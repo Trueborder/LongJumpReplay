@@ -40,12 +40,12 @@ class ProfessionalTimeline(tk.Canvas):
     cheaper for Tk to redraw at video-rate.
     """
 
-    HEADER_H = 25
-    DETAIL_TOP = 26
-    DETAIL_BOTTOM = 83
-    OVERVIEW_TOP = 94
-    OVERVIEW_BOTTOM = 113
-    SIDE_PAD = 12
+    HEADER_H = 32
+    DETAIL_TOP = 35
+    DETAIL_BOTTOM = 101
+    OVERVIEW_TOP = 113
+    OVERVIEW_BOTTOM = 136
+    SIDE_PAD = 16
     MAX_MAJOR_TICKS = 36
     MAX_MINOR_TICKS = 180
     MAX_MARKERS = 48
@@ -64,7 +64,7 @@ class ProfessionalTimeline(tk.Canvas):
     ) -> None:
         super().__init__(
             master,
-            height=122,
+            height=154,
             background=palette["surface"],
             highlightthickness=1,
             highlightbackground=palette["border"],
@@ -113,6 +113,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._items["mode"] = self.create_text(self.SIDE_PAD, 12, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 8))
         self._items["timecode"] = self.create_text(1, 12, anchor="center", text="+0.000s", fill=p["text"], font=("Consolas", 10, "bold"))
         self._items["zoom"] = self.create_text(1, 12, anchor="e", text=tr(self.language, "timeline.view", seconds=2.0), fill=p["muted"], font=("Segoe UI", 8))
+        self._items["help"] = self.create_text(1, 146, anchor="center", text=tr(self.language, "timeline.hint"), fill=p["muted"], font=("Segoe UI", 7))
 
         self._items["detail_bg"] = self.create_rectangle(1, self.DETAIL_TOP, 2, self.DETAIL_BOTTOM, fill=p["timeline"], outline=p["border"])
         self._items["detail_available"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 2, self.DETAIL_BOTTOM - 1, fill=p["surface2"], outline="")
@@ -126,6 +127,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._items["overview_viewport"] = self.create_rectangle(1, self.OVERVIEW_TOP + 1, 2, self.OVERVIEW_BOTTOM - 1, fill="", outline=p["text"], width=1)
         self._items["overview_playhead"] = self.create_line(0, self.OVERVIEW_TOP, 0, self.OVERVIEW_BOTTOM, fill=p["danger"], width=2)
         self._items["overview_freeze"] = self.create_line(0, self.OVERVIEW_TOP, 0, self.OVERVIEW_BOTTOM, fill=p["warning"], width=1, state="hidden")
+        self._items["focus_band"] = self.create_rectangle(0, self.DETAIL_TOP + 1, 0, self.DETAIL_BOTTOM - 1, fill=p["selection"], outline="", stipple="gray50")
 
         # The detail playhead is intentionally always centred and created last.
         self._items["fixed_playhead"] = self.create_line(0, self.HEADER_H, 0, self.OVERVIEW_TOP - 2, fill=p["danger"], width=2)
@@ -140,6 +142,7 @@ class ProfessionalTimeline(tk.Canvas):
     def set_language(self, language: str) -> None:
         self.language = language if language in {"en", "cs"} else "en"
         self.itemconfigure(self._items["freeze_label"], text=tr(self.language, "timeline.freeze"))
+        self.itemconfigure(self._items["help"], text=tr(self.language, "timeline.hint"))
         self.request_render(force=True)
 
     def apply_palette(self, palette: dict[str, str]) -> None:
@@ -154,6 +157,7 @@ class ProfessionalTimeline(tk.Canvas):
         self.itemconfigure(self._items["mode"], fill=p["muted"])
         self.itemconfigure(self._items["timecode"], fill=p["text"])
         self.itemconfigure(self._items["zoom"], fill=p["muted"])
+        self.itemconfigure(self._items["help"], fill=p["muted"])
         self.itemconfigure(self._items["detail_bg"], fill=p["timeline"], outline=p["border"])
         self.itemconfigure(self._items["detail_available"], fill=p["surface2"])
         self.itemconfigure(self._items["unavailable_left"], fill=p["bg"])
@@ -165,6 +169,7 @@ class ProfessionalTimeline(tk.Canvas):
         self.itemconfigure(self._items["overview_viewport"], outline=p["text"])
         self.itemconfigure(self._items["overview_playhead"], fill=p["danger"])
         self.itemconfigure(self._items["overview_freeze"], fill=p["warning"])
+        self.itemconfigure(self._items["focus_band"], fill=p["selection"])
         self.itemconfigure(self._items["fixed_playhead"], fill=p["danger"])
         self.itemconfigure(self._items["playhead_cap"], fill=p["danger"])
         for item in self._major_lines:
@@ -221,7 +226,7 @@ class ProfessionalTimeline(tk.Canvas):
             return
         self._last_render_perf = time.perf_counter()
         w = max(240, self.winfo_width())
-        h = max(118, self.winfo_height())
+        h = max(150, self.winfo_height())
         x0, x1 = self.SIDE_PAD, w - self.SIDE_PAD
         cx = w / 2
         p = self.palette
@@ -230,8 +235,10 @@ class ProfessionalTimeline(tk.Canvas):
         self.coords(self._items["mode"], x0, 12)
         self.coords(self._items["timecode"], cx, 12)
         self.coords(self._items["zoom"], x1, 12)
+        self.coords(self._items["help"], cx, min(h - 7, 147))
         self.coords(self._items["detail_bg"], x0, self.DETAIL_TOP, x1, self.DETAIL_BOTTOM)
         self.coords(self._items["overview_bg"], x0, self.OVERVIEW_TOP, x1, self.OVERVIEW_BOTTOM)
+        self.coords(self._items["focus_band"], cx - 22, self.DETAIL_TOP + 1, cx + 22, self.DETAIL_BOTTOM - 1)
         self.coords(self._items["fixed_playhead"], cx, self.HEADER_H, cx, self.OVERVIEW_TOP - 2)
         self.coords(self._items["playhead_cap"], cx - 6, self.HEADER_H, cx + 6, self.HEADER_H, cx, self.HEADER_H + 7)
         self.tag_raise(self._items["fixed_playhead"])

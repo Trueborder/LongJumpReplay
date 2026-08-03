@@ -44,3 +44,20 @@ def test_athlete_timer_config_round_trip_and_validation(tmp_path):
             assert 'athlete_timer.duration_seconds' in str(exc)
         else:
             raise AssertionError(f'invalid timer duration accepted: {invalid!r}')
+
+
+def test_dangerous_runtime_values_and_duplicate_hotkeys_are_rejected():
+    invalid_configs = [
+        {'buffer': {'store_every_nth_frame': 0}},
+        {'display': {'guide_width_px': 0}},
+        {'takeoff_assist': {'quick_review_speed': 0}},
+        {'hotkeys': {'bindings': {'freeze_toggle': 'F2', 'timer_toggle': 'f2'}}},
+        {'camera': {'source_type': 'file', 'file_path': ''}},
+    ]
+    for data in invalid_configs:
+        try:
+            config_from_dict(data)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f'invalid configuration accepted: {data!r}')

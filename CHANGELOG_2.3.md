@@ -1,5 +1,21 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Judge-station interface remake
+
+- Reworked the main screen into clearer header, competition context, video, timeline, decision, and status zones.
+- Enlarged the primary Freeze/Live and judging actions while reducing visual competition from secondary controls.
+- Rebuilt Settings with task-based navigation groups, card-style fields, stronger page introductions, active-page highlighting, and a larger workspace.
+- Rebuilt the timeline with a taller layered ruler, fixed focus band, clearer availability and Freeze markers, a stronger playhead, and visible interaction guidance.
+- Updated both light and dark palettes for improved contrast and visual hierarchy.
+
+## Reliability hardening
+
+- Attempts now finalize available frames with a warning after a bounded post-roll capture stall instead of remaining in Collecting indefinitely.
+- Replay-to-Live state handling is centralized so deletion and clear-recording workflows remain consistent with timer and playback state.
+- Deleting an undecided attempt in strict mode no longer leaves playback pointing at deleted media.
+- Added validation for capture sampling, display dimensions, Take-off Assist, export FPS, hotkey collisions, file sources, and Shuttle timing/identifiers.
+- Attempt recovery metadata is now written atomically.
+
 ## Athlete attempt timer
 
 - Added a clickable countdown at the far top-right of the header, available in competition and judge-only modes.

@@ -15,6 +15,8 @@ def test_category_settings_dialog_builds_all_pages():
     }
     assert dialog._vars["athlete_timer_duration"].get() == 60
     assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
+    assert set(dialog._nav_group_labels) == {"essentials", "judging", "replay", "system"}
+    assert dialog._nav_buttons["general"].cget("style") == "SettingsNav.TButton"
     dialog._show_page("competition")
     assert dialog._current_page == "competition"
     assert dialog.roster_tree is not None
@@ -23,4 +25,5 @@ def test_category_settings_dialog_builds_all_pages():
         assert dialog.apply_button.winfo_manager() == "pack"
         assert dialog.apply_close_button.winfo_manager() == "pack"
         assert dialog.footer.winfo_manager() == "grid"
+        assert dialog._nav_buttons[page].instate(["selected"])
     dialog.destroy(); root.destroy()

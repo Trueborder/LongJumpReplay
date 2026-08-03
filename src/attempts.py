@@ -25,6 +25,8 @@ class AttemptManager:
     The copied packets mean a decision can take longer than the live buffer.
     """
 
+    POST_ROLL_STALL_GRACE_SECONDS = 3.0
+
     def __init__(
         self,
         ring_buffer: TimeRingBuffer,
@@ -445,23 +447,28 @@ class AttemptManager:
 
     def _collect_post_roll(self) -> None:
         newest = self.ring_buffer.newest()
-        if newest is None:
-            return
+        now_monotonic_ns = time.monotonic_ns()
         to_encode: list[int] = []
         with self._lock:
             collecting = [a for a in self._attempts if a.state is AttemptState.COLLECTING]
             for attempt in collecting:
                 target_end = attempt.freeze_timestamp_ns + int(attempt.post_seconds * 1e9)
                 last_ns = attempt.packets[-1].timestamp_ns if attempt.packets else attempt.freeze_timestamp_ns
-                end_ns = min(target_end, newest.timestamp_ns)
-                if end_ns > last_ns:
-                    new_packets = self.ring_buffer.snapshot_between(last_ns + 1, end_ns)
-                    if new_packets:
-                        attempt.packets.extend(new_packets)
-                        attempt.frame_count = len(attempt.packets)
-                        attempt.fps = estimate_fps(attempt.packets, fallback=attempt.fps)
-                        attempt.media_end_timestamp_ns = attempt.packets[-1].timestamp_ns
-                if newest.timestamp_ns >= target_end:
+                if newest is not None:
+                    end_ns = min(target_end, newest.timestamp_ns)
+                    if end_ns > last_ns:
+                        new_packets = self.ring_buffer.snapshot_between(last_ns + 1, end_ns)
+                        if new_packets:
+                            attempt.packets.extend(new_packets)
+                            attempt.frame_count = len(attempt.packets)
+                            attempt.fps = estimate_fps(attempt.packets, fallback=attempt.fps)
+                            attempt.media_end_timestamp_ns = attempt.packets[-1].timestamp_ns
+                stalled = now_monotonic_ns >= attempt.created_monotonic_ns + int((attempt.post_seconds + self.POST_ROLL_STALL_GRACE_SECONDS) * 1e9)
+                complete = newest is not None and newest.timestamp_ns >= target_end
+                if complete or stalled:
+                    if stalled and not complete:
+                        warning = "Post-roll ended early because live capture stopped advancing."
+                        attempt.quality_warning = f"{attempt.quality_warning}; {warning}" if attempt.quality_warning else warning
                     attempt.state = AttemptState.ENCODING
                     to_encode.append(attempt.attempt_id)
                     self.event_queue.put(("attempt_updated", attempt.attempt_id))
@@ -618,11 +625,14 @@ class AttemptManager:
             "evidence_annotated_path": str(attempt.evidence_annotated_path) if attempt.evidence_annotated_path else None,
             "markers": [{"timestamp_ns": m.timestamp_ns, "label": m.label} for m in attempt.markers],
         }
+        temp_path = path.with_suffix(path.suffix + ".tmp")
         try:
-            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            temp_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            temp_path.replace(path)
             attempt.temp_metadata_path = path
         except OSError:
-            pass
+            try: temp_path.unlink(missing_ok=True)
+            except OSError: pass
 
     def _recover_cache_index(self) -> None:
         # Sessions from a previous crash remain useful until their recorded expiry.

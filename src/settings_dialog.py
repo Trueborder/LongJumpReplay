@@ -76,6 +76,12 @@ class SettingsDialog(tk.Toplevel):
         ("recovery", "Recovery & export", "Obnova a export"),
         ("advanced", "Advanced", "Pokročilé"),
     ]
+    CATEGORY_GROUPS = [
+        ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "appearance", "camera")),
+        ("judging", "JUDGING WORKFLOW", "ROZHODOVÁNÍ", ("competition", "rounds", "decisions", "final")),
+        ("replay", "REPLAY WORKSPACE", "PRACOVNÍ PLOCHA", ("board", "replay", "views", "assist")),
+        ("system", "CONTROLS & SYSTEM", "OVLÁDÁNÍ A SYSTÉM", ("hotkeys", "shuttle", "performance", "recovery", "advanced")),
+    ]
 
     def __init__(
         self,
@@ -91,14 +97,16 @@ class SettingsDialog(tk.Toplevel):
         self.lang = self.working.general.language
         self.tr = Translator(self.lang)
         self.title(self.tr("settings.title"))
-        self.geometry("1120x780")
-        self.minsize(900, 650)
+        self.geometry("1220x820")
+        self.minsize(980, 700)
         self.transient(parent)
         self.grab_set()
         self._vars: dict[str, tk.Variable] = {}
         self._pages: dict[str, ttk.Frame] = {}
         self._page_inners: dict[str, ttk.Frame] = {}
         self._nav_buttons: dict[str, ttk.Button] = {}
+        self._nav_group_labels: dict[str, ttk.Label] = {}
+        self._category_group: dict[str, str] = {}
         self._current_page = ""
         self._dirty = False
         self._initialising = True
@@ -121,39 +129,51 @@ class SettingsDialog(tk.Toplevel):
         return values[1] if self.lang == "cs" else values[0]
 
     def _build(self) -> None:
-        shell = ttk.Frame(self, style="App.TFrame", padding=12)
+        shell = ttk.Frame(self, style="App.TFrame", padding=14)
         shell.grid(row=0, column=0, sticky="nsew")
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         shell.rowconfigure(1, weight=1)
         shell.columnconfigure(0, weight=1)
 
-        header = ttk.Frame(shell, style="App.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        ttk.Label(header, text=self.tr("settings.header"), style="Title.TLabel").pack(side="left")
-        self.dirty_label = ttk.Label(header, text="", style="HeaderMuted.TLabel")
-        self.dirty_label.pack(side="left", padx=(14, 0), pady=(4, 0))
+        header = ttk.Frame(shell, style="SettingsHeader.TFrame", padding=(18, 13))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        brand = ttk.Frame(header, style="Panel.TFrame")
+        brand.pack(side="left")
+        ttk.Label(brand, text=self.tr("settings.header"), style="Brand.TLabel").pack(anchor="w")
+        ttk.Label(brand, text=self.tr("settings.subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(1, 0))
+        self.dirty_label = ttk.Label(header, text="", style="SettingsDirty.TLabel")
+        self.dirty_label.pack(side="right", padx=(14, 0))
 
         body = ttk.Frame(shell, style="App.TFrame")
         body.grid(row=1, column=0, sticky="nsew")
         body.rowconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
-        sidebar = ttk.Frame(body, style="Toolbar.TFrame", padding=6, width=220)
-        sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 10))
+        sidebar = ttk.Frame(body, style="SettingsSidebar.TFrame", padding=10, width=255)
+        sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 12))
         sidebar.grid_propagate(False)
+        ttk.Label(sidebar, text=self.tr("settings.find_area"), style="SettingsGroup.TLabel").pack(anchor="w", padx=5, pady=(2, 5))
         self.search_var = tk.StringVar()
         search = ttk.Entry(sidebar, textvariable=self.search_var)
-        search.pack(fill="x", pady=(0, 6))
+        search.pack(fill="x", pady=(0, 10))
         search.insert(0, "")
         self.nav_host = ttk.Frame(sidebar, style="Toolbar.TFrame")
         self.nav_host.pack(fill="both", expand=True)
 
-        self.page_host = ttk.Frame(body, style="Panel.TFrame")
+        self.page_host = ttk.Frame(body, style="Panel.TFrame", padding=1)
         self.page_host.grid(row=0, column=1, sticky="nsew")
-        for key, en, cs in self.CATEGORY_DEFS:
-            button = ttk.Button(self.nav_host, text=self._txt(en, cs), style="SettingsNav.TButton", command=lambda k=key: self._show_page(k))
-            button.pack(fill="x", pady=1)
-            self._nav_buttons[key] = button
+        definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
+        for group_key, group_en, group_cs, keys in self.CATEGORY_GROUPS:
+            label = ttk.Label(self.nav_host, text=self._txt(group_en, group_cs), style="SettingsGroup.TLabel")
+            label.pack(fill="x", padx=5, pady=(10 if self._nav_group_labels else 2, 4))
+            self._nav_group_labels[group_key] = label
+            for key in keys:
+                en, cs = definitions[key]
+                self._category_group[key] = group_key
+                button = ttk.Button(self.nav_host, text=self._txt(en, cs), style="SettingsNav.TButton", command=lambda k=key: self._show_page(k))
+                button.pack(fill="x", pady=1)
+                self._nav_buttons[key] = button
+        for key, _en, _cs in self.CATEGORY_DEFS:
             wrapper, inner = self._new_scroll_page()
             self._pages[key] = wrapper
             self._page_inners[key] = inner
@@ -176,7 +196,7 @@ class SettingsDialog(tk.Toplevel):
         self._build_recovery(self._page_inners["recovery"])
         self._build_advanced(self._page_inners["advanced"])
 
-        footer = ttk.Frame(shell, style="Toolbar.TFrame", padding=(8, 7))
+        footer = ttk.Frame(shell, style="SettingsHeader.TFrame", padding=(12, 9))
         self.footer = footer
         footer.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         self.restore_button = ttk.Button(footer, text=self.tr("settings.restore"), style="Control.TButton", command=self._restore_defaults)
@@ -196,7 +216,7 @@ class SettingsDialog(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        inner = ttk.Frame(canvas, style="Panel.TFrame", padding=16)
+        inner = ttk.Frame(canvas, style="Panel.TFrame", padding=18)
         window = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda _e, c=canvas: c.configure(scrollregion=c.bbox("all")))
         canvas.bind("<Configure>", lambda e, c=canvas, w=window: c.itemconfigure(w, width=e.width))
@@ -210,27 +230,37 @@ class SettingsDialog(tk.Toplevel):
             self._pages[self._current_page].pack_forget()
         self._pages[key].pack(fill="both", expand=True)
         self._current_page = key
+        for name, button in self._nav_buttons.items():
+            button.state(["selected"] if name == key else ["!selected"])
 
     def _filter_navigation(self) -> None:
         query = self.search_var.get().strip().lower()
-        first = None
-        for key, en, cs in self.CATEGORY_DEFS:
-            button = self._nav_buttons[key]
-            visible = not query or query in en.lower() or query in cs.lower()
-            if visible:
-                button.pack(fill="x", pady=1)
-                first = first or key
-            else:
-                button.pack_forget()
-        if first and self._current_page not in [k for k, en, cs in self.CATEGORY_DEFS if not query or query in en.lower() or query in cs.lower()]:
+        definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
+        visible_keys: list[str] = []
+        for label in self._nav_group_labels.values():
+            label.pack_forget()
+        for button in self._nav_buttons.values():
+            button.pack_forget()
+        for group_key, _en, _cs, keys in self.CATEGORY_GROUPS:
+            matches = [key for key in keys if not query or query in definitions[key][0].lower() or query in definitions[key][1].lower()]
+            if not matches:
+                continue
+            self._nav_group_labels[group_key].pack(fill="x", padx=5, pady=(10 if visible_keys else 2, 4))
+            for key in matches:
+                self._nav_buttons[key].pack(fill="x", pady=1)
+                visible_keys.append(key)
+        first = visible_keys[0] if visible_keys else None
+        if first and self._current_page not in visible_keys:
             self._show_page(first)
 
     def _title(self, frame: ttk.Frame, title_en: str, title_cs: str, desc_en: str = "", desc_cs: str = "") -> int:
-        ttk.Label(frame, text=self._txt(title_en, title_cs), style="Title.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
+        hero = ttk.Frame(frame, style="SettingsHero.TFrame", padding=(18, 15))
+        hero.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 10))
+        ttk.Label(hero, text=self._txt(title_en, title_cs), style="SettingsHeroTitle.TLabel").pack(anchor="w")
         if desc_en or desc_cs:
-            ttk.Label(frame, text=self._txt(desc_en, desc_cs), style="Muted.TLabel", wraplength=760, justify="left").grid(row=1, column=0, columnspan=4, sticky="ew", pady=(2, 12))
+            ttk.Label(hero, text=self._txt(desc_en, desc_cs), style="SettingsHeroDesc.TLabel", wraplength=780, justify="left").pack(anchor="w", pady=(5, 0))
         frame.columnconfigure(1, weight=1)
-        return 2
+        return 1
 
     def _impact_text(self, impact: str) -> str:
         return self.tr(f"settings.impact.{impact}")
@@ -249,26 +279,31 @@ class SettingsDialog(tk.Toplevel):
         impact: str = "none",
         width: int | None = None,
     ) -> tk.Widget:
-        left = ttk.Frame(frame, style="Panel.TFrame")
-        left.grid(row=row, column=0, sticky="nw", pady=7, padx=(0, 12))
-        ttk.Label(left, text=self._txt(label_en, label_cs), style="Text.TLabel", font=("Segoe UI Semibold", 9)).pack(anchor="w")
+        card = ttk.Frame(frame, style="SettingsRow.TFrame", padding=(14, 11))
+        card.grid(row=row, column=0, columnspan=4, sticky="ew", pady=4)
+        card.columnconfigure(0, weight=2)
+        card.columnconfigure(1, weight=1)
+        card.columnconfigure(2, weight=2)
+        left = ttk.Frame(card, style="Panel.TFrame")
+        left.grid(row=0, column=0, sticky="nw", padx=(0, 14))
+        ttk.Label(left, text=self._txt(label_en, label_cs), style="SettingsRowTitle.TLabel").pack(anchor="w")
         if impact != "none":
             ttk.Label(left, text=self._impact_text(impact), style=IMPACT_STYLES[impact]).pack(anchor="w", pady=(2, 0))
         if kind == "check":
-            widget: tk.Widget = ttk.Checkbutton(frame, variable=var)
+            widget: tk.Widget = ttk.Checkbutton(card, variable=var)
         elif kind == "combo":
-            widget = ttk.Combobox(frame, textvariable=var, values=values, state="readonly", width=width)
+            widget = ttk.Combobox(card, textvariable=var, values=values, state="readonly", width=width)
         elif kind == "spin":
-            widget = ttk.Spinbox(frame, textvariable=var, from_=0, to=10000, increment=1, width=width)
+            widget = ttk.Spinbox(card, textvariable=var, from_=0, to=10000, increment=1, width=width)
         else:
-            widget = ttk.Entry(frame, textvariable=var, width=width)
-        widget.grid(row=row, column=1, sticky="ew", pady=7)
+            widget = ttk.Entry(card, textvariable=var, width=width)
+        widget.grid(row=0, column=1, sticky="ew", padx=(0, 14))
         if desc_en or desc_cs:
-            ttk.Label(frame, text=self._txt(desc_en, desc_cs), style="Muted.TLabel", wraplength=330, justify="left").grid(row=row, column=2, sticky="nw", padx=(14, 0), pady=7)
+            ttk.Label(card, text=self._txt(desc_en, desc_cs), style="SettingsRowDesc.TLabel", wraplength=360, justify="left").grid(row=0, column=2, sticky="nw")
         return widget
 
     def _section(self, frame: ttk.Frame, row: int, title_en: str, title_cs: str) -> ttk.LabelFrame:
-        box = ttk.LabelFrame(frame, text=self._txt(title_en, title_cs), padding=10)
+        box = ttk.LabelFrame(frame, text=self._txt(title_en, title_cs), padding=10, style="SettingsSection.TLabelframe")
         box.grid(row=row, column=0, columnspan=4, sticky="ew", pady=(10, 4))
         box.columnconfigure(1, weight=1)
         return box

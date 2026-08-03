@@ -7,18 +7,18 @@ from tkinter import ttk
 
 
 DARK = {
-    "bg": "#0c0f14", "surface": "#121720", "surface2": "#181f2b", "border": "#293241",
-    "text": "#eef2f7", "muted": "#99a4b3", "accent": "#4f8cff", "accent_hover": "#70a2ff",
-    "live": "#42d392", "warning": "#f6c85f", "danger": "#ff6b6b", "video": "#05070a",
-    "timeline": "#151b25", "tick": "#738096", "selection": "#284a7a",
-    "valid_soft": "#16392c", "foul_soft": "#452328", "review_soft": "#493c1b", "pending_soft": "#202b3a",
+    "bg": "#090d14", "surface": "#111722", "surface2": "#182131", "border": "#2a374a",
+    "text": "#f4f7fb", "muted": "#96a4b8", "accent": "#4f8cff", "accent_hover": "#78a8ff",
+    "live": "#35d39a", "warning": "#f5bd4f", "danger": "#ff6675", "video": "#03060a",
+    "timeline": "#0d1420", "tick": "#71839c", "selection": "#254c80",
+    "valid_soft": "#12392d", "foul_soft": "#47212a", "review_soft": "#493918", "pending_soft": "#1c293b",
 }
 LIGHT = {
-    "bg": "#eef1f5", "surface": "#ffffff", "surface2": "#f6f8fb", "border": "#ced5df",
-    "text": "#17202c", "muted": "#667386", "accent": "#2867d9", "accent_hover": "#1f55b5",
-    "live": "#138a5b", "warning": "#b16b00", "danger": "#c43b3b", "video": "#111317",
-    "timeline": "#e5e9ef", "tick": "#677386", "selection": "#b9d3ff",
-    "valid_soft": "#dff3e9", "foul_soft": "#f8e2e2", "review_soft": "#fff2cf", "pending_soft": "#edf1f6",
+    "bg": "#e9eef5", "surface": "#ffffff", "surface2": "#f3f6fa", "border": "#c8d2df",
+    "text": "#132033", "muted": "#627086", "accent": "#245fc7", "accent_hover": "#184da8",
+    "live": "#087f57", "warning": "#a96400", "danger": "#bd3043", "video": "#0c1118",
+    "timeline": "#e7edf5", "tick": "#66758a", "selection": "#c5d9fb",
+    "valid_soft": "#dcefe7", "foul_soft": "#f7dfe3", "review_soft": "#fff0c9", "pending_soft": "#edf2f8",
 }
 
 
@@ -53,6 +53,14 @@ class ThemeManager:
         style.configure("App.TFrame", background=p["bg"])
         style.configure("Panel.TFrame", background=p["surface"])
         style.configure("Toolbar.TFrame", background=p["surface2"])
+        style.configure("JudgeHeader.TFrame", background=p["surface"], borderwidth=1, relief="solid")
+        style.configure("ControlDock.TFrame", background=p["surface"], borderwidth=1, relief="solid")
+        style.configure("Brand.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 15))
+        style.configure("BrandSub.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
+        style.configure("Header.TMenubutton", background=p["surface"], foreground=p["muted"], padding=(9, 5), borderwidth=0)
+        style.map("Header.TMenubutton", background=[("active", p["surface2"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])])
+        style.configure("ContextTitle.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 8))
+        style.configure("ContextValue.TLabel", background=p["surface2"], foreground=p["text"], font=("Segoe UI Semibold", 10))
         style.configure("Title.TLabel", background=p["bg"], foreground=p["text"], font=("Segoe UI Semibold", 14))
         style.configure("PanelTitle.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 9))
         style.configure("Text.TLabel", background=p["surface"], foreground=p["text"])
@@ -64,10 +72,16 @@ class ThemeManager:
         style.configure("Accent.TButton", padding=(11, 6), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")
         style.map("Accent.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
         style.configure("Live.TButton", padding=(11, 6), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
+        style.configure("PrimaryJudge.TButton", padding=(18, 11), font=("Segoe UI Semibold", 11), background=p["accent"], foreground="#ffffff")
+        style.map("PrimaryJudge.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
+        style.configure("LiveJudge.TButton", padding=(14, 11), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
         style.configure("Danger.TButton", padding=(9, 6), background=p["danger"], foreground="#ffffff")
         style.configure("Valid.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
         style.configure("Foul.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["danger"], foreground="#ffffff")
         style.configure("Review.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["warning"], foreground="#111111")
+        style.configure("JudgeValid.TButton", padding=(16, 10), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
+        style.configure("JudgeFoul.TButton", padding=(16, 10), font=("Segoe UI Semibold", 10), background=p["danger"], foreground="#ffffff")
+        style.configure("JudgeReview.TButton", padding=(16, 10), font=("Segoe UI Semibold", 10), background=p["warning"], foreground="#111111")
         style.configure("Sidebar.TButton", padding=(12, 9), anchor="w", background=p["surface2"], foreground=p["text"])
         style.map("Sidebar.TButton", background=[("active", p["selection"]), ("pressed", p["selection"])])
         style.configure("Treeview", background=p["surface"], fieldbackground=p["surface"], foreground=p["text"], rowheight=28, borderwidth=0)
@@ -92,8 +106,20 @@ class ThemeManager:
         style.configure("ImpactHigh.TLabel", background=p["surface"], foreground=p["danger"], font=("Segoe UI Semibold", 8))
         style.configure("ImpactVeryHigh.TLabel", background=p["surface"], foreground=p["danger"], font=("Segoe UI Semibold", 8, "underline"))
         style.configure("ImpactNone.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
-        style.configure("SettingsNav.TButton", padding=(12, 8), anchor="w", background=p["surface2"], foreground=p["text"])
-        style.map("SettingsNav.TButton", background=[("active", p["selection"]), ("pressed", p["selection"])])
+        style.configure("SettingsHeader.TFrame", background=p["surface"], borderwidth=1, relief="solid")
+        style.configure("SettingsSidebar.TFrame", background=p["surface2"], borderwidth=1, relief="solid")
+        style.configure("SettingsHero.TFrame", background=p["surface2"], borderwidth=1, relief="solid")
+        style.configure("SettingsHeroTitle.TLabel", background=p["surface2"], foreground=p["text"], font=("Segoe UI Semibold", 18))
+        style.configure("SettingsHeroDesc.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 9))
+        style.configure("SettingsGroup.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 8))
+        style.configure("SettingsDirty.TLabel", background=p["surface"], foreground=p["warning"], font=("Segoe UI Semibold", 8))
+        style.configure("SettingsRow.TFrame", background=p["surface"], borderwidth=1, relief="solid")
+        style.configure("SettingsRowTitle.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 10))
+        style.configure("SettingsRowDesc.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
+        style.configure("SettingsSection.TLabelframe", background=p["surface"], bordercolor=p["border"], relief="solid", borderwidth=1)
+        style.configure("SettingsSection.TLabelframe.Label", background=p["surface"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
+        style.configure("SettingsNav.TButton", padding=(14, 9), anchor="w", background=p["surface2"], foreground=p["muted"], borderwidth=0)
+        style.map("SettingsNav.TButton", background=[("active", p["selection"]), ("pressed", p["selection"]), ("selected", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"]), ("selected", p["text"])])
         # ttk combobox pop-downs use a classic Tk Listbox on Windows.
         self.root.option_add("*TCombobox*Listbox.background", p["surface2"])
         self.root.option_add("*TCombobox*Listbox.foreground", p["text"])

@@ -37,6 +37,7 @@ Preserve these rules unless the product owner explicitly changes them:
 15. **Competition management must be completely disableable.** Judge-only mode must remain simple.
 16. **Take-off Assist may locate a candidate frame but must never decide Valid/Foul.** A human remains responsible.
 17. **The athlete countdown is an operator aid only.** It must not create a result or be persisted in attempt metadata, evidence, or exports.
+18. **A stalled camera must not leave post-roll open forever.** Finalize the available partial recording after a bounded monotonic deadline and retain a quality warning.
 
 ## 3. Intended operator workflow
 
@@ -306,6 +307,12 @@ A webcam may negotiate a lower real rate. Requested FPS is not proof of actual F
 
 ## 9. UI layouts and controls
 
+### Judge-station visual hierarchy
+
+The main window is organized into stable task zones: application/camera/timer header, numbered-athlete context, video workspace, layered timeline, primary Freeze/Live and decision dock, and compact status reporting. Primary judging actions are visually stronger than layout, calibration, export, and maintenance controls. Both themes use the same hierarchy and semantic colors.
+
+Settings uses four navigation groups (Essentials, Judging workflow, Replay workspace, Controls & system), active-page highlighting, page-introduction cards, card-based setting rows, visible impact badges, and a fixed Apply footer. The underlying sixteen pages remain separate to avoid presenting one very long form.
+
 Supported layouts:
 
 - `replay_pip`
@@ -355,6 +362,7 @@ Do not regress these properties:
 - hidden or suspended timeline does no expensive work;
 - dragging and overview seeking remain responsive;
 - window move/resize suspends expensive rendering and resumes with the latest frame.
+- the taller layered ruler retains a fixed shaded focus band, strong centre playhead, distinct Freeze marker, availability band, full-media overview, and an interaction hint without creating canvas items during updates.
 
 When changing timeline code, run both logic and GUI tests plus `tools/benchmark_timeline.py`.
 
@@ -433,6 +441,11 @@ Always test changes affecting workflow against:
 16. Timer click and configured hotkey share the same action, and starts outside Live are rejected.
 17. Successful/failed Freeze, Replay-to-Live, manual athlete change, and runtime duration application preserve the timer lifecycle above.
 18. Timer READY blinking, warning/expired colors, translations, and far-right header layout remain correct in light and dark themes.
+19. A stalled post-roll finalizes partial media with a warning instead of remaining Collecting.
+20. Strict-mode deletion enters a consistent Live state without completing the deleted rotation slot.
+21. Clear-recording Live transitions reset runtime-only review aids through the centralized Live path.
+22. Dangerous capture sampling, display, analysis, export, duplicate-hotkey, file-source, and device values are rejected during config validation.
+23. English and Czech translation dictionaries expose the same keys.
 
 ### Headless note
 
@@ -544,12 +557,14 @@ Do not:
 
 ## 18. Suggested next engineering work
 
+The prepared implementation sequence is maintained in `docs/IMPLEMENTATION_ROADMAP.md`. It intentionally keeps athlete names, clubs, distances, and broader meet management out of scope.
+
 Highest-value future work, in rough order:
 
 1. Break `src/main_window.py` into focused controllers without changing behavior.
 2. Add an in-app camera capability scanner that enumerates actual supported resolution/FPS combinations rather than only testing requested values.
 3. Add richer event/session persistence and crash-recovery tests on Windows.
-4. Add CSV athlete import and optional manual distance entry for finalist ranking.
+4. Improve numbered attempt-rotation presets without adding athlete identity or distance management.
 5. Profile CPU usage on weak and strong Windows laptops and tune presets from real measurements.
 6. Add Windows-native UI automation smoke tests for menus, dark combobox popups, window move/resize, and shutdown.
 7. Validate the physical 120 FPS camera and ShuttleXpress before any official event usage.

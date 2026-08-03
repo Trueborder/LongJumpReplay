@@ -67,7 +67,7 @@ def test_athlete_timer_gui_workflow_and_rendering(tmp_path):
 
         # Replay-to-Live, manual athlete changes, and duration Apply reset READY.
         app.playback.mode = PlaybackMode.LIVE_BUFFER
-        app.return_live()
+        app._clear_recordings_mode("live", ask=False)
         assert app.athlete_timer.state is AthleteTimerState.READY
         app.athlete_timer.start(); app._select_competitor_delta(1)
         assert app.athlete_timer.state is AthleteTimerState.READY

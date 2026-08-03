@@ -30,6 +30,10 @@ The timer is available in competition and judge-only modes and is never written 
 
 ## What is new in 2.3
 
+- Remade judge-station interface with clearer workflow zones and larger primary actions.
+- Task-grouped, card-based Settings workspace with active navigation and clearer descriptions.
+- Rebuilt layered timeline with a fixed focus band, stronger Freeze/playhead hierarchy, and interaction guidance.
+- Bounded partial post-roll recovery when capture stalls, stricter configuration validation, and consistent Live transitions.
 - Optional judging with Not decided as the default result.
 - Correct round-by-round athlete rotation.
 - Qualification plus an optional manually selected final round.

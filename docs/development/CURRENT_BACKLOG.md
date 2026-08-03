@@ -10,13 +10,12 @@ This is a planning list, not a promise. Preserve the current stable workflow bef
 - Better session recovery and Windows crash simulation tests.
 - Split `main_window.py` into domain controllers.
 
-## Competition management
+## Judging workflow
 
-- CSV athlete import/export.
-- Optional athlete names while retaining simple numeric mode.
-- Optional manual distance entry.
-- Automatic top-N finalist selection from entered distances.
-- Event templates and reusable competition presets.
+- Reusable presets for numbered attempt rotations.
+- Faster recovery of interrupted review sessions.
+- Clearer audit history for operator actions and decisions.
+- Keep participants number-based; do not add names, clubs, distances, or broader meet management.
 
 ## Operator quality
 

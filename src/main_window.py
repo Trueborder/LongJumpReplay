@@ -47,7 +47,7 @@ class MainWindow:
         self.config_path = config_path
         self.translator = Translator(config.general.language)
         self.root.title(self.translator("app.title"))
-        self.root.minsize(1040, 650)
+        self.root.minsize(1100, 700)
         if config.display.window_geometry:
             try: self.root.geometry(config.display.window_geometry)
             except tk.TclError: pass
@@ -96,6 +96,7 @@ class MainWindow:
         self._operator_mode = bool(config.competition.operator_mode_enabled)
         self._recovery_checked = False
         self._last_board_signature: object = None
+        self._last_timer_render_signature: object = None
 
         self._build_variables()
         self._build_menu()
@@ -214,26 +215,30 @@ class MainWindow:
         self.help_menu.add_command(label=self._t("menu.about"), command=lambda: messagebox.showinfo(self._t("menu.about"), "Long Jump Replay 2.3\nLive video review for long-jump take-off decisions."))
 
     def _attach_header_menus(self, header: ttk.Frame) -> None:
-        self.header_menu_frame = ttk.Frame(header, style="App.TFrame")
-        self.header_menu_frame.pack(side="left", padx=(14, 0))
-        self.file_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.file"), menu=self.file_menu)
-        self.view_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.view"), menu=self.view_menu)
-        self.help_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.help"), menu=self.help_menu)
+        self.header_menu_frame = ttk.Frame(header, style="Panel.TFrame")
+        self.header_menu_frame.pack(side="left", padx=(22, 0))
+        self.file_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.file"), menu=self.file_menu, style="Header.TMenubutton")
+        self.view_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.view"), menu=self.view_menu, style="Header.TMenubutton")
+        self.help_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.help"), menu=self.help_menu, style="Header.TMenubutton")
         for button in (self.file_menu_button, self.view_menu_button, self.help_menu_button):
             button.pack(side="left", padx=1)
             button.bind("<ButtonPress-1>", lambda _e: self._begin_menu_interaction(), add="+")
 
     def _build_layout(self) -> None:
-        self.outer = ttk.Frame(self.root, style="App.TFrame", padding=(10, 8, 10, 8))
+        self.outer = ttk.Frame(self.root, style="App.TFrame", padding=(12, 10, 12, 10))
         self.outer.pack(fill="both", expand=True)
 
-        header = ttk.Frame(self.outer, style="App.TFrame")
-        header.pack(fill="x", pady=(0, 6))
-        self.header_title = ttk.Label(header, text=self._t("app.header"), style="Title.TLabel")
-        self.header_title.pack(side="left")
+        header = ttk.Frame(self.outer, style="JudgeHeader.TFrame", padding=(14, 9))
+        header.pack(fill="x", pady=(0, 8))
+        header_brand = ttk.Frame(header, style="Panel.TFrame")
+        header_brand.pack(side="left")
+        self.header_title = ttk.Label(header_brand, text=self._t("app.header"), style="Brand.TLabel")
+        self.header_title.pack(anchor="w")
+        self.header_subtitle = ttk.Label(header_brand, text=self._t("app.subtitle"), style="BrandSub.TLabel")
+        self.header_subtitle.pack(anchor="w")
         self._attach_header_menus(header)
-        ttk.Label(header, textvariable=self.camera_var, style="HeaderMuted.TLabel").pack(side="left", padx=(16, 0), pady=(3, 0))
-        self.timer_frame = tk.Frame(header, borderwidth=0, cursor="hand2")
+        ttk.Label(header, textvariable=self.camera_var, style="Muted.TLabel").pack(side="left", padx=(18, 0), pady=(3, 0))
+        self.timer_frame = tk.Frame(header, borderwidth=0, highlightthickness=1, cursor="hand2")
         self.timer_frame.pack(side="right", padx=(12, 0), pady=(1, 0))
         self.timer_prefix_label = tk.Label(self.timer_frame, textvariable=self.timer_prefix_var, borderwidth=0, cursor="hand2", font=("Segoe UI Semibold", 10))
         self.timer_prefix_label.pack(side="left", padx=(6, 5), pady=3)
@@ -243,20 +248,20 @@ class MainWindow:
             widget.bind("<Button-1>", lambda _event: self.toggle_athlete_timer())
         self.mode_badge = tk.Label(header, textvariable=self.mode_var, padx=10, pady=4, borderwidth=0, font=("Segoe UI Semibold", 9))
         self.mode_badge.pack(side="right", padx=(10, 0))
-        ttk.Label(header, textvariable=self.clock_var, style="HeaderMuted.TLabel").pack(side="right", pady=(3, 0))
+        ttk.Label(header, textvariable=self.clock_var, style="Muted.TLabel").pack(side="right", pady=(3, 0))
         self._update_athlete_timer_display()
 
         self.warning_banner = tk.Label(self.outer, textvariable=self.warning_var, anchor="w", padx=10, pady=5, font=("Segoe UI Semibold", 9))
         self.competition_banner = tk.Label(self.outer, textvariable=self.competition_banner_var, anchor="center", padx=10, pady=5, font=("Segoe UI Semibold", 9))
 
-        self.competition_bar = ttk.Frame(self.outer, style="Toolbar.TFrame", padding=(8, 5))
-        self.current_athlete_label = ttk.Label(self.competition_bar, text=self._t("competition.current"), style="Status.TLabel")
+        self.competition_bar = ttk.Frame(self.outer, style="Toolbar.TFrame", padding=(12, 8))
+        self.current_athlete_label = ttk.Label(self.competition_bar, text=self._t("competition.current"), style="ContextTitle.TLabel")
         self.current_athlete_label.pack(side="left", padx=(0, 8))
         self.group_combo = ttk.Combobox(self.competition_bar, textvariable=self.group_var, state="readonly", width=9)
         self.group_combo.pack(side="left"); self.group_combo.bind("<<ComboboxSelected>>", self._group_changed)
         self.competitor_combo = ttk.Combobox(self.competition_bar, textvariable=self.competitor_var, state="readonly", width=7)
         self.competitor_combo.pack(side="left", padx=(6, 8)); self.competitor_combo.bind("<<ComboboxSelected>>", self._competitor_changed)
-        ttk.Label(self.competition_bar, textvariable=self.current_try_var, style="PanelTitle.TLabel").pack(side="left")
+        ttk.Label(self.competition_bar, textvariable=self.current_try_var, style="ContextValue.TLabel").pack(side="left")
         self.prev_athlete_button = ttk.Button(self.competition_bar, text=self._t("competition.previous"), style="Control.TButton", command=lambda: self._select_competitor_delta(-1))
         self.prev_athlete_button.pack(side="right", padx=(5, 0))
         self.next_athlete_button = ttk.Button(self.competition_bar, text=self._t("competition.next"), style="Control.TButton", command=lambda: self._select_competitor_delta(1))
@@ -290,7 +295,7 @@ class MainWindow:
         self.comparison_prev_canvas = VideoCanvas(self.video_host, self.palette, compact=True, guide_enabled=False, board_roi_enabled=False, board_roi_visible=False, language=self.config.general.language)
         self.comparison_next_canvas = VideoCanvas(self.video_host, self.palette, compact=True, guide_enabled=False, board_roi_enabled=False, board_roi_visible=False, language=self.config.general.language)
 
-        self.timeline_wrap = ttk.Frame(self.workspace, style="Panel.TFrame", padding=(6, 5), height=max(100, self.config.display.timeline_height))
+        self.timeline_wrap = ttk.Frame(self.workspace, style="Panel.TFrame", padding=(8, 7), height=max(165, self.config.display.timeline_height))
         self.timeline = ProfessionalTimeline(
             self.timeline_wrap, self.palette, self.seek_timeline,
             detail_window_seconds=self.config.timeline.detail_window_seconds,
@@ -305,11 +310,11 @@ class MainWindow:
         self.root.after_idle(self._set_timeline_sash)
         self.root.after(180, self._set_timeline_sash)
 
-        self.controls = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(7, 6))
-        self.controls.pack(fill="x", pady=(6, 0))
-        self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), style="Accent.TButton", command=self.toggle_freeze)
+        self.controls = ttk.Frame(self.workspace, style="ControlDock.TFrame", padding=(10, 8))
+        self.controls.pack(fill="x", pady=(8, 0))
+        self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), style="PrimaryJudge.TButton", command=self.toggle_freeze)
         self.freeze_button.pack(side="left")
-        self.live_button = ttk.Button(self.controls, text=self._t("button.live"), style="Live.TButton", command=self.return_live)
+        self.live_button = ttk.Button(self.controls, text=self._t("button.live"), style="LiveJudge.TButton", command=self.return_live)
         self.live_button.pack(side="left", padx=(6, 12))
         self.prev_frame_button = ttk.Button(self.controls, text=self._t("button.previous_frame"), width=10, style="Control.TButton", command=lambda: self.step_frame(-1))
         self.prev_frame_button.pack(side="left", padx=2)
@@ -317,14 +322,14 @@ class MainWindow:
         self.next_frame_button.pack(side="left", padx=2)
         ttk.Separator(self.controls, orient="vertical").pack(side="left", fill="y", padx=10)
 
-        self.decision_frame = ttk.Frame(self.controls, style="Toolbar.TFrame")
+        self.decision_frame = ttk.Frame(self.controls, style="Panel.TFrame")
         self.not_decided_button = ttk.Button(self.decision_frame, text=self._t("button.not_decided"), width=12, style="Control.TButton", command=lambda: self.mark_decision(AttemptDecision.NOT_DECIDED))
         self.not_decided_button.pack(side="left", padx=2)
-        self.valid_button = ttk.Button(self.decision_frame, text=self._t("button.valid"), width=8, style="Valid.TButton", command=lambda: self.mark_decision(AttemptDecision.VALID))
+        self.valid_button = ttk.Button(self.decision_frame, text=self._t("button.valid"), width=8, style="JudgeValid.TButton", command=lambda: self.mark_decision(AttemptDecision.VALID))
         self.valid_button.pack(side="left", padx=2)
-        self.foul_button = ttk.Button(self.decision_frame, text=self._t("button.foul"), width=8, style="Foul.TButton", command=lambda: self.mark_decision(AttemptDecision.FOUL))
+        self.foul_button = ttk.Button(self.decision_frame, text=self._t("button.foul"), width=8, style="JudgeFoul.TButton", command=lambda: self.mark_decision(AttemptDecision.FOUL))
         self.foul_button.pack(side="left", padx=2)
-        self.review_button = ttk.Button(self.decision_frame, text=self._t("button.review"), width=8, style="Review.TButton", command=lambda: self.mark_decision(AttemptDecision.REVIEW))
+        self.review_button = ttk.Button(self.decision_frame, text=self._t("button.review"), width=8, style="JudgeReview.TButton", command=lambda: self.mark_decision(AttemptDecision.REVIEW))
         self.review_button.pack(side="left", padx=2)
         self.decision_frame.pack(side="left")
 
@@ -333,8 +338,8 @@ class MainWindow:
 
         self.center_overlay = tk.Label(self.video_host, text="", justify="center", padx=18, pady=10, font=("Segoe UI Semibold", 14), borderwidth=0)
 
-        self.status_bar = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(8, 4))
-        self.status_bar.pack(fill="x", pady=(4, 0))
+        self.status_bar = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(10, 5))
+        self.status_bar.pack(fill="x", pady=(5, 0))
         ttk.Label(self.status_bar, textvariable=self.status_var, style="Status.TLabel").pack(side="left")
         ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel").pack(side="right")
 
@@ -618,34 +623,43 @@ class MainWindow:
     def _update_athlete_timer_display(self) -> None:
         snapshot = self.athlete_timer.snapshot()
         p = self.palette
-        background = p["bg"]
+        background = p["surface2"]
+        prefix = ""
+        prefix_visible = False
+        prefix_color = p["muted"]
+        if snapshot.state is AthleteTimerState.READY:
+            prefix = self._t("timer.ready")
+            prefix_visible = True
+            prefix_color = p["accent"] if int(time.monotonic() / 0.5) % 2 == 0 else background
+            value_color = p["accent"]
+        elif snapshot.state is AthleteTimerState.STOPPED:
+            prefix = self._t("timer.stopped")
+            prefix_visible = True
+            value_color = p["accent"]
+        elif snapshot.state is AthleteTimerState.EXPIRED:
+            value_color = p["danger"]
+        elif snapshot.remaining_seconds <= 10:
+            value_color = p["warning"]
+        else:
+            value_color = p["accent"]
+        signature = (snapshot.state, snapshot.remaining_seconds, prefix, prefix_visible, prefix_color, value_color, background, p["border"])
+        if signature == self._last_timer_render_signature:
+            return
+        self._last_timer_render_signature = signature
+        self.timer_frame.configure(highlightbackground=p["border"], highlightcolor=p["accent"])
         self.timer_frame.configure(bg=background)
         self.timer_prefix_label.configure(bg=background)
         self.timer_value_label.configure(bg=background)
         self.timer_value_var.set(format_countdown(snapshot.remaining_seconds))
-        if snapshot.state is AthleteTimerState.READY:
-            self.timer_prefix_var.set(self._t("timer.ready"))
+        if prefix_visible:
+            self.timer_prefix_var.set(prefix)
             if not self.timer_prefix_label.winfo_manager():
                 self.timer_prefix_label.pack(side="left", before=self.timer_value_label, padx=(6, 5), pady=3)
-            visible = int(time.monotonic() / 0.5) % 2 == 0
-            self.timer_prefix_label.configure(fg=p["accent"] if visible else background)
-            self.timer_value_label.configure(fg=p["accent"])
-        elif snapshot.state is AthleteTimerState.STOPPED:
-            self.timer_prefix_var.set(self._t("timer.stopped"))
-            if not self.timer_prefix_label.winfo_manager():
-                self.timer_prefix_label.pack(side="left", before=self.timer_value_label, padx=(6, 5), pady=3)
-            self.timer_prefix_label.configure(fg=p["muted"])
-            self.timer_value_label.configure(fg=p["accent"])
+            self.timer_prefix_label.configure(fg=prefix_color)
         else:
             if self.timer_prefix_label.winfo_manager():
                 self.timer_prefix_label.pack_forget()
-            if snapshot.state is AthleteTimerState.EXPIRED:
-                color = p["danger"]
-            elif snapshot.remaining_seconds <= 10:
-                color = p["warning"]
-            else:
-                color = p["accent"]
-            self.timer_value_label.configure(fg=color)
+        self.timer_value_label.configure(fg=value_color)
 
     def toggle_athlete_timer(self) -> None:
         if self.athlete_timer.snapshot().state is AthleteTimerState.RUNNING:
@@ -948,14 +962,18 @@ class MainWindow:
                 self._show_next_athlete_overlay(next_assignment)
         return True
 
-    def return_live(self) -> None:
-        self._cancel_scheduled_review()
+    def _enter_live(self, complete_rotation: bool = True) -> bool:
         returning_from_replay = self.playback.mode is not PlaybackMode.LIVE
-        if not self._complete_current_attempt_for_rotation():
-            return
+        if complete_rotation and not self._complete_current_attempt_for_rotation():
+            return False
         self.playback.go_live(); self._last_replay_key = None; self.timeline.detail_center_ns = None
         if returning_from_replay:
             self.athlete_timer.reset(); self._update_athlete_timer_display()
+        return True
+
+    def return_live(self) -> None:
+        self._cancel_scheduled_review()
+        self._enter_live(complete_rotation=True)
 
     def step_frame(self, delta: int) -> None:
         self._cancel_scheduled_review(); self.playback.step(delta); self._last_replay_key = None
@@ -1139,7 +1157,8 @@ class MainWindow:
         attempt_id = self.playback.attempt_id
         if attempt_id is None: return
         if not messagebox.askyesno("Delete attempt", f"Delete temporary attempt #{attempt_id:02d}?\nExported and evidence files are not removed."): return
-        self.return_live()
+        self._cancel_scheduled_review()
+        self._enter_live(complete_rotation=False)
         if not self.attempts.delete(attempt_id, force=True): self._show_message("This attempt cannot be deleted while it is being encoded or exported.", 5)
         self._refresh_attempts()
 
@@ -1190,7 +1209,7 @@ class MainWindow:
                 return 0
             mode = selected
         self._cancel_scheduled_review()
-        self.playback.go_live()
+        self._enter_live(complete_rotation=False)
         count = 0
         if mode == "all":
             count = self.attempts.clear_all()
@@ -1382,7 +1401,7 @@ class MainWindow:
     def _set_timeline_sash(self) -> None:
         if not self._timeline_pane_added: return
         try:
-            total = self.media_pane.winfo_height(); self.media_pane.sashpos(0, max(240, total - self.config.display.timeline_height))
+            total = self.media_pane.winfo_height(); self.media_pane.sashpos(0, max(240, total - max(165, self.config.display.timeline_height)))
         except tk.TclError: pass
 
     def _apply_layout(self) -> None:
@@ -1431,6 +1450,7 @@ class MainWindow:
                 canvas.set_language(self.config.general.language)
         self.root.title(self._t("app.title"))
         self.header_title.configure(text=self._t("app.header"))
+        self.header_subtitle.configure(text=self._t("app.subtitle"))
         self._update_athlete_timer_display()
         self.file_menu_button.configure(text=self._t("menu.file"))
         self.view_menu_button.configure(text=self._t("menu.view"))
@@ -1728,7 +1748,7 @@ class MainWindow:
             except tk.TclError: pass
         try:
             if self._attempts_pane_added and self.content_pane.winfo_width() > 10:
-                self.config.display.attempts_panel_width = max(200, self.content_pane.winfo_width() - int(self.content_pane.sashpos(0)))
+                self.config.display.attempts_panel_width = max(220, self.content_pane.winfo_width() - int(self.content_pane.sashpos(0)))
             if self._timeline_pane_added and self.media_pane.winfo_height() > 10:
                 self.config.display.timeline_height = max(100, self.media_pane.winfo_height() - int(self.media_pane.sashpos(0)))
         except tk.TclError: pass

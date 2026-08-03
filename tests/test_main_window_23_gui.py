@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import messagebox
 
 from src.config import AppConfig, save_config
 from src.main_window import MainWindow
@@ -77,6 +78,31 @@ def test_strict_decision_mode_can_still_block_return_live(tmp_path):
     root.after(6000, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
     assert result["attempt_id"] is not None
+    assert result["athlete"] == 1
+
+
+def test_deleting_undecided_attempt_in_strict_mode_leaves_consistent_live_state(tmp_path, monkeypatch):
+    config, path = _config(tmp_path)
+    config.competition.require_decision_before_continue = True
+    save_config(config, path)
+    monkeypatch.setattr(messagebox, "askyesno", lambda *args, **kwargs: True)
+    root = tk.Tk(); app = MainWindow(root, config, path); result = {}
+    root.after(450, app.toggle_freeze)
+    root.after(850, app.delete_current_attempt)
+
+    def inspect():
+        result["attempts"] = app.attempts.attempts()
+        result["mode"] = app.playback.mode
+        result["attempt_id"] = app.playback.attempt_id
+        result["athlete"] = app.competition.current_competitor()
+        app.close()
+
+    root.after(1100, inspect)
+    root.after(6000, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+    assert result["attempts"] == []
+    assert result["mode"].value == "LIVE"
+    assert result["attempt_id"] is None
     assert result["athlete"] == 1
 
 

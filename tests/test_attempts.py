@@ -89,3 +89,24 @@ def test_ready_attempt_is_recovered_from_temporary_cache(tmp_path, jpeg_frame):
     assert recovered.temp_video_path and recovered.temp_video_path.exists()
     assert recovered_manager.get_frame(recovered.attempt_id, recovered.freeze_frame_index).frame_bgr is not None
     recovered_manager.stop()
+
+
+def test_stalled_capture_finalizes_partial_post_roll(monkeypatch, tmp_path, jpeg_frame):
+    jpeg, _ = jpeg_frame
+    ring = TimeRingBuffer(2, 128)
+    base = 5_000_000_000
+    ring.append(base, jpeg, 160, 90)
+    config = AttemptsConfig(pre_seconds=.1, post_seconds=2, retention_minutes=1)
+    manager = AttemptManager(ring, config, ExportConfig(), tmp_path / 'cache', Queue())
+    now = [10_000_000_000]
+    monkeypatch.setattr('src.attempts.time.monotonic_ns', lambda: now[0])
+    attempt = manager.create_attempt()
+    assert attempt and attempt.state is AttemptState.COLLECTING
+    submitted = []
+    monkeypatch.setattr(manager, '_submit_encode', submitted.append)
+    now[0] += int((config.post_seconds + manager.POST_ROLL_STALL_GRACE_SECONDS + .1) * 1e9)
+    manager._collect_post_roll()
+    stalled = manager.get_attempt(attempt.attempt_id)
+    assert stalled and stalled.state is AttemptState.ENCODING
+    assert 'Post-roll ended early' in stalled.quality_warning
+    assert submitted == [attempt.attempt_id]

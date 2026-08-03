@@ -305,12 +305,16 @@ class AppConfig:
             raise ValueError("general.language must be en or cs")
         if self.camera.source_type not in {"camera", "synthetic", "file"}:
             raise ValueError("camera.source_type must be camera, synthetic, or file")
+        if self.camera.source_type == "file" and not self.camera.file_path.strip():
+            raise ValueError("camera.file_path is required for a file source")
         if self.camera.width <= 0 or self.camera.height <= 0:
             raise ValueError("Camera dimensions must be positive")
         if not 1 <= self.camera.fps <= 1000:
             raise ValueError("camera.fps must be between 1 and 1000")
         if len(self.camera.fourcc) != 4:
             raise ValueError("camera.fourcc must contain exactly four characters")
+        if not 0 <= self.camera.buffer_size <= 64 or not 0.1 <= self.camera.reconnect_seconds <= 60:
+            raise ValueError("Camera buffer/reconnect settings are outside supported limits")
         if not 1 <= self.buffer.duration_seconds <= 600:
             raise ValueError("buffer.duration_seconds must be between 1 and 600")
         if not 1 <= self.buffer.jpeg_quality <= 100:
@@ -319,6 +323,8 @@ class AppConfig:
             raise ValueError("buffer.encoder_queue_size must be at least 2")
         if self.buffer.max_memory_mb < 128:
             raise ValueError("buffer.max_memory_mb must be at least 128")
+        if isinstance(self.buffer.store_every_nth_frame, bool) or not isinstance(self.buffer.store_every_nth_frame, int) or not 1 <= self.buffer.store_every_nth_frame <= 100:
+            raise ValueError("buffer.store_every_nth_frame must be an integer between 1 and 100")
         if self.attempts.pre_seconds < 0 or self.attempts.post_seconds < 0:
             raise ValueError("Attempt pre/post roll cannot be negative")
         if self.attempts.retention_minutes < 0.5:
@@ -371,6 +377,12 @@ class AppConfig:
             raise ValueError("Guide position must be within the image")
         if not -89.9 <= self.display.guide_angle_deg <= 89.9:
             raise ValueError("Guide angle must be between -89.9 and 89.9 degrees")
+        if not 1 <= self.display.guide_width_px <= 20:
+            raise ValueError("display.guide_width_px must be between 1 and 20")
+        if not 1 <= self.display.comparison_offset_frames <= 100:
+            raise ValueError("display.comparison_offset_frames must be between 1 and 100")
+        if self.display.attempts_panel_width < 220 or not 100 <= self.display.timeline_height <= 500:
+            raise ValueError("Display panel sizes are outside supported limits")
         for value in (self.display.board_roi_x, self.display.board_roi_y, self.display.board_roi_width, self.display.board_roi_height):
             if not 0 <= value <= 1:
                 raise ValueError("Board ROI values must be between 0 and 1")
@@ -391,8 +403,29 @@ class AppConfig:
             raise ValueError("Take-off confidence must be between 0 and 1")
         if not 80 <= a.downscale_width <= 1280:
             raise ValueError("Take-off analysis width must be between 80 and 1280")
+        if not 0.01 <= a.quick_review_speed <= 4.0:
+            raise ValueError("takeoff_assist.quick_review_speed must be between 0.01 and 4")
+        if not -1000 <= a.seek_lead_frames <= 1000:
+            raise ValueError("takeoff_assist.seek_lead_frames must be between -1000 and 1000")
+        if not 0 <= self.export.target_fps <= 1000:
+            raise ValueError("export.target_fps must be between 0 and 1000")
         if not isinstance(self.hotkeys.bindings, dict):
             raise ValueError("hotkeys.bindings must be an object")
+        assigned: dict[str, str] = {}
+        for action, binding in self.hotkeys.bindings.items():
+            if not isinstance(action, str) or not isinstance(binding, str):
+                raise ValueError("Hotkey action names and bindings must be strings")
+            normalized = binding.strip().lower()
+            if not normalized:
+                continue
+            if normalized in assigned:
+                raise ValueError(f"Hotkey {binding} is assigned to both {assigned[normalized]} and {action}")
+            assigned[normalized] = action
+        s = self.shuttle
+        if not 1 <= s.poll_timeout_ms <= 5000 or not 0 <= s.shuttle_debounce_ms <= 5000:
+            raise ValueError("Shuttle timing settings are outside supported limits")
+        if not 0 <= s.vendor_id <= 0xFFFF or any(not 0 <= int(value) <= 0xFFFF for value in s.product_ids):
+            raise ValueError("Shuttle USB identifiers must be 16-bit values")
 
 
 def apply_performance_preset(config: AppConfig, preset: str) -> None:
