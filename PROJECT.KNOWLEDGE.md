@@ -30,7 +30,7 @@ Preserve these rules unless the product owner explicitly changes them:
 8. **Timeline updates must reuse canvas items.** Do not delete and recreate all tick marks every frame.
 9. **Expensive redraws are throttled or suspended while moving/resizing the window or interacting with menus.** Capture continues.
 10. **Space must always control Freeze/Live even after clicking a button.** Focused widgets must not steal it.
-11. **Evidence quality must not be silently reduced by performance presets.** Reduce preview/UI analysis work first.
+11. **Evidence quality must not be silently reduced by performance presets.** Reduce preview/UI analysis work first. The separate Older PC mode is an explicit operator choice and may retain every second source frame; it must clearly disclose that tradeoff.
 12. **The app must close even if a camera backend or worker misbehaves.** Shutdown has bounded waits and emergency release behavior.
 13. **English and Czech are supported.** New user-facing strings must go through `src/i18n.py`.
 14. **Dark mode controls must remain readable.** Always test combobox popups, selections, disabled text, and focus states.
@@ -378,6 +378,8 @@ The PC fan/noise is a real product concern. Performance presets are:
 
 Settings with performance consequences display Low / Medium / High / Very high impact labels.
 
+The explicit Older PC mode is stronger than the ordinary Quiet presentation preset. It applies Quiet UI rendering, a 15-second/1 GB live buffer, JPEG quality 72, a 64-frame encoder queue, 128-pixel assist analysis, and `store_every_nth_frame = 2`. Camera capture remains at the configured FPS, so a 120 FPS source yields a 60 FPS retained replay. It is available through Settings, `app.py --low-power`, and `START_LOW_POWER.bat`.
+
 Optimization order:
 
 1. reduce preview refresh rate;
@@ -446,6 +448,7 @@ Always test changes affecting workflow against:
 21. Clear-recording Live transitions reset runtime-only review aids through the centralized Live path.
 22. Dangerous capture sampling, display, analysis, export, duplicate-hotkey, file-source, and device values are rejected during config validation.
 23. English and Czech translation dictionaries expose the same keys.
+24. Older PC mode preserves configured camera FPS, applies bounded low-resource values, validates successfully, and is loadable from Settings.
 
 ### Headless note
 

@@ -449,7 +449,7 @@ class MainWindow:
         if p.adaptive_enabled:
             stats = self.capture.stats()
             if stats.queue_depth > max(8, self.config.buffer.encoder_queue_size // 2) or stats.queue_drops:
-                hz = min(hz, 30)
+                hz = min(hz, 12)
         return max(4, int(hz))
 
     def _schedule_tick(self) -> None:

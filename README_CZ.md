@@ -2,6 +2,10 @@
 
 Program slouží pro živý náhled a zpětnou kontrolu odrazu při skoku dalekém. Kamera běží dál i během kontroly pokusu. Zmrazený pokus se uloží jako samostatný dočasný záznam, takže po přepsání živého bufferu nezmizí.
 
+## Režim pro slabší počítače
+
+Na starším nebo méně výkonném počítači spusťte `START_LOW_POWER.bat` nebo v nastavení Výkon zvolte **Režim pro slabší PC**. Kamera zůstane nastavena na požadovanou frekvenci, ale aplikace vykresluje rozhraní při 20 Hz, ukládá každý druhý snímek (60 FPS z kamery 120 FPS), používá 15sekundový živý buffer a nejvýše 1 GB RAM.
+
 ## Nejdůležitější změna
 
 Po stisku mezerníku vznikne pokus se stavem **Nerozhodnuto**. Dalším stiskem mezerníku se vrátíš na živý obraz a program může automaticky přejít k dalšímu závodníkovi. Není nutné označit každý pokus jako Platný, Přešlap nebo Kontrola.

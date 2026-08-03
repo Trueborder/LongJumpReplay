@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from src.config import AppConfig, config_from_dict, load_config, save_config
+from src.config import AppConfig, apply_low_resource_mode, config_from_dict, load_config, save_config
 
 
 def test_config_round_trip(tmp_path):
@@ -61,3 +61,19 @@ def test_dangerous_runtime_values_and_duplicate_hotkeys_are_rejected():
             pass
         else:
             raise AssertionError(f'invalid configuration accepted: {data!r}')
+
+
+def test_low_resource_mode_reduces_work_without_lowering_camera_fps():
+    config = AppConfig()
+    config.camera.fps = 120
+    apply_low_resource_mode(config)
+    assert config.performance.preset == 'quiet'
+    assert config.performance.preview_refresh_hz == 20
+    assert config.performance.adaptive_enabled is True
+    assert config.camera.fps == 120
+    assert config.buffer.duration_seconds == 15
+    assert config.buffer.jpeg_quality == 72
+    assert config.buffer.encoder_queue_size == 64
+    assert config.buffer.max_memory_mb == 1024
+    assert config.buffer.store_every_nth_frame == 2
+    config.validate()

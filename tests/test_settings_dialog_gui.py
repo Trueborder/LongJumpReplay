@@ -14,6 +14,10 @@ def test_category_settings_dialog_builds_all_pages():
         "hotkeys", "shuttle", "recovery", "advanced",
     }
     assert dialog._vars["athlete_timer_duration"].get() == 60
+    dialog._load_low_resource_mode()
+    assert dialog._vars["preview_hz"].get() == 20
+    assert dialog._vars["store_nth"].get() == 2
+    assert dialog._vars["buffer_memory"].get() == 1024
     assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
     assert set(dialog._nav_group_labels) == {"essentials", "judging", "replay", "system"}
     assert dialog._nav_buttons["general"].cget("style") == "SettingsNav.TButton"

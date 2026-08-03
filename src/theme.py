@@ -65,6 +65,7 @@ class ThemeManager:
         style.configure("PanelTitle.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 9))
         style.configure("Text.TLabel", background=p["surface"], foreground=p["text"])
         style.configure("Muted.TLabel", background=p["surface"], foreground=p["muted"])
+        style.configure("Warning.TLabel", background=p["surface"], foreground=p["warning"])
         style.configure("HeaderMuted.TLabel", background=p["bg"], foreground=p["muted"])
         style.configure("Status.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 8))
         style.configure("Control.TButton", padding=(9, 6), font=("Segoe UI", 9))

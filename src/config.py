@@ -177,15 +177,15 @@ class PerformanceConfig:
 
 PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
     "quiet": {
-        "preview_refresh_hz": 24,
-        "timeline_refresh_hz": 15,
+        "preview_refresh_hz": 20,
+        "timeline_refresh_hz": 10,
         "status_refresh_hz": 2,
-        "attempts_refresh_hz": 2,
-        "preview_scale": 0.75,
+        "attempts_refresh_hz": 1,
+        "preview_scale": 0.65,
         "pause_hidden_panels": True,
         "reduce_when_minimized": True,
         "adaptive_enabled": True,
-        "assist_width": 160,
+        "assist_width": 128,
     },
     "balanced": {
         "preview_refresh_hz": 60,
@@ -444,6 +444,21 @@ def apply_performance_preset(config: AppConfig, preset: str) -> None:
     # silently change the quality of frames retained as evidence. Buffer JPEG
     # quality remains an explicit Advanced/Performance choice.
     config.takeoff_assist.downscale_width = int(values["assist_width"])
+
+
+def apply_low_resource_mode(config: AppConfig) -> None:
+    """Apply an explicit older-PC profile while keeping camera capture at its requested FPS.
+
+    Unlike the presentation-only presets, this mode deliberately stores every
+    second captured frame. A 120 FPS camera therefore produces a 60 FPS replay.
+    It is only applied through an explicit operator action or CLI flag.
+    """
+    apply_performance_preset(config, "quiet")
+    config.buffer.duration_seconds = min(config.buffer.duration_seconds, 15.0)
+    config.buffer.jpeg_quality = min(config.buffer.jpeg_quality, 72)
+    config.buffer.encoder_queue_size = min(config.buffer.encoder_queue_size, 64)
+    config.buffer.max_memory_mb = min(config.buffer.max_memory_mb, 1024)
+    config.buffer.store_every_nth_frame = max(config.buffer.store_every_nth_frame, 2)
 
 
 def _deep_update(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

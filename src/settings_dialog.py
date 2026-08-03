@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from collections.abc import Callable
 
-from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_performance_preset
+from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
 
@@ -346,8 +346,19 @@ class SettingsDialog(tk.Toplevel):
         preset_box = self._section(f, r, "Performance preset", "Výkonový profil"); r += 1
         ttk.Combobox(preset_box, textvariable=self._vars["performance_preset"], values=("quiet", "balanced", "high", "evidence", "custom"), state="readonly", width=22).grid(row=0, column=0, sticky="w")
         ttk.Button(preset_box, text=self._txt("Load preset", "Načíst profil"), command=self._load_performance_preset).grid(row=0, column=1, padx=(8, 0), sticky="w")
+        ttk.Button(preset_box, text=self._txt("Older PC mode", "Režim pro slabší PC"), command=self._load_low_resource_mode).grid(row=0, column=2, padx=(8, 0), sticky="w")
         self.preset_description = ttk.Label(preset_box, style="Muted.TLabel", wraplength=650, justify="left")
         self.preset_description.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(
+            preset_box,
+            text=self._txt(
+                "Older PC mode explicitly retains every second camera frame and needs an app restart.",
+                "Režim pro slabší PC výslovně ukládá každý druhý snímek kamery a vyžaduje restart aplikace.",
+            ),
+            style="Warning.TLabel",
+            wraplength=650,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 0))
         self._vars["performance_preset"].trace_add("write", lambda *_: self._update_preset_description())
         self._update_preset_description()
         self._row(f, r, "Live/replay preview refresh", "Obnovování náhledu videa", self._vars["preview_hz"], desc_en="Changes interface smoothness, not camera recording FPS.", desc_cs="Mění plynulost rozhraní, ne snímkovou frekvenci záznamu kamery.", impact="high"); r += 1
@@ -392,6 +403,26 @@ class SettingsDialog(tk.Toplevel):
         self._vars["jpeg_quality"].set(temp.buffer.jpeg_quality)
         if "assist_width" in self._vars:
             self._vars["assist_width"].set(temp.takeoff_assist.downscale_width)
+
+    def _load_low_resource_mode(self) -> None:
+        temp = deepcopy(self.working)
+        apply_low_resource_mode(temp)
+        p, b = temp.performance, temp.buffer
+        self._vars["performance_preset"].set(p.preset)
+        self._vars["preview_hz"].set(p.preview_refresh_hz)
+        self._vars["timeline_hz"].set(p.timeline_refresh_hz)
+        self._vars["status_hz"].set(p.status_refresh_hz)
+        self._vars["attempts_hz"].set(p.attempts_refresh_hz)
+        self._vars["preview_scale"].set(p.preview_scale)
+        self._vars["pause_hidden"].set(p.pause_hidden_panels)
+        self._vars["reduce_minimized"].set(p.reduce_when_minimized)
+        self._vars["adaptive"].set(p.adaptive_enabled)
+        self._vars["jpeg_quality"].set(b.jpeg_quality)
+        self._vars["buffer_seconds"].set(b.duration_seconds)
+        self._vars["buffer_memory"].set(b.max_memory_mb)
+        self._vars["queue_size"].set(b.encoder_queue_size)
+        self._vars["store_nth"].set(b.store_every_nth_frame)
+        self._vars["assist_width"].set(temp.takeoff_assist.downscale_width)
 
     def _build_camera(self, f: ttk.Frame) -> None:
         r = self._title(f, "Camera", "Kamera", "Camera changes require an application restart.", "Změny kamery vyžadují restart aplikace.")

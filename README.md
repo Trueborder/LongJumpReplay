@@ -87,6 +87,8 @@ Colours are deliberately soft and are always accompanied by text or symbols.
 
 Settings that can affect CPU, RAM, fan noise, or UI responsiveness show a **Low / Medium / High / Very high** impact badge. Preview FPS is independent of camera recording FPS.
 
+For older or resource-constrained PCs, double-click `START_LOW_POWER.bat` or choose **Older PC mode** on the Performance settings page. This explicit mode keeps camera capture at the configured rate, renders the interface at 20 Hz, retains every second camera frame (60 FPS from a 120 FPS camera), uses a 15-second live buffer, and limits its RAM budget to 1 GB.
+
 The most useful controls are:
 
 - preview refresh rate;
