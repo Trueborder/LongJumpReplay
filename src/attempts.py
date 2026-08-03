@@ -1,0 +1,679 @@
+from __future__ import annotations
+
+from dataclasses import replace
+import json
+from pathlib import Path
+from queue import Queue
+import shutil
+from threading import Event, RLock, Thread
+import time
+from typing import Iterable
+
+import cv2
+
+from .config import AttemptsConfig, ExportConfig
+from .exporter import decode_packet, estimate_fps, export_clip
+from .models import AttemptDecision, AttemptMarker, AttemptSession, AttemptState, FramePacket, MediaFrame
+from .ring_buffer import TimeRingBuffer
+
+
+class AttemptManager:
+    """Create durable replay sessions from the rolling live buffer.
+
+    A freeze immediately copies the pre-roll JPEG packets, continues collecting
+    post-roll packets, then encodes the completed session into temporary video.
+    The copied packets mean a decision can take longer than the live buffer.
+    """
+
+    def __init__(
+        self,
+        ring_buffer: TimeRingBuffer,
+        config: AttemptsConfig,
+        export_config: ExportConfig,
+        cache_directory: Path,
+        event_queue: Queue[tuple[str, object]],
+    ) -> None:
+        self.ring_buffer = ring_buffer
+        self.config = config
+        self.export_config = export_config
+        self.cache_directory = cache_directory
+        self.event_queue = event_queue
+        self._lock = RLock()
+        self._attempts: list[AttemptSession] = []
+        self._next_id = 1
+        self._stop = Event()
+        self._thread: Thread | None = None
+        self._workers: dict[str, Thread] = {}
+        self._pending_exports: dict[int, Path] = {}
+        self._video_caps: dict[int, cv2.VideoCapture] = {}
+        self._frame_cache: dict[int, tuple[int, object]] = {}
+        self._cancelled_attempt_ids: set[int] = set()
+
+    def start(self) -> None:
+        self.cache_directory.mkdir(parents=True, exist_ok=True)
+        self._recover_cache_index()
+        self._stop.clear()
+        self._thread = Thread(target=self._loop, name="attempt-manager", daemon=True)
+        self._thread.start()
+
+    def stop(self, timeout: float = 3.0) -> list[str]:
+        self._stop.set()
+        deadline = time.perf_counter() + max(.1, timeout)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(max(.0, deadline - time.perf_counter()))
+        with self._lock:
+            self._cancelled_attempt_ids.update(a.attempt_id for a in self._attempts)
+            workers = list(self._workers.items())
+            for cap in self._video_caps.values():
+                cap.release()
+            self._video_caps.clear()
+            self._frame_cache.clear()
+        # Codec and copy workers are allowed to finish, but never outlive the
+        # requested shutdown budget. This also prevents test/session builds from
+        # accumulating OpenCV workers across repeated window launches.
+        for _name, worker in workers:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                break
+            if worker.is_alive():
+                worker.join(remaining)
+        alive = []
+        if self._thread and self._thread.is_alive():
+            alive.append(self._thread.name)
+        with self._lock:
+            alive.extend(name for name, worker in self._workers.items() if worker.is_alive())
+        return alive
+
+    def create_attempt(
+        self,
+        freeze_timestamp_ns: int | None = None,
+        competitor_group: str = "",
+        competitor_number: int = 0,
+        competitor_attempt_number: int = 0,
+        quality_warning: str = "",
+        competition_phase: str = "qualification",
+    ) -> AttemptSession | None:
+        newest = self.ring_buffer.newest()
+        if newest is None:
+            return None
+        freeze_ns = freeze_timestamp_ns or newest.timestamp_ns
+        start_ns = freeze_ns - int(self.config.pre_seconds * 1_000_000_000)
+        packets = self.ring_buffer.snapshot_between(start_ns, freeze_ns)
+        if not packets:
+            packets = [newest]
+        now = time.time()
+        with self._lock:
+            for attempt in self._attempts:
+                attempt.selected = False
+            freeze_index = min(range(len(packets)), key=lambda i: abs(packets[i].timestamp_ns - freeze_ns))
+            attempt = AttemptSession(
+                attempt_id=self._next_id,
+                created_monotonic_ns=time.monotonic_ns(),
+                created_wall_time=now,
+                freeze_timestamp_ns=freeze_ns,
+                pre_seconds=self.config.pre_seconds,
+                post_seconds=self.config.post_seconds,
+                expires_at_wall_time=now + self.config.retention_minutes * 60,
+                packets=list(packets),
+                frame_count=len(packets),
+                freeze_frame_index=freeze_index,
+                fps=estimate_fps(packets, fallback=30.0),
+                width=packets[0].width,
+                height=packets[0].height,
+                media_start_timestamp_ns=packets[0].timestamp_ns,
+                media_end_timestamp_ns=packets[-1].timestamp_ns,
+                selected=self.config.auto_select_new,
+                competitor_group=competitor_group,
+                competitor_number=competitor_number,
+                competitor_attempt_number=competitor_attempt_number,
+                competition_phase=competition_phase,
+                quality_warning=quality_warning,
+            )
+            self._next_id += 1
+            self._attempts.append(attempt)
+            self._enforce_limits_locked()
+        self.event_queue.put(("attempt_created", attempt.attempt_id))
+        return self.get_attempt(attempt.attempt_id)
+
+
+    def create_placeholder_attempt(
+        self,
+        competitor_group: str,
+        competitor_number: int,
+        competitor_attempt_number: int,
+        decision: AttemptDecision,
+        competition_phase: str = "qualification",
+    ) -> AttemptSession:
+        """Create a roster result without video (Pass, DNS, Withdrawn)."""
+        now = time.time()
+        with self._lock:
+            for existing in self._attempts:
+                existing.selected = False
+            attempt = AttemptSession(
+                attempt_id=self._next_id,
+                created_monotonic_ns=time.monotonic_ns(),
+                created_wall_time=now,
+                freeze_timestamp_ns=time.monotonic_ns(),
+                pre_seconds=0.0,
+                post_seconds=0.0,
+                expires_at_wall_time=now + self.config.retention_minutes * 60,
+                state=AttemptState.READY,
+                decision=AttemptDecision(decision),
+                decision_wall_time=now,
+                competitor_group=competitor_group,
+                competitor_number=competitor_number,
+                competitor_attempt_number=competitor_attempt_number,
+                competition_phase=competition_phase,
+                rotation_completed=True,
+                counts_for_rotation=decision is not AttemptDecision.REATTEMPT,
+                selected=True,
+            )
+            self._next_id += 1
+            self._attempts.append(attempt)
+            self._write_metadata_locked(attempt)
+            self._enforce_limits_locked()
+        self.event_queue.put(("attempt_created", attempt.attempt_id))
+        self.event_queue.put(("attempt_ready", attempt.attempt_id))
+        return self.get_attempt(attempt.attempt_id)  # type: ignore[return-value]
+
+    def set_rotation_completed(self, attempt_id: int, completed: bool = True) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            attempt.rotation_completed = bool(completed)
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
+    def set_counts_for_rotation(self, attempt_id: int, counts: bool) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            attempt.counts_for_rotation = bool(counts)
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
+    def attempts(self) -> list[AttemptSession]:
+        with self._lock:
+            return [self._public_copy(a) for a in self._attempts]
+
+    def get_attempt(self, attempt_id: int) -> AttemptSession | None:
+        with self._lock:
+            found = self._find_locked(attempt_id)
+            return self._public_copy(found) if found else None
+
+    def selected_attempt(self) -> AttemptSession | None:
+        with self._lock:
+            found = next((a for a in self._attempts if a.selected), None)
+            return self._public_copy(found) if found else None
+
+    def clear_selection(self) -> None:
+        with self._lock:
+            for attempt in self._attempts:
+                if attempt.selected:
+                    attempt.selected = False
+                    attempt.expires_at_wall_time = max(
+                        attempt.expires_at_wall_time,
+                        time.time() + self.config.retention_minutes * 60,
+                    )
+        self.event_queue.put(("attempt_selected", 0))
+
+    def select(self, attempt_id: int) -> AttemptSession | None:
+        with self._lock:
+            target = self._find_locked(attempt_id)
+            if target is None:
+                return None
+            for attempt in self._attempts:
+                attempt.selected = attempt.attempt_id == attempt_id
+            # A selected attempt is never deleted under the operator's cursor.
+            target.expires_at_wall_time = max(target.expires_at_wall_time, time.time() + 30.0)
+            result = self._public_copy(target)
+        self.event_queue.put(("attempt_selected", attempt_id))
+        return result
+
+    def select_relative(self, delta: int) -> AttemptSession | None:
+        with self._lock:
+            if not self._attempts:
+                return None
+            current = next((i for i, a in enumerate(self._attempts) if a.selected), len(self._attempts) - 1)
+            index = max(0, min(len(self._attempts) - 1, current + delta))
+            target_id = self._attempts[index].attempt_id
+        return self.select(target_id)
+
+    def add_marker(self, attempt_id: int, timestamp_ns: int, label: str = "Marker") -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            attempt.markers.append(AttemptMarker(timestamp_ns, label))
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
+
+    def packets_snapshot(self, attempt_id: int) -> list[FramePacket]:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            return list(attempt.packets) if attempt else []
+
+    def set_decision(self, attempt_id: int, decision: AttemptDecision) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            attempt.decision = AttemptDecision(decision)
+            attempt.decision_wall_time = time.time()
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
+    def set_evidence_paths(self, attempt_id: int, raw_path: Path | None, annotated_path: Path | None) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            attempt.evidence_raw_path = raw_path
+            attempt.evidence_annotated_path = annotated_path
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
+    def set_takeoff_candidate(self, attempt_id: int, frame_index: int, confidence: float) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or attempt.frame_count <= 0:
+                return False
+            attempt.takeoff_candidate_index = max(0, min(attempt.frame_count - 1, int(frame_index)))
+            attempt.takeoff_confidence = max(0.0, min(1.0, float(confidence)))
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("takeoff_candidate", (attempt_id, attempt.takeoff_candidate_index, attempt.takeoff_confidence)))
+        return True
+
+    def clear_all(self) -> int:
+        """Remove every temporary attempt, including selected records.
+
+        Encoding workers are not killed mid-codec call. Their attempt IDs are
+        cancelled, so any late output is deleted instead of reappearing.
+        """
+        with self._lock:
+            attempts = list(self._attempts)
+            self._cancelled_attempt_ids.update(a.attempt_id for a in attempts)
+            self._pending_exports.clear()
+            for cap in self._video_caps.values():
+                cap.release()
+            self._video_caps.clear()
+            self._frame_cache.clear()
+            self._attempts.clear()
+            for attempt in attempts:
+                for path in (attempt.temp_video_path, attempt.temp_metadata_path):
+                    if path:
+                        try: path.unlink(missing_ok=True)
+                        except OSError: pass
+            for path in self.cache_directory.glob("attempt_*.*"):
+                try: path.unlink(missing_ok=True)
+                except OSError: pass
+        self.event_queue.put(("attempts_cleared", len(attempts)))
+        return len(attempts)
+
+    def clear_unresolved(self) -> int:
+        """Remove temporary attempts that still need an operator decision.
+
+        Not-decided and Review records are treated as unresolved. Exported and
+        evidence files live outside the temporary cache and are never touched.
+        """
+        unresolved = {AttemptDecision.NOT_DECIDED, AttemptDecision.REVIEW}
+        return self._clear_matching(lambda attempt: attempt.decision in unresolved)
+
+    def _clear_matching(self, predicate) -> int:
+        with self._lock:
+            targets = [attempt for attempt in self._attempts if predicate(attempt)]
+            if not targets:
+                return 0
+            target_ids = {attempt.attempt_id for attempt in targets}
+            self._cancelled_attempt_ids.update(target_ids)
+            for attempt_id in target_ids:
+                self._pending_exports.pop(attempt_id, None)
+                cap = self._video_caps.pop(attempt_id, None)
+                if cap is not None:
+                    cap.release()
+                self._frame_cache.pop(attempt_id, None)
+            self._attempts = [attempt for attempt in self._attempts if attempt.attempt_id not in target_ids]
+            for attempt in targets:
+                for path in (attempt.temp_video_path, attempt.temp_metadata_path):
+                    if path:
+                        try:
+                            path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+        self.event_queue.put(("attempts_cleared", len(targets)))
+        return len(targets)
+
+    def request_export(self, attempt_id: int, output_directory: Path) -> bool:
+        output_directory.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            if attempt.state in {AttemptState.COLLECTING, AttemptState.ENCODING}:
+                self._pending_exports[attempt_id] = output_directory
+                self.event_queue.put(("message", f"Attempt #{attempt_id:02d} will export after post-roll is complete."))
+                return True
+            if not attempt.temp_video_path or not attempt.temp_video_path.exists():
+                return False
+            attempt.state = AttemptState.EXPORTING
+            source = attempt.temp_video_path
+            meta_source = attempt.temp_metadata_path
+            created = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(attempt.created_wall_time))
+            destination = output_directory / f"attempt_{attempt_id:02d}_{created}{source.suffix}"
+            meta_destination = destination.with_suffix(".json")
+        name = f"attempt-export-{attempt_id}"
+        worker = Thread(target=self._copy_export, args=(attempt_id, source, destination, meta_source, meta_destination), name=name, daemon=True)
+        with self._lock:
+            self._workers[name] = worker
+        worker.start()
+        return True
+
+    def delete(self, attempt_id: int, force: bool = False) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or (attempt.selected and not force) or attempt.protected:
+                return False
+            self._delete_locked(attempt)
+        self.event_queue.put(("attempt_deleted", attempt_id))
+        return True
+
+    def frame_count(self, attempt_id: int) -> int:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            return attempt.frame_count if attempt else 0
+
+    def get_frame(self, attempt_id: int, frame_index: int) -> MediaFrame:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or attempt.frame_count <= 0:
+                return MediaFrame(None, 0, 0, 0, 0.0)
+            index = max(0, min(attempt.frame_count - 1, frame_index))
+            if attempt.packets and index < len(attempt.packets):
+                packet = attempt.packets[index]
+                return MediaFrame(decode_packet(packet), packet.timestamp_ns, index, attempt.frame_count, attempt.fps)
+            cached = self._frame_cache.get(attempt_id)
+            if cached and cached[0] == index:
+                timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
+                return MediaFrame(cached[1], timestamp, index, attempt.frame_count, attempt.fps)
+            path = attempt.temp_video_path
+            if not path or not path.exists():
+                return MediaFrame(None, 0, index, attempt.frame_count, attempt.fps)
+            cap = self._video_caps.get(attempt_id)
+            if cap is None or not cap.isOpened():
+                cap = cv2.VideoCapture(str(path))
+                self._video_caps[attempt_id] = cap
+            cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+            ok, frame = cap.read()
+            if not ok:
+                return MediaFrame(None, 0, index, attempt.frame_count, attempt.fps)
+            self._frame_cache[attempt_id] = (index, frame)
+            timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
+            return MediaFrame(frame, timestamp, index, attempt.frame_count, attempt.fps)
+
+    def frame_index_at_timestamp(self, attempt_id: int, timestamp_ns: int) -> int:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or attempt.frame_count <= 0:
+                return 0
+            if attempt.packets:
+                # Binary search is unnecessary at <= 5000 packets and avoids a dependency.
+                return min(range(len(attempt.packets)), key=lambda i: abs(attempt.packets[i].timestamp_ns - timestamp_ns))
+            index = round((timestamp_ns - attempt.start_timestamp_ns) / 1e9 * max(1.0, attempt.fps))
+            return max(0, min(attempt.frame_count - 1, index))
+
+    def cache_size_bytes(self) -> int:
+        total = 0
+        for path in self.cache_directory.glob("attempt_*.*"):
+            try:
+                total += path.stat().st_size
+            except OSError:
+                pass
+        return total
+
+    def _loop(self) -> None:
+        while not self._stop.wait(.05):
+            self._collect_post_roll()
+            self._cleanup()
+
+    def _collect_post_roll(self) -> None:
+        newest = self.ring_buffer.newest()
+        if newest is None:
+            return
+        to_encode: list[int] = []
+        with self._lock:
+            collecting = [a for a in self._attempts if a.state is AttemptState.COLLECTING]
+            for attempt in collecting:
+                target_end = attempt.freeze_timestamp_ns + int(attempt.post_seconds * 1e9)
+                last_ns = attempt.packets[-1].timestamp_ns if attempt.packets else attempt.freeze_timestamp_ns
+                end_ns = min(target_end, newest.timestamp_ns)
+                if end_ns > last_ns:
+                    new_packets = self.ring_buffer.snapshot_between(last_ns + 1, end_ns)
+                    if new_packets:
+                        attempt.packets.extend(new_packets)
+                        attempt.frame_count = len(attempt.packets)
+                        attempt.fps = estimate_fps(attempt.packets, fallback=attempt.fps)
+                        attempt.media_end_timestamp_ns = attempt.packets[-1].timestamp_ns
+                if newest.timestamp_ns >= target_end:
+                    attempt.state = AttemptState.ENCODING
+                    to_encode.append(attempt.attempt_id)
+                    self.event_queue.put(("attempt_updated", attempt.attempt_id))
+        for attempt_id in to_encode:
+            self._submit_encode(attempt_id)
+
+    def _submit_encode(self, attempt_id: int) -> None:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or f"attempt-encode-{attempt_id}" in self._workers:
+                return
+            packets = list(attempt.packets)
+        name = f"attempt-encode-{attempt_id}"
+        worker = Thread(target=self._encode_attempt, args=(attempt_id, packets), name=name, daemon=True)
+        with self._lock:
+            self._workers[name] = worker
+        worker.start()
+
+    def _encode_attempt(self, attempt_id: int, packets: list[FramePacket]) -> None:
+        try:
+            result = export_clip(
+                packets,
+                self.cache_directory,
+                preferred_codec=self.config.temp_codec,
+                write_sidecar_json=False,
+                base_name=f"attempt_{attempt_id:04d}",
+            )
+            with self._lock:
+                attempt = self._find_locked(attempt_id)
+                if attempt is None or attempt_id in self._cancelled_attempt_ids:
+                    self._cancelled_attempt_ids.discard(attempt_id)
+                    result.video_path.unlink(missing_ok=True)
+                    if result.sidecar_path: result.sidecar_path.unlink(missing_ok=True)
+                    return
+                attempt.temp_video_path = result.video_path
+                attempt.temp_metadata_path = result.sidecar_path
+                attempt.frame_count = result.frame_count
+                attempt.fps = result.fps
+                attempt.state = AttemptState.READY
+                attempt.media_start_timestamp_ns = packets[0].timestamp_ns
+                attempt.media_end_timestamp_ns = packets[-1].timestamp_ns
+                attempt.packets.clear()  # the durable MP4 now owns the large payload
+                self._write_metadata_locked(attempt)
+                pending = self._pending_exports.pop(attempt_id, None)
+            self.event_queue.put(("attempt_ready", attempt_id))
+            if pending:
+                self.request_export(attempt_id, pending)
+        except Exception as exc:
+            with self._lock:
+                attempt = self._find_locked(attempt_id)
+                if attempt:
+                    attempt.state, attempt.error = AttemptState.ERROR, str(exc)
+            self.event_queue.put(("attempt_error", (attempt_id, str(exc))))
+        finally:
+            with self._lock:
+                self._workers.pop(f"attempt-encode-{attempt_id}", None)
+
+    def _copy_export(self, attempt_id: int, source: Path, destination: Path, meta_source: Path | None, meta_destination: Path) -> None:
+        try:
+            shutil.copy2(source, destination)
+            if meta_source and meta_source.exists():
+                shutil.copy2(meta_source, meta_destination)
+            with self._lock:
+                attempt = self._find_locked(attempt_id)
+                if attempt:
+                    attempt.state = AttemptState.EXPORTED
+                    attempt.export_path = destination
+                    self._write_metadata_locked(attempt)
+            self.event_queue.put(("attempt_exported", (attempt_id, destination)))
+        except Exception as exc:
+            with self._lock:
+                attempt = self._find_locked(attempt_id)
+                if attempt:
+                    attempt.state, attempt.error = AttemptState.ERROR, str(exc)
+            self.event_queue.put(("attempt_error", (attempt_id, str(exc))))
+        finally:
+            with self._lock:
+                self._workers.pop(f"attempt-export-{attempt_id}", None)
+
+    def _cleanup(self) -> None:
+        now = time.time()
+        with self._lock:
+            expired = [a for a in self._attempts if a.expires_at_wall_time <= now and not a.selected and not a.protected and a.state not in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING}]
+            for attempt in expired:
+                self._delete_locked(attempt)
+                self.event_queue.put(("attempt_deleted", attempt.attempt_id))
+            self._enforce_limits_locked()
+
+    def _enforce_limits_locked(self) -> None:
+        def removable() -> Iterable[AttemptSession]:
+            return (a for a in self._attempts if not a.selected and not a.protected and a.state not in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING})
+        while len(self._attempts) > self.config.max_attempts:
+            victim = next(iter(removable()), None)
+            if victim is None: break
+            self._delete_locked(victim)
+        limit = int(self.config.max_cache_gb * 1024 ** 3)
+        while self.cache_size_bytes() > limit:
+            victim = next(iter(removable()), None)
+            if victim is None: break
+            self._delete_locked(victim)
+
+    def _delete_locked(self, attempt: AttemptSession) -> None:
+        cap = self._video_caps.pop(attempt.attempt_id, None)
+        if cap: cap.release()
+        self._frame_cache.pop(attempt.attempt_id, None)
+        for path in (attempt.temp_video_path, attempt.temp_metadata_path):
+            if path:
+                try: path.unlink(missing_ok=True)
+                except OSError: pass
+        if attempt in self._attempts:
+            self._attempts.remove(attempt)
+
+    def _find_locked(self, attempt_id: int) -> AttemptSession | None:
+        return next((a for a in self._attempts if a.attempt_id == attempt_id), None)
+
+    @staticmethod
+    def _public_copy(attempt: AttemptSession) -> AttemptSession:
+        copy = replace(attempt)
+        copy.packets = []  # do not leak/copy megabytes into the GUI
+        copy.markers = list(attempt.markers)
+        return copy
+
+    def _write_metadata_locked(self, attempt: AttemptSession) -> None:
+        path = self.cache_directory / f"attempt_{attempt.attempt_id:04d}.session.json"
+        data = {
+            "attempt_id": attempt.attempt_id,
+            "created_wall_time": attempt.created_wall_time,
+            "freeze_timestamp_ns": attempt.freeze_timestamp_ns,
+            "pre_seconds": attempt.pre_seconds,
+            "post_seconds": attempt.post_seconds,
+            "expires_at_wall_time": attempt.expires_at_wall_time,
+            "state": attempt.state.value,
+            "decision": attempt.decision.value,
+            "decision_wall_time": attempt.decision_wall_time,
+            "competitor_group": attempt.competitor_group,
+            "competitor_number": attempt.competitor_number,
+            "competitor_attempt_number": attempt.competitor_attempt_number,
+            "competition_phase": attempt.competition_phase,
+            "rotation_completed": attempt.rotation_completed,
+            "counts_for_rotation": attempt.counts_for_rotation,
+            "quality_warning": attempt.quality_warning,
+            "video": attempt.temp_video_path.name if attempt.temp_video_path else None,
+            "fps": attempt.fps,
+            "frame_count": attempt.frame_count,
+            "freeze_frame_index": attempt.freeze_frame_index,
+            "takeoff_candidate_index": attempt.takeoff_candidate_index,
+            "takeoff_confidence": attempt.takeoff_confidence,
+            "width": attempt.width,
+            "height": attempt.height,
+            "media_start_timestamp_ns": attempt.media_start_timestamp_ns,
+            "media_end_timestamp_ns": attempt.media_end_timestamp_ns,
+            "export_path": str(attempt.export_path) if attempt.export_path else None,
+            "evidence_raw_path": str(attempt.evidence_raw_path) if attempt.evidence_raw_path else None,
+            "evidence_annotated_path": str(attempt.evidence_annotated_path) if attempt.evidence_annotated_path else None,
+            "markers": [{"timestamp_ns": m.timestamp_ns, "label": m.label} for m in attempt.markers],
+        }
+        try:
+            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            attempt.temp_metadata_path = path
+        except OSError:
+            pass
+
+    def _recover_cache_index(self) -> None:
+        # Sessions from a previous crash remain useful until their recorded expiry.
+        now = time.time()
+        for path in sorted(self.cache_directory.glob("attempt_*.session.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if float(data.get("expires_at_wall_time", 0)) <= now:
+                    path.unlink(missing_ok=True)
+                    video_name = data.get("video")
+                    if video_name: (self.cache_directory / video_name).unlink(missing_ok=True)
+                    continue
+                video_name = data.get("video")
+                video_path = self.cache_directory / video_name if video_name else None
+                if not video_path or not video_path.exists():
+                    continue
+                attempt = AttemptSession(
+                    attempt_id=int(data["attempt_id"]),
+                    created_monotonic_ns=0,
+                    created_wall_time=float(data["created_wall_time"]),
+                    freeze_timestamp_ns=int(data["freeze_timestamp_ns"]),
+                    pre_seconds=float(data["pre_seconds"]),
+                    post_seconds=float(data["post_seconds"]),
+                    expires_at_wall_time=float(data["expires_at_wall_time"]),
+                    state=AttemptState.READY,
+                    decision=AttemptDecision(data.get("decision", "Not decided").replace("Pending", "Not decided")),
+                    decision_wall_time=float(data.get("decision_wall_time", 0.0)),
+                    competitor_group=str(data.get("competitor_group", "")),
+                    competitor_number=int(data.get("competitor_number", 0)),
+                    competitor_attempt_number=int(data.get("competitor_attempt_number", 0)),
+                    competition_phase=str(data.get("competition_phase", "qualification")),
+                    rotation_completed=bool(data.get("rotation_completed", False)),
+                    counts_for_rotation=bool(data.get("counts_for_rotation", True)),
+                    quality_warning=str(data.get("quality_warning", "")),
+                    temp_video_path=video_path,
+                    temp_metadata_path=path,
+                    fps=float(data["fps"]),
+                    frame_count=int(data["frame_count"]),
+                    freeze_frame_index=int(data["freeze_frame_index"]),
+                    takeoff_candidate_index=data.get("takeoff_candidate_index"),
+                    takeoff_confidence=float(data.get("takeoff_confidence", 0.0)),
+                    width=int(data.get("width", 0)),
+                    height=int(data.get("height", 0)),
+                    media_start_timestamp_ns=int(data.get("media_start_timestamp_ns", 0)),
+                    media_end_timestamp_ns=int(data.get("media_end_timestamp_ns", 0)),
+                    markers=[AttemptMarker(int(m["timestamp_ns"]), str(m.get("label", "Marker"))) for m in data.get("markers", [])],
+                    export_path=Path(data["export_path"]) if data.get("export_path") else None,
+                    evidence_raw_path=Path(data["evidence_raw_path"]) if data.get("evidence_raw_path") else None,
+                    evidence_annotated_path=Path(data["evidence_annotated_path"]) if data.get("evidence_annotated_path") else None,
+                )
+                self._attempts.append(attempt)
+                self._next_id = max(self._next_id, attempt.attempt_id + 1)
+            except Exception:
+                continue

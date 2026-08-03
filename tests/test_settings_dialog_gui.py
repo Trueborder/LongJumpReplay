@@ -1,0 +1,24 @@
+import tkinter as tk
+
+from src.config import AppConfig
+from src.settings_dialog import SettingsDialog
+
+
+def test_category_settings_dialog_builds_all_pages():
+    root = tk.Tk(); root.withdraw(); applied = []
+    dialog = SettingsDialog(root, AppConfig(), applied.append)
+    dialog.update_idletasks()
+    assert set(dialog._pages) == {
+        "general", "appearance", "performance", "camera", "board", "competition",
+        "rounds", "decisions", "final", "replay", "views", "assist",
+        "hotkeys", "shuttle", "recovery", "advanced",
+    }
+    dialog._show_page("competition")
+    assert dialog._current_page == "competition"
+    assert dialog.roster_tree is not None
+    for page in dialog._pages:
+        dialog._show_page(page); dialog.update_idletasks()
+        assert dialog.apply_button.winfo_manager() == "pack"
+        assert dialog.apply_close_button.winfo_manager() == "pack"
+        assert dialog.footer.winfo_manager() == "grid"
+    dialog.destroy(); root.destroy()

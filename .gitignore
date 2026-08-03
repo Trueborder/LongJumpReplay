@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Build and release
+build/
+dist/
+release/
+*.spec.bak
+
+# Runtime data and generated media
+cache/
+exports/
+evidence/
+logs/
+*.log
+SELF_TEST_SOURCE.txt
+SELF_TEST_FROZEN.txt
+SELF_TEST_SINGLE_EXE.txt
+
+# Local configuration and backups
+config.local.json
+*.tmp
+*.bak
+*_backup_*/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

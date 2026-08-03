@@ -1,0 +1,5 @@
+@echo off
+cd /d "%~dp0"
+if not exist .venv (echo Run INSTALL_WINDOWS.bat first.& pause & exit /b 1)
+call .venv\Scripts\activate.bat
+python app.py --windowed

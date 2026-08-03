@@ -1,0 +1,11 @@
+Long Jump Replay 2.3 · 720p/120 fps soak test
+Capture: 120.01 fps
+JPEG buffer: 120.07 fps
+Queue drops: 0
+Encode failures: 0
+Average JPEG encode: 1.585 ms
+Live buffer: 480 frames / 3.99 s / 22.14 MiB
+Temporary recording: attempt_0001.mp4
+Temporary frames: 300
+Remaining workers: none
+SOAK TEST: OK
