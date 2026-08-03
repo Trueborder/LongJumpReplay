@@ -37,6 +37,7 @@ ACTION_LABELS = {
     "toggle_guide": ("Show / hide board guide", "Zobrazit / skrýt čáru"),
     "toggle_comparison": ("Toggle three-frame comparison", "Přepnout porovnání snímků"),
     "start_competition_wizard": ("Start Competition Wizard", "Spustit průvodce soutěží"),
+    "timer_toggle": ("", ""),  # Label is localized through src/i18n.py.
 }
 
 SHUTTLE_ACTIONS = [
@@ -114,6 +115,8 @@ class SettingsDialog(tk.Toplevel):
         return cs if self.lang == "cs" else en
 
     def _action_label(self, action: str) -> str:
+        if action == "timer_toggle":
+            return self.tr("settings.athlete_timer_hotkey")
         values = ACTION_LABELS.get(action, (action, action))
         return values[1] if self.lang == "cs" else values[0]
 
@@ -491,6 +494,7 @@ class SettingsDialog(tk.Toplevel):
             "auto_live": tk.BooleanVar(value=c.auto_return_live),
             "auto_live_delay": tk.DoubleVar(value=c.auto_return_delay_seconds),
             "special_results": tk.BooleanVar(value=c.enable_special_results),
+            "athlete_timer_duration": tk.IntVar(value=self.working.athlete_timer.duration_seconds),
         }
         self._vars.update(vals)
         self._row(f, r, "Show decision buttons", "Zobrazit rozhodovací tlačítka", vals["decision_controls"], "check", impact="low"); r += 1
@@ -501,6 +505,16 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Return to Live automatically after a decision", "Automaticky se vrátit na Živě po rozhodnutí", vals["auto_live"], "check", impact="low"); r += 1
         self._row(f, r, "Automatic Live delay (seconds)", "Prodleva automatického návratu (s)", vals["auto_live_delay"]); r += 1
         self._row(f, r, "Enable Passed / DNS / Withdrawn / Reattempt", "Zapnout Vynecháno / DNS / Odstoupení / Opakování", vals["special_results"], "check")
+
+        r += 1
+        self._row(
+            f, r,
+            self.tr("settings.athlete_timer_duration"), self.tr("settings.athlete_timer_duration"),
+            vals["athlete_timer_duration"], "spin",
+            desc_en=self.tr("settings.athlete_timer_duration_help"),
+            desc_cs=self.tr("settings.athlete_timer_duration_help"),
+            impact="low", width=8,
+        )
 
     def _build_final(self, f: ttk.Frame) -> None:
         r = self._title(f, "Final round", "Finále", "Because this camera tool does not measure distance, finalists are selected manually after qualification.", "Protože tento kamerový nástroj neměří délku, finalisté se po základní části vybírají ručně.")
@@ -711,6 +725,7 @@ class SettingsDialog(tk.Toplevel):
         c.auto_advance_on_attempt_complete = bool(self._vars["advance_complete"].get()); c.auto_advance_after_decision = bool(self._vars["advance_decision"].get())
         c.auto_save_evidence = bool(self._vars["auto_evidence"].get()); c.auto_return_live = bool(self._vars["auto_live"].get()); c.auto_return_delay_seconds = float(self._vars["auto_live_delay"].get())
         c.enable_special_results = bool(self._vars["special_results"].get())
+        w.athlete_timer.duration_seconds = int(self._vars["athlete_timer_duration"].get())
         c.final_round_enabled = bool(self._vars["final_enabled"].get()); c.finalists_count = int(self._vars["finalists_count"].get()); c.final_attempts = int(self._vars["final_attempts"].get()); c.final_order = str(self._vars["final_order"].get())
         c.finalist_numbers_by_group["Boys"] = self._parse_numbers(str(self._vars["boys_finalists"].get()))
         c.finalist_numbers_by_group["Girls"] = self._parse_numbers(str(self._vars["girls_finalists"].get()))

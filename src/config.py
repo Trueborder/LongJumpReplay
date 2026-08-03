@@ -33,6 +33,7 @@ DEFAULT_HOTKEYS = {
     "toggle_guide": "g",
     "toggle_comparison": "c",
     "start_competition_wizard": "Control-n",
+    "timer_toggle": "",
 }
 
 
@@ -77,6 +78,11 @@ class AttemptsConfig:
     cache_directory: str = "cache"
     temp_codec: str = "mp4v"
     auto_select_new: bool = True
+
+
+@dataclass(slots=True)
+class AthleteTimerConfig:
+    duration_seconds: int = 60
 
 
 @dataclass(slots=True)
@@ -284,6 +290,7 @@ class AppConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     buffer: BufferConfig = field(default_factory=BufferConfig)
     attempts: AttemptsConfig = field(default_factory=AttemptsConfig)
+    athlete_timer: AthleteTimerConfig = field(default_factory=AthleteTimerConfig)
     competition: CompetitionConfig = field(default_factory=CompetitionConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
     performance: PerformanceConfig = field(default_factory=PerformanceConfig)
@@ -320,6 +327,8 @@ class AppConfig:
             raise ValueError("attempts.max_attempts must be between 1 and 500")
         if self.attempts.max_cache_gb < 0.1:
             raise ValueError("attempts.max_cache_gb must be at least 0.1")
+        if isinstance(self.athlete_timer.duration_seconds, bool) or not isinstance(self.athlete_timer.duration_seconds, int) or not 1 <= self.athlete_timer.duration_seconds <= 600:
+            raise ValueError("athlete_timer.duration_seconds must be an integer between 1 and 600")
         if len(self.attempts.temp_codec) != 4 or len(self.export.codec) != 4:
             raise ValueError("Video codecs must contain exactly four characters")
         c = self.competition
@@ -420,6 +429,7 @@ def config_from_dict(data: dict[str, Any]) -> AppConfig:
         camera=CameraConfig(**merged["camera"]),
         buffer=BufferConfig(**merged["buffer"]),
         attempts=AttemptsConfig(**merged["attempts"]),
+        athlete_timer=AthleteTimerConfig(**merged["athlete_timer"]),
         competition=CompetitionConfig(**merged["competition"]),
         display=DisplayConfig(**merged["display"]),
         performance=PerformanceConfig(**merged["performance"]),

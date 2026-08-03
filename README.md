@@ -15,6 +15,19 @@ A Windows-oriented live replay application for reviewing long-jump take-off-boar
 
 Strict judging is optional in **Settings → Attempts & decisions → Require a decision before continuing**.
 
+## Athlete attempt timer
+
+The far-right header timer is independent of recording and judging. It starts only when the operator clicks it or uses the configurable **Start / stop athlete timer** hotkey (unassigned by default).
+
+- `READY 01:00` blinks until explicitly started.
+- Clicking while running stops the current value; clicking while stopped or expired restarts the full countdown.
+- The final ten seconds are amber, and expiry shows `00:00` in red without sound or an automatic result.
+- A successful Freeze stops a running timer. A failed Freeze leaves it running.
+- Returning from Replay to Live, manually changing athlete, or applying a new duration resets it to READY.
+- The duration is configurable from 1 to 600 seconds in **Settings > Attempts & decisions**.
+
+The timer is available in competition and judge-only modes and is never written into attempt metadata, evidence, or exports.
+
 ## What is new in 2.3
 
 - Optional judging with Not decided as the default result.
@@ -23,6 +36,7 @@ Strict judging is optional in **Settings → Attempts & decisions → Require a 
 - Athlete × attempt competition board.
 - Start Competition Wizard.
 - Complete judge-only mode with competition management disabled.
+- Configurable operator-controlled athlete attempt countdown in the header.
 - English and Czech interface.
 - Remade Settings window with a permanently visible Apply footer.
 - Performance presets and impact labels.

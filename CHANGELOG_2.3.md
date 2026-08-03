@@ -1,5 +1,14 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Athlete attempt timer
+
+- Added a clickable countdown at the far top-right of the header, available in competition and judge-only modes.
+- Defaults to 60 seconds and supports a 1-600 second duration in Attempts & decisions settings.
+- Added an unassigned configurable hotkey using the existing collision checks.
+- READY blinks; the final ten seconds are amber; expiry is red and has no sound or automatic result.
+- Successful Freeze stops a running timer, while failed Freeze does not; Replay-to-Live, manual athlete changes, and applied duration changes reset it.
+- Timer state remains runtime-only and is excluded from attempts, evidence, and exports.
+
 ## Attempt workflow
 
 - A frozen recording no longer requires a verdict before the operator can continue.

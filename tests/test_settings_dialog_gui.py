@@ -13,6 +13,8 @@ def test_category_settings_dialog_builds_all_pages():
         "rounds", "decisions", "final", "replay", "views", "assist",
         "hotkeys", "shuttle", "recovery", "advanced",
     }
+    assert dialog._vars["athlete_timer_duration"].get() == 60
+    assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
     dialog._show_page("competition")
     assert dialog._current_page == "competition"
     assert dialog.roster_tree is not None

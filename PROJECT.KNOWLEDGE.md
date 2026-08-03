@@ -36,6 +36,7 @@ Preserve these rules unless the product owner explicitly changes them:
 14. **Dark mode controls must remain readable.** Always test combobox popups, selections, disabled text, and focus states.
 15. **Competition management must be completely disableable.** Judge-only mode must remain simple.
 16. **Take-off Assist may locate a candidate frame but must never decide Valid/Foul.** A human remains responsible.
+17. **The athlete countdown is an operator aid only.** It must not create a result or be persisted in attempt metadata, evidence, or exports.
 
 ## 3. Intended operator workflow
 
@@ -172,6 +173,11 @@ Communication back to the GUI uses queues and scheduled polling. Do not update w
 
 ### Core modules
 
+- `src/athlete_timer.py`
+  - monotonic, testable athlete countdown controller;
+  - READY, RUNNING, STOPPED, and EXPIRED lifecycle;
+  - contains no Tkinter, attempt, judging, or persistence dependencies.
+
 - `src/main_window.py`
   - main application composition and orchestration;
   - menu, toolbars, layouts, status, decisions, competition flow, clear-cache dialog, export, recovery, diagnostics, shutdown;
@@ -272,6 +278,7 @@ The default file is `config.json`. Important sections:
 - `camera`: source, device index, dimensions, requested FPS, FOURCC, backend, reconnect
 - `buffer`: rolling duration, JPEG quality, encoder queue, RAM cap
 - `attempts`: pre/post-roll, retention, max count/cache, temporary codec
+- `athlete_timer`: integer countdown duration from 1 to 600 seconds (default 60)
 - `competition`: groups, athlete counts, attempts, decisions, final round, optional features
 - `display`: theme, layout, visible panels, guide, ROI, comparison
 - `performance`: preset and GUI refresh controls
@@ -322,8 +329,19 @@ Core default hotkeys:
 - G: guide
 - C: comparison
 - Ctrl+N: Competition Wizard
+- Unassigned by default: Start / stop athlete timer (`timer_toggle`)
 
 All bindings are configurable. Tests must cover that Space still works with a focused button.
+
+### Athlete timer lifecycle
+
+- READY displays the full configured duration and blinks only the READY text every 500 ms.
+- READY starts only on an explicit timer click or configured timer hotkey while playback is Live.
+- RUNNING uses monotonic elapsed time and rounds the visible remainder up to whole seconds. It is amber from 10 through 1 and red at expired `00:00`.
+- RUNNING stops only on an explicit timer action or after a successful Freeze. A Freeze with no live frame leaves it running.
+- STOPPED and EXPIRED restart from the full configured duration on the next valid timer action.
+- A successful Replay-to-Live transition, a manual athlete change, or an applied duration change resets to READY without starting.
+- The timer remains visible when competition management is disabled and never changes judging, capture, recording, rotation, or attempt metadata.
 
 ## 10. Timeline performance contract
 
@@ -412,6 +430,9 @@ Always test changes affecting workflow against:
 13. Dark/light combobox popup text remains readable.
 14. Apply footer is visible on every Settings page.
 15. Menu interaction does not rebuild the menu or freeze capture.
+16. Timer click and configured hotkey share the same action, and starts outside Live are rejected.
+17. Successful/failed Freeze, Replay-to-Live, manual athlete change, and runtime duration application preserve the timer lifecycle above.
+18. Timer READY blinking, warning/expired colors, translations, and far-right header layout remain correct in light and dark themes.
 
 ### Headless note
 

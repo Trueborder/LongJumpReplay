@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 
 from .attempts import AttemptManager
+from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
 from .capture import CaptureEngine
 from .competition import CompetitionSession, RosterAssignment
 from .competition_board import CompetitionBoard
@@ -63,6 +64,7 @@ class MainWindow:
             self.event_queue,
         )
         self.playback = PlaybackController(self.buffer, self.attempts)
+        self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
         self.competition = CompetitionSession(config.competition)
         self.shuttle = ShuttleHIDPoller(config.shuttle, self.action_queue)
 
@@ -126,6 +128,8 @@ class MainWindow:
         self.var_theme = tk.StringVar(value=d.theme)
         self.camera_var = tk.StringVar(value="Starting camera…")
         self.clock_var = tk.StringVar(value="")
+        self.timer_prefix_var = tk.StringVar(value=self._t("timer.ready"))
+        self.timer_value_var = tk.StringVar(value=format_countdown(self.config.athlete_timer.duration_seconds))
         self.mode_var = tk.StringVar(value=self._t("mode.live"))
         self.status_var = tk.StringVar(value="Initialising…")
         self.message_var = tk.StringVar(value="")
@@ -229,9 +233,18 @@ class MainWindow:
         self.header_title.pack(side="left")
         self._attach_header_menus(header)
         ttk.Label(header, textvariable=self.camera_var, style="HeaderMuted.TLabel").pack(side="left", padx=(16, 0), pady=(3, 0))
+        self.timer_frame = tk.Frame(header, borderwidth=0, cursor="hand2")
+        self.timer_frame.pack(side="right", padx=(12, 0), pady=(1, 0))
+        self.timer_prefix_label = tk.Label(self.timer_frame, textvariable=self.timer_prefix_var, borderwidth=0, cursor="hand2", font=("Segoe UI Semibold", 10))
+        self.timer_prefix_label.pack(side="left", padx=(6, 5), pady=3)
+        self.timer_value_label = tk.Label(self.timer_frame, textvariable=self.timer_value_var, borderwidth=0, cursor="hand2", font=("Consolas", 12, "bold"))
+        self.timer_value_label.pack(side="left", padx=(0, 6), pady=3)
+        for widget in (self.timer_frame, self.timer_prefix_label, self.timer_value_label):
+            widget.bind("<Button-1>", lambda _event: self.toggle_athlete_timer())
         self.mode_badge = tk.Label(header, textvariable=self.mode_var, padx=10, pady=4, borderwidth=0, font=("Segoe UI Semibold", 9))
         self.mode_badge.pack(side="right", padx=(10, 0))
         ttk.Label(header, textvariable=self.clock_var, style="HeaderMuted.TLabel").pack(side="right", pady=(3, 0))
+        self._update_athlete_timer_display()
 
         self.warning_banner = tk.Label(self.outer, textvariable=self.warning_var, anchor="w", padx=10, pady=5, font=("Segoe UI Semibold", 9))
         self.competition_banner = tk.Label(self.outer, textvariable=self.competition_banner_var, anchor="center", padx=10, pady=5, font=("Segoe UI Semibold", 9))
@@ -407,6 +420,7 @@ class MainWindow:
             "toggle_guide": self.toggle_guide,
             "toggle_comparison": self.toggle_comparison,
             "start_competition_wizard": self.start_competition_wizard,
+            "timer_toggle": self.toggle_athlete_timer,
         }
         if not (self.config.competition.enabled and self.config.competition.keyboard_competition_controls):
             for name in ("previous_athlete", "next_athlete", "mark_passed"):
@@ -448,6 +462,7 @@ class MainWindow:
     def _tick(self) -> None:
         if self._closing: return
         self._process_action_queue(); self._process_event_queue()
+        self._update_athlete_timer_display()
         now = time.perf_counter()
         suspended = self._window_interacting or now < self._menu_active_until
         try:
@@ -600,6 +615,48 @@ class MainWindow:
         if capture.last_error and capture.last_error != self._last_error:
             self._last_error = capture.last_error; self._show_message(f"Camera: {capture.last_error}", 8)
 
+    def _update_athlete_timer_display(self) -> None:
+        snapshot = self.athlete_timer.snapshot()
+        p = self.palette
+        background = p["bg"]
+        self.timer_frame.configure(bg=background)
+        self.timer_prefix_label.configure(bg=background)
+        self.timer_value_label.configure(bg=background)
+        self.timer_value_var.set(format_countdown(snapshot.remaining_seconds))
+        if snapshot.state is AthleteTimerState.READY:
+            self.timer_prefix_var.set(self._t("timer.ready"))
+            if not self.timer_prefix_label.winfo_manager():
+                self.timer_prefix_label.pack(side="left", before=self.timer_value_label, padx=(6, 5), pady=3)
+            visible = int(time.monotonic() / 0.5) % 2 == 0
+            self.timer_prefix_label.configure(fg=p["accent"] if visible else background)
+            self.timer_value_label.configure(fg=p["accent"])
+        elif snapshot.state is AthleteTimerState.STOPPED:
+            self.timer_prefix_var.set(self._t("timer.stopped"))
+            if not self.timer_prefix_label.winfo_manager():
+                self.timer_prefix_label.pack(side="left", before=self.timer_value_label, padx=(6, 5), pady=3)
+            self.timer_prefix_label.configure(fg=p["muted"])
+            self.timer_value_label.configure(fg=p["accent"])
+        else:
+            if self.timer_prefix_label.winfo_manager():
+                self.timer_prefix_label.pack_forget()
+            if snapshot.state is AthleteTimerState.EXPIRED:
+                color = p["danger"]
+            elif snapshot.remaining_seconds <= 10:
+                color = p["warning"]
+            else:
+                color = p["accent"]
+            self.timer_value_label.configure(fg=color)
+
+    def toggle_athlete_timer(self) -> None:
+        if self.athlete_timer.snapshot().state is AthleteTimerState.RUNNING:
+            self.athlete_timer.stop()
+        elif self.playback.mode is not PlaybackMode.LIVE:
+            self._show_message(self._t("timer.live_only"), 5)
+            return
+        else:
+            self.athlete_timer.start()
+        self._update_athlete_timer_display()
+
     def _capture_quality_warning(self, stats=None) -> str:
         stats = stats or self.capture.stats()
         issues = []
@@ -696,11 +753,13 @@ class MainWindow:
         group = self._group_internal(self.group_var.get())
         try: self.competition.set_current(group, self.config.competition.current_competitor_by_group.get(group, 1))
         except ValueError: return
+        self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
     def _competitor_changed(self, _event=None) -> None:
         try: self.competition.set_current(self._group_internal(self.group_var.get()), int(self.competitor_var.get()))
         except (ValueError, TypeError): return
+        self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_current_try(); self._save_config_safely()
 
     def _select_competitor_delta(self, delta: int) -> None:
@@ -709,11 +768,13 @@ class MainWindow:
         if count <= 0: return
         current = self.competition.current_competitor()
         self.competition.set_current(group, ((current - 1 + delta) % count) + 1)
+        self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
     def _select_athlete_from_board(self, athlete: int) -> None:
         try: self.competition.set_current(self.competition.current_group(), athlete)
         except ValueError: return
+        self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
     def _open_attempt_from_board(self, attempt_id: int) -> None:
@@ -858,6 +919,7 @@ class MainWindow:
             attempt_id = self.playback.freeze_to_new_attempt(**kwargs)
             if attempt_id is None:
                 self._show_message("The live buffer does not contain a frame yet.", 4); return
+            self.athlete_timer.stop(); self._update_athlete_timer_display()
             self._last_replay_key = None; self._last_board_signature = None; self._refresh_attempts()
             if self.config.takeoff_assist.enabled and self.config.display.board_roi_enabled:
                 self._start_takeoff_analysis(attempt_id)
@@ -888,9 +950,12 @@ class MainWindow:
 
     def return_live(self) -> None:
         self._cancel_scheduled_review()
+        returning_from_replay = self.playback.mode is not PlaybackMode.LIVE
         if not self._complete_current_attempt_for_rotation():
             return
         self.playback.go_live(); self._last_replay_key = None; self.timeline.detail_center_ns = None
+        if returning_from_replay:
+            self.athlete_timer.reset(); self._update_athlete_timer_display()
 
     def step_frame(self, delta: int) -> None:
         self._cancel_scheduled_review(); self.playback.step(delta); self._last_replay_key = None
@@ -1350,6 +1415,7 @@ class MainWindow:
         if hasattr(self, "competition_board"):
             self.competition_board.apply_palette(self.palette)
         self._refresh_attempts(); self._update_video_labels()
+        self._update_athlete_timer_display()
 
     # -------------------------------------------------------------- settings
     def open_settings(self) -> None:
@@ -1365,6 +1431,7 @@ class MainWindow:
                 canvas.set_language(self.config.general.language)
         self.root.title(self._t("app.title"))
         self.header_title.configure(text=self._t("app.header"))
+        self._update_athlete_timer_display()
         self.file_menu_button.configure(text=self._t("menu.file"))
         self.view_menu_button.configure(text=self._t("menu.view"))
         self.help_menu_button.configure(text=self._t("menu.help"))
@@ -1405,7 +1472,11 @@ class MainWindow:
     def apply_settings(self, new_config: AppConfig) -> None:
         camera_changed = new_config.camera != self.config.camera or new_config.buffer != self.config.buffer
         language_changed = new_config.general.language != self.config.general.language
+        timer_duration_changed = new_config.athlete_timer.duration_seconds != self.config.athlete_timer.duration_seconds
         self.config = new_config
+        if timer_duration_changed:
+            self.athlete_timer.set_duration(new_config.athlete_timer.duration_seconds)
+            self._update_athlete_timer_display()
         self.attempts.config = new_config.attempts
         self.attempts.export_config = new_config.export
         self.competition.update_config(new_config.competition)

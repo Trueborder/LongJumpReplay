@@ -153,6 +153,12 @@ EN = {
     "message.attempt_ready": "Attempt #{attempt:02d} stored in temporary MP4 cache.",
     "message.decision_marked": "{roster} marked {decision}.",
     "message.reattempt": "Reattempt granted to {roster}.",
+    "timer.ready": "READY",
+    "timer.stopped": "STOPPED",
+    "timer.live_only": "The athlete timer can only be started in Live mode.",
+    "settings.athlete_timer_duration": "Athlete countdown duration (seconds)",
+    "settings.athlete_timer_duration_help": "Operator-started header timer. Supported range: 1–600 seconds.",
+    "settings.athlete_timer_hotkey": "Start / stop athlete timer",
 }
 
 CS = {
@@ -305,6 +311,12 @@ CS = {
     "message.attempt_ready": "Pokus #{attempt:02d} uložen do dočasné MP4 cache.",
     "message.decision_marked": "{roster}: {decision}.",
     "message.reattempt": "Závodníkovi {roster} byl přidělen opakovaný pokus.",
+    "timer.ready": "PŘIPRAVEN",
+    "timer.stopped": "ZASTAVENO",
+    "timer.live_only": "Časomíru závodníka lze spustit pouze v živém režimu.",
+    "settings.athlete_timer_duration": "Délka odpočtu závodníka (sekundy)",
+    "settings.athlete_timer_duration_help": "Ručně spouštěná časomíra v záhlaví. Povolený rozsah: 1–600 sekund.",
+    "settings.athlete_timer_hotkey": "Spustit / zastavit časomíru závodníka",
 }
 
 
