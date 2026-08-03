@@ -13,6 +13,7 @@ Read `PROJECT.KNOWLEDGE.md` before making any nontrivial change. It is the sourc
 - New user-facing text must be translated in English and Czech.
 - Do not silently reduce evidence quality through a performance preset.
 - Shutdown must remain bounded and clean.
+- Every project change must include a relevant update to `PROJECT.KNOWLEDGE.md` in the same change, even when the implementation change is small.
 
 ## Before editing
 

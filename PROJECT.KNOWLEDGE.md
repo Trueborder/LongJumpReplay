@@ -506,7 +506,7 @@ After editing:
 2. Run the full test suite.
 3. Run `python app.py --self-test` for pipeline-affecting changes.
 4. Manually run `python app.py --synthetic --windowed` for GUI changes.
-5. Update this knowledge file only when architecture, workflow, guarantees, or known limitations materially change.
+5. Update this knowledge file for every project change. Add a concise note describing what changed and update the relevant existing section when architecture, workflow, guarantees, testing, setup, or known limitations are affected.
 6. Update `CHANGELOG_*.md` for user-visible changes.
 
 Do not:
@@ -545,4 +545,5 @@ A change is done only when:
 - performance-sensitive changes are profiled or at least benchmarked;
 - shutdown still leaves no workers;
 - documentation/config migration is updated;
+- `PROJECT.KNOWLEDGE.md` records the change;
 - claims clearly distinguish simulated tests from real Windows/hardware tests.
