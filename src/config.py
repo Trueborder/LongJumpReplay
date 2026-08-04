@@ -158,6 +158,7 @@ class DisplayConfig:
     comparison_enabled: bool = True
     comparison_offset_frames: int = 1
     remember_geometry: bool = True
+    window_maximized: bool = False
     window_geometry: str = "1360x820"
 
 
@@ -383,6 +384,8 @@ class AppConfig:
             raise ValueError("display.comparison_offset_frames must be between 1 and 100")
         if self.display.attempts_panel_width < 220 or not 100 <= self.display.timeline_height <= 500:
             raise ValueError("Display panel sizes are outside supported limits")
+        if not isinstance(self.display.window_maximized, bool):
+            raise ValueError("display.window_maximized must be true or false")
         for value in (self.display.board_roi_x, self.display.board_roi_y, self.display.board_roi_width, self.display.board_roi_height):
             if not 0 <= value <= 1:
                 raise ValueError("Board ROI values must be between 0 and 1")

@@ -97,6 +97,8 @@ class MainWindow:
         self._recovery_checked = False
         self._last_board_signature: object = None
         self._last_timer_render_signature: object = None
+        self._system_paused = False
+        self._system_pause_transition = False
 
         self._build_variables()
         self._build_menu()
@@ -108,6 +110,8 @@ class MainWindow:
         self._refresh_competitor_selector()
         if config.display.fullscreen:
             self.root.attributes("-fullscreen", True)
+        else:
+            self.root.after_idle(self._apply_initial_window_state)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.bind("<Configure>", self._on_root_configure, add="+")
 
@@ -149,6 +153,28 @@ class MainWindow:
 
     def _group_internal(self, display: str) -> str:
         return "Boys" if display in {"Boys", "Chlapci", self._t("competition.boys")} else "Girls"
+
+    @staticmethod
+    def _geometry_nearly_fills_screen(geometry: str, screen_width: int, screen_height: int) -> bool:
+        try:
+            size = geometry.split("+", 1)[0]
+            width_text, height_text = size.split("x", 1)
+            width, height = int(width_text), int(height_text)
+        except (TypeError, ValueError):
+            return False
+        return width >= screen_width * .90 and height >= screen_height * .85
+
+    def _apply_initial_window_state(self) -> None:
+        try:
+            should_maximize = self.config.display.window_maximized or self._geometry_nearly_fills_screen(
+                self.config.display.window_geometry,
+                self.root.winfo_screenwidth(),
+                self.root.winfo_screenheight(),
+            )
+            if should_maximize:
+                self.root.state("zoomed")
+        except tk.TclError:
+            pass
 
     def _begin_menu_interaction(self) -> None:
         if not self.config.performance.menu_throttle_enabled:
@@ -246,6 +272,8 @@ class MainWindow:
         self.timer_value_label.pack(side="left", padx=(0, 6), pady=3)
         for widget in (self.timer_frame, self.timer_prefix_label, self.timer_value_label):
             widget.bind("<Button-1>", lambda _event: self.toggle_athlete_timer())
+        self.system_pause_button = ttk.Button(header, text=self._t("button.pause_system"), style="SystemPause.TButton", command=self.toggle_system_pause)
+        self.system_pause_button.pack(side="right", padx=(12, 0), pady=(1, 0))
         self.mode_badge = tk.Label(header, textvariable=self.mode_var, padx=10, pady=4, borderwidth=0, font=("Segoe UI Semibold", 9))
         self.mode_badge.pack(side="right", padx=(10, 0))
         ttk.Label(header, textvariable=self.clock_var, style="Muted.TLabel").pack(side="right", pady=(3, 0))
@@ -577,6 +605,11 @@ class MainWindow:
 
     def _update_video_labels(self) -> None:
         p = self.palette; stats = self.capture.stats()
+        if self._system_paused:
+            self.mode_var.set(self._t("mode.paused")); self.mode_badge.configure(bg=p["muted"], fg="#ffffff")
+            self.live_canvas.set_status(self._t("mode.paused"), p["muted"])
+            self.replay_canvas.set_status(self._t("mode.paused"), p["muted"], self._t("system.paused_status"))
+            return
         self.live_canvas.set_status(f"● LIVE · {stats.capture_fps:5.1f} fps", p["live"])
         if self.playback.mode is PlaybackMode.LIVE:
             self.mode_var.set(self._t("mode.live")); self.mode_badge.configure(bg=p["live"], fg="#ffffff")
@@ -601,6 +634,12 @@ class MainWindow:
                 self.replay_canvas.set_status(label, color, secondary)
 
     def _update_status(self) -> None:
+        if self._system_paused:
+            self.camera_var.set(self._t("mode.paused")); self.clock_var.set(time.strftime("%H:%M:%S"))
+            self.status_var.set(self._t("system.paused_status"))
+            if self._warning_active:
+                self.warning_banner.pack_forget(); self.warning_var.set(""); self._warning_active = False
+            return
         capture, buffer = self.capture.stats(), self.buffer.stats()
         cache_gb = self.attempts.cache_size_bytes() / 1024 ** 3
         self.camera_var.set(capture.source_description); self.clock_var.set(time.strftime("%H:%M:%S"))
@@ -662,6 +701,9 @@ class MainWindow:
         self.timer_value_label.configure(fg=value_color)
 
     def toggle_athlete_timer(self) -> None:
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5)
+            return
         if self.athlete_timer.snapshot().state is AthleteTimerState.RUNNING:
             self.athlete_timer.stop()
         elif self.playback.mode is not PlaybackMode.LIVE:
@@ -670,6 +712,48 @@ class MainWindow:
         else:
             self.athlete_timer.start()
         self._update_athlete_timer_display()
+
+    def _set_system_paused_ui(self) -> None:
+        paused_or_stopping = self._system_paused or self._system_pause_transition
+        self.system_pause_button.configure(
+            text=self._t("button.resume_system") if self._system_paused and not self._system_pause_transition else self._t("button.pause_system"),
+            style="SystemResume.TButton" if self._system_paused and not self._system_pause_transition else "SystemPause.TButton",
+        )
+        self.system_pause_button.state(["disabled"] if self._system_pause_transition else ["!disabled"])
+        state = ["disabled"] if paused_or_stopping else ["!disabled"]
+        for button in (
+            self.freeze_button, self.live_button, self.prev_frame_button, self.next_frame_button,
+            self.not_decided_button, self.valid_button, self.foul_button, self.review_button,
+        ):
+            button.state(state)
+        self._update_video_labels()
+        self._update_status()
+
+    def toggle_system_pause(self) -> None:
+        if self._system_pause_transition:
+            return
+        if self._system_paused:
+            self.capture.start()
+            self._system_paused = False
+            self._last_live_index = -1
+            self._last_replay_key = None
+            self._set_system_paused_ui()
+            self._show_message(self._t("system.resumed"), 5)
+            return
+
+        self._cancel_scheduled_review()
+        self._system_paused = True
+        self._system_pause_transition = True
+        self.playback.go_live()
+        self.athlete_timer.reset(); self._update_athlete_timer_display()
+        self._show_message(self._t("system.pausing"), 5)
+        self._set_system_paused_ui()
+
+        def stop_capture() -> None:
+            alive = self.capture.stop(timeout=2.5)
+            self.event_queue.put(("system_pause_complete", alive))
+
+        Thread(target=stop_capture, name="camera-pause", daemon=True).start()
 
     def _capture_quality_warning(self, stats=None) -> str:
         stats = stats or self.capture.stats()
@@ -908,12 +992,22 @@ class MainWindow:
                 attempt_id, index, confidence = payload; self._handle_takeoff_candidate(int(attempt_id), int(index), float(confidence))
             elif event == "attempts_cleared":
                 self._show_message(f"Cleared {int(payload)} temporary recording(s) and the live buffer.", 5)
+            elif event == "system_pause_complete":
+                self._system_pause_transition = False
+                self.buffer.clear(); self.capture.latest.clear()
+                self._displayed_bgr = None; self._displayed_timestamp_ns = 0
+                self._last_live_index = -1; self._last_replay_key = None
+                for canvas in self._all_video_canvases(): canvas.set_frame(None)
+                self._set_system_paused_ui()
             elif event == "message": self._show_message(str(payload), 6)
             elif event in {"attempt_deleted", "attempt_updated", "attempt_selected"}: self._last_attempts_refresh = 0
 
     # --------------------------------------------------------- core controls
     def toggle_freeze(self) -> None:
         self._cancel_scheduled_review()
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5)
+            return
         if self.playback.mode is PlaybackMode.LIVE:
             assignment = self.competition.assignment_for_current(self.attempts.attempts())
             if self.config.competition.enabled and assignment is None:
@@ -972,10 +1066,14 @@ class MainWindow:
         return True
 
     def return_live(self) -> None:
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5); return
         self._cancel_scheduled_review()
         self._enter_live(complete_rotation=True)
 
     def step_frame(self, delta: int) -> None:
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5); return
         self._cancel_scheduled_review(); self.playback.step(delta); self._last_replay_key = None
 
     def select_relative_attempt(self, delta: int) -> None:
@@ -990,6 +1088,8 @@ class MainWindow:
         self._cancel_scheduled_review(); self.playback.seek_timestamp(timestamp_ns); self._last_replay_key = None
 
     def add_marker(self) -> None:
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5); return
         if self.playback.mode is PlaybackMode.LIVE: self.toggle_freeze()
         if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
             self._show_message("Markers belong to an attempt. Freeze first.", 4); return
@@ -997,6 +1097,8 @@ class MainWindow:
             self._show_message("Marker added.", 3); self._last_timeline_update = 0
 
     def mark_decision(self, decision: AttemptDecision) -> None:
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5); return
         if not self.config.competition.decision_controls_enabled and not self.config.display.show_decision_controls: return
         if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
             self._show_message("Freeze or select an attempt before recording a decision.", 5); return
@@ -1022,6 +1124,8 @@ class MainWindow:
             self._auto_live_job = self.root.after(delay, self.return_live)
 
     def mark_special_result(self, decision: AttemptDecision) -> None:
+        if self._system_paused:
+            self._show_message(self._t("system.paused_message"), 5); return
         if not self.config.competition.enabled or not self.config.competition.enable_special_results:
             self._show_message("Special competition results are disabled in Settings.", 5); return
         assignment = self.competition.assignment_for_current(self.attempts.attempts())
@@ -1456,6 +1560,7 @@ class MainWindow:
         self.view_menu_button.configure(text=self._t("menu.view"))
         self.help_menu_button.configure(text=self._t("menu.help"))
         self.freeze_button.configure(text=self._t("button.freeze"))
+        self.system_pause_button.configure(text=self._t("button.resume_system") if self._system_paused else self._t("button.pause_system"))
         self.live_button.configure(text=self._t("button.live"))
         self.prev_frame_button.configure(text=self._t("button.previous_frame"))
         self.next_frame_button.configure(text=self._t("button.next_frame"))
@@ -1744,7 +1849,11 @@ class MainWindow:
             except tk.TclError: pass
             self._window_interaction_job = None
         if self.config.display.remember_geometry and not bool(self.root.attributes("-fullscreen")):
-            try: self.config.display.window_geometry = self.root.geometry()
+            try:
+                window_state = self.root.state()
+                self.config.display.window_maximized = window_state == "zoomed"
+                if window_state == "normal":
+                    self.config.display.window_geometry = self.root.geometry()
             except tk.TclError: pass
         try:
             if self._attempts_pane_added and self.content_pane.winfo_width() > 10:

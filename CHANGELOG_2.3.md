@@ -1,5 +1,12 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Camera and judging pause
+
+- Added a prominent Pause system / Resume system switch to the main header.
+- Pause asynchronously releases the camera, drains capture work, clears the live RAM buffer, resets the timer, and blocks new judging actions without deleting completed attempts.
+- Resume reconnects the configured source and begins a fresh live buffer.
+- Near-screen floating geometry is normalized to a genuinely maximized window; maximized versus restored state is remembered separately from normal geometry.
+
 ## Low-resource operation
 
 - Added an explicit Older PC mode in Settings.

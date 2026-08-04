@@ -77,6 +77,8 @@ class ThemeManager:
         style.map("PrimaryJudge.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
         style.configure("LiveJudge.TButton", padding=(14, 11), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
         style.configure("Danger.TButton", padding=(9, 6), background=p["danger"], foreground="#ffffff")
+        style.configure("SystemPause.TButton", padding=(12, 7), background=p["warning"], foreground="#111111", font=("Segoe UI Semibold", 9))
+        style.configure("SystemResume.TButton", padding=(12, 7), background=p["live"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
         style.configure("Valid.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
         style.configure("Foul.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["danger"], foreground="#ffffff")
         style.configure("Review.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["warning"], foreground="#111111")

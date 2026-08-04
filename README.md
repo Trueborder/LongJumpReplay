@@ -19,6 +19,8 @@ Strict judging is optional in **Settings → Attempts & decisions → Require a 
 
 The far-right header timer is independent of recording and judging. It starts only when the operator clicks it or uses the configurable **Start / stop athlete timer** hotkey (unassigned by default).
 
+The main header also contains a visible **Pause system** switch. Pausing releases the camera, stops live recording, empties the live RAM buffer, blocks judging controls and timer starts, and creates no new temporary attempt cache. Completed attempts already in the session remain available. **Resume system** reconnects the configured camera and starts with a fresh live buffer.
+
 - `READY 01:00` blinks until explicitly started.
 - Clicking while running stops the current value; clicking while stopped or expired restarts the full countdown.
 - The final ten seconds are amber, and expiry shows `00:00` in red without sound or an automatic result.

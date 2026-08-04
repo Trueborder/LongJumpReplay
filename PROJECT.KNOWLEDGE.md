@@ -38,6 +38,8 @@ Preserve these rules unless the product owner explicitly changes them:
 16. **Take-off Assist may locate a candidate frame but must never decide Valid/Foul.** A human remains responsible.
 17. **The athlete countdown is an operator aid only.** It must not create a result or be persisted in attempt metadata, evidence, or exports.
 18. **A stalled camera must not leave post-roll open forever.** Finalize the available partial recording after a bounded monotonic deadline and retain a quality warning.
+19. **System pause is a hard capture boundary.** It releases the camera, clears latest/live-buffer frames, blocks judging and timer starts, and creates no new attempt cache. Existing completed attempts are preserved.
+20. **Window state and window geometry are distinct.** Remember maximized state separately; convert near-screen floating geometry to a real maximized window instead of opening an almost-borderless normal window.
 
 ## 3. Intended operator workflow
 
@@ -449,6 +451,8 @@ Always test changes affecting workflow against:
 22. Dangerous capture sampling, display, analysis, export, duplicate-hotkey, file-source, and device values are rejected during config validation.
 23. English and Czech translation dictionaries expose the same keys.
 24. Older PC mode preserves configured camera FPS, applies bounded low-resource values, validates successfully, and is loadable from Settings.
+25. Main-screen pause stops and resumes capture, clears the live buffer/latest frame, blocks Freeze and timer actions, and leaves existing attempts intact.
+26. Near-screen saved geometry opens maximized while ordinary reduced geometry stays restored.
 
 ### Headless note
 

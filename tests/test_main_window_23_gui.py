@@ -135,3 +135,9 @@ def test_header_menu_is_static_and_throttles_expensive_redraws(tmp_path):
         assert throttled_hz <= normal_hz
     finally:
         app.close(); root.mainloop()
+
+
+def test_near_screen_geometry_is_maximized_instead_of_borderless_floating():
+    assert MainWindow._geometry_nearly_fills_screen("1920x1009+0+0", 1920, 1080)
+    assert not MainWindow._geometry_nearly_fills_screen("1360x820+100+80", 1920, 1080)
+    assert not MainWindow._geometry_nearly_fills_screen("invalid", 1920, 1080)

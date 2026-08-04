@@ -39,6 +39,12 @@ class LatestFrameStore:
         with self._lock:
             return self._frame, self._timestamp_ns, self._capture_index
 
+    def clear(self) -> None:
+        with self._lock:
+            self._frame = None
+            self._timestamp_ns = 0
+            self._capture_index = -1
+
 
 class SyntheticSource:
     description = "Synthetic 120 fps camera"

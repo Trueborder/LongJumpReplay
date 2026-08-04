@@ -20,6 +20,7 @@ def test_old_partial_config_gets_new_defaults():
     assert config.hotkeys.bindings['next_attempt'] == 'Control-Next'
     assert config.hotkeys.bindings['timer_toggle'] == ''
     assert config.athlete_timer.duration_seconds == 60
+    assert config.display.window_maximized is False
 
 
 def test_invalid_theme_rejected():
