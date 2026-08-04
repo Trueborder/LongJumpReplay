@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import time
 import tkinter as tk
 from tkinter import ttk
 from collections.abc import Callable, Iterable
@@ -50,6 +52,11 @@ class CompetitionBoard(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self._cell_attempts: dict[tuple[int, int], int] = {}
         self._cell_boxes: list[tuple[int, int, int, int, int, int]] = []
+        self._cell_items: dict[tuple[int, int], tuple[int, str]] = {}
+        self._focused_cell: tuple[int, int] | None = None
+        self._focused_group = ""
+        self._pulse_started = 0.0
+        self._pulse_job: str | None = None
         self._config: CompetitionConfig | None = None
         self._group = "Boys"
         self._active_athlete = 1
@@ -72,6 +79,9 @@ class CompetitionBoard(ttk.Frame):
         active_attempt: int,
         language: str = "en",
     ) -> None:
+        if group != self._group:
+            self._focused_cell = None
+            self._focused_group = ""
         self._config = config
         self._group = group
         self._active_athlete = active_athlete
@@ -84,6 +94,7 @@ class CompetitionBoard(ttk.Frame):
         self.canvas.delete("all")
         self._cell_attempts = {}
         self._cell_boxes = []
+        self._cell_items = {}
         config = self._config
         if not config or not config.enabled:
             text = "Competition management is disabled" if self._language == "en" else "Správa soutěže je vypnutá"
@@ -141,15 +152,66 @@ class CompetitionBoard(ttk.Frame):
                     fill = p["review_soft"]
                 elif decision is not None:
                     fill = p["pending_soft"]
-                outline = p["accent"] if athlete == self._active_athlete and attempt_no == self._active_attempt else p["border"]
-                line_width = 3 if athlete == self._active_athlete and attempt_no == self._active_attempt else 1
-                self.canvas.create_rectangle(x0, y0, x0 + cell_w, y0 + row_h, fill=fill, outline=outline, width=line_width)
+                cell = (athlete, attempt_no)
+                focused = self._focused_group == self._group and self._focused_cell == cell
+                active = self._focused_cell is None and athlete == self._active_athlete and attempt_no == self._active_attempt
+                outline = p["accent_hover"] if focused else p["accent"] if active else p["border"]
+                line_width = 3 if focused or active else 1
+                rectangle = self.canvas.create_rectangle(x0, y0, x0 + cell_w, y0 + row_h, fill=fill, outline=outline, width=line_width)
                 text = SYMBOLS.get(decision, "") if eligible else ""
                 self.canvas.create_text(x0 + cell_w / 2, y0 + row_h / 2, text=text, fill=p["text"] if eligible else p["muted"], font=("Segoe UI Semibold", 11))
                 self._cell_boxes.append((x0, y0, x0 + cell_w, y0 + row_h, athlete, attempt_no))
+                self._cell_items[cell] = (rectangle, fill)
                 if attempt:
                     self._cell_attempts[(athlete, attempt_no)] = attempt.attempt_id
         self.canvas.configure(scrollregion=(0, 0, width, height))
+        self._schedule_focus_pulse()
+
+    @staticmethod
+    def _blend(first: str, second: str, amount: float) -> str:
+        amount = max(0.0, min(1.0, amount))
+        left = tuple(int(first[index:index + 2], 16) for index in (1, 3, 5))
+        right = tuple(int(second[index:index + 2], 16) for index in (1, 3, 5))
+        values = tuple(round(a + (b - a) * amount) for a, b in zip(left, right))
+        return "#" + "".join(f"{value:02x}" for value in values)
+
+    def focus_cell(self, cell: tuple[int, int] | None) -> None:
+        self._focused_cell = cell
+        self._focused_group = self._group if cell is not None else ""
+        self._pulse_started = time.monotonic()
+        self.redraw()
+
+    def clear_focus(self) -> None:
+        if self._focused_cell is not None:
+            self.focus_cell(None)
+
+    def _schedule_focus_pulse(self) -> None:
+        if self._focused_cell is None or self._focused_group != self._group:
+            if self._pulse_job is not None:
+                try: self.after_cancel(self._pulse_job)
+                except tk.TclError: pass
+                self._pulse_job = None
+            return
+        if self._pulse_job is None:
+            self._pulse_job = self.after(50, self._animate_focus)
+
+    def _animate_focus(self) -> None:
+        self._pulse_job = None
+        if self._focused_cell is None or self._focused_group != self._group:
+            return
+        item = self._cell_items.get(self._focused_cell)
+        if item is None:
+            self._focused_cell = None
+            self._focused_group = ""
+            return
+        rectangle, base_fill = item
+        wave = (math.sin((time.monotonic() - self._pulse_started) * math.tau / 1.4) + 1.0) / 2.0
+        pulse_fill = self._blend(base_fill, self.palette["accent_hover"], 0.12 + wave * 0.28)
+        try:
+            self.canvas.itemconfigure(rectangle, fill=pulse_fill, outline=self.palette["accent_hover"], width=3)
+        except tk.TclError:
+            return
+        self._schedule_focus_pulse()
 
     def _hit(self, x: int, y: int) -> tuple[int, int] | None:
         cx, cy = int(self.canvas.canvasx(x)), int(self.canvas.canvasy(y))
@@ -162,6 +224,7 @@ class CompetitionBoard(ttk.Frame):
         hit = self._hit(event.x, event.y)
         if not hit:
             return
+        self.focus_cell(hit)
         attempt_id = self._cell_attempts.get(hit)
         if attempt_id is not None:
             self.on_open_attempt(attempt_id)
@@ -172,3 +235,10 @@ class CompetitionBoard(ttk.Frame):
     def _wheel(self, event) -> str:
         self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
         return "break"
+
+    def destroy(self) -> None:
+        if self._pulse_job is not None:
+            try: self.after_cancel(self._pulse_job)
+            except tk.TclError: pass
+            self._pulse_job = None
+        super().destroy()

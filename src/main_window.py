@@ -96,6 +96,7 @@ class MainWindow:
         self._operator_mode = bool(config.competition.operator_mode_enabled)
         self._recovery_checked = False
         self._last_board_signature: object = None
+        self._board_next_assignment: RosterAssignment | None = None
         self._last_timer_render_signature: object = None
         self._system_paused = False
         self._system_pause_transition = False
@@ -841,8 +842,9 @@ class MainWindow:
         if not hasattr(self, "competition_board"):
             return
         group = self.competition.current_group()
-        athlete = assignment.competitor_number if assignment else self.competition.current_competitor()
-        attempt_no = assignment.attempt_number if assignment else 0
+        board_assignment = self._board_next_assignment if self.playback.mode is PlaybackMode.ATTEMPT and self._board_next_assignment else assignment
+        athlete = board_assignment.competitor_number if board_assignment else self.competition.current_competitor()
+        attempt_no = board_assignment.attempt_number if board_assignment else 0
         signature = (
             group, athlete, attempt_no, self.config.competition.enabled, self.config.competition.show_competition_board,
             self.config.competition.boys_competitors, self.config.competition.girls_competitors,
@@ -859,12 +861,14 @@ class MainWindow:
         group = self._group_internal(self.group_var.get())
         try: self.competition.set_current(group, self.config.competition.current_competitor_by_group.get(group, 1))
         except ValueError: return
+        self._board_next_assignment = None; self.competition_board.clear_focus()
         self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
     def _competitor_changed(self, _event=None) -> None:
         try: self.competition.set_current(self._group_internal(self.group_var.get()), int(self.competitor_var.get()))
         except (ValueError, TypeError): return
+        self._board_next_assignment = None; self.competition_board.clear_focus()
         self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_current_try(); self._save_config_safely()
 
@@ -874,10 +878,12 @@ class MainWindow:
         if count <= 0: return
         current = self.competition.current_competitor()
         self.competition.set_current(group, ((current - 1 + delta) % count) + 1)
+        self._board_next_assignment = None; self.competition_board.clear_focus()
         self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
     def _select_cell_from_board(self, athlete: int, attempt_no: int) -> None:
+        self._board_next_assignment = None
         group = self.competition.current_group()
         assignment = self.competition.select_attempt_cell(group, athlete, attempt_no)
         if assignment is None:
@@ -1038,6 +1044,9 @@ class MainWindow:
             attempt_id = self.playback.freeze_to_new_attempt(**kwargs)
             if attempt_id is None:
                 self._show_message("The live buffer does not contain a frame yet.", 4); return
+            if assignment is not None and self.config.competition.auto_advance_on_attempt_complete:
+                self._board_next_assignment = self.competition.next_assignment_after(self.attempts.attempts(), assignment)
+            self.competition_board.clear_focus()
             self.athlete_timer.stop(); self._update_athlete_timer_display()
             self._last_replay_key = None; self._last_board_signature = None; self._refresh_attempts()
             if self.config.takeoff_assist.enabled and self.config.display.board_roi_enabled:
@@ -1072,8 +1081,10 @@ class MainWindow:
         if complete_rotation and not self._complete_current_attempt_for_rotation():
             return False
         self.playback.go_live(); self._last_replay_key = None; self.timeline.detail_center_ns = None
+        self._board_next_assignment = None; self.competition_board.clear_focus(); self._last_board_signature = None
         if returning_from_replay:
             self.athlete_timer.reset(); self._update_athlete_timer_display()
+        self._refresh_current_try()
         return True
 
     def return_live(self) -> None:

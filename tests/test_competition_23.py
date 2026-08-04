@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from src.competition import CompetitionSession
+from src.competition import CompetitionSession, RosterAssignment
 from src.config import CompetitionConfig
 from src.models import AttemptDecision, AttemptSession
 
@@ -59,3 +59,15 @@ def test_board_cell_can_target_an_exact_empty_attempt():
 
     # Once that exact slot exists, normal pending-attempt selection resumes.
     assert session.assignment_for_current([made(2, 3)]).attempt_number == 1
+
+
+def test_next_board_target_stays_in_round_then_wraps_to_next_round():
+    config = CompetitionConfig(boys_competitors=3, girls_enabled=False, default_attempts_per_competitor=3)
+    session = CompetitionSession(config)
+
+    after_first = session.next_assignment_after([made(1, 1)], RosterAssignment("Boys", 1, 1))
+    assert after_first == RosterAssignment("Boys", 2, 1)
+
+    first_round = [made(athlete, 1) for athlete in range(1, 4)]
+    after_last = session.next_assignment_after(first_round, RosterAssignment("Boys", 3, 1))
+    assert after_last == RosterAssignment("Boys", 1, 2)

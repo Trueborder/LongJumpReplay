@@ -61,6 +61,34 @@ def test_not_decided_attempt_does_not_block_next_freeze(tmp_path):
     assert result["current_attempt"] == result["attempts"][1].attempt_id
 
 
+def test_freeze_projects_next_athlete_cell_before_live_rotation(tmp_path):
+    config, path = _config(tmp_path)
+    root = tk.Tk(); app = MainWindow(root, config, path); result = {}
+
+    root.after(450, app.toggle_freeze)
+
+    def inspect_frozen():
+        projection = app._board_next_assignment
+        result["projection"] = (projection.competitor_number, projection.attempt_number) if projection else None
+        result["board_cell"] = (app.competition_board._active_athlete, app.competition_board._active_attempt)
+        app.return_live()
+
+    def inspect_live():
+        result["current_athlete"] = app.competition.current_competitor()
+        result["projection_after_live"] = app._board_next_assignment
+        app.close()
+
+    root.after(850, inspect_frozen)
+    root.after(1100, inspect_live)
+    root.after(6000, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+
+    assert result["projection"] == (2, 1)
+    assert result["board_cell"] == (2, 1)
+    assert result["current_athlete"] == 2
+    assert result["projection_after_live"] is None
+
+
 def test_strict_decision_mode_can_still_block_return_live(tmp_path):
     config, path = _config(tmp_path)
     config.competition.require_decision_before_continue = True

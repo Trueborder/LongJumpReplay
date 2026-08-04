@@ -199,6 +199,23 @@ class CompetitionSession:
                     rows.append(RosterAssignment(group, number, attempt_no, "qualification"))
         return rows
 
+    def next_assignment_after(self, attempts: Iterable[AttemptSession], completed: RosterAssignment) -> RosterAssignment | None:
+        """Return the next pending cell in round-major board order without changing state."""
+        pending = self.pending_assignments(attempts, completed.group)
+        if not pending:
+            return None
+        order = self.finalists(completed.group) if self.final_started(completed.group) else list(range(1, self.competitor_count(completed.group) + 1))
+        positions = {number: index for index, number in enumerate(order)}
+
+        def rotation_key(assignment: RosterAssignment) -> tuple[int, int]:
+            round_number = assignment.attempt_number
+            if assignment.phase == "final":
+                round_number -= self.qualification_limit(assignment.group, assignment.competitor_number)
+            return round_number, positions.get(assignment.competitor_number, -1)
+
+        completed_key = rotation_key(completed)
+        return next((assignment for assignment in pending if rotation_key(assignment) > completed_key), pending[0])
+
     def advance(self, attempts: Iterable[AttemptSession]) -> RosterAssignment | None:
         if not self.config.enabled:
             return None

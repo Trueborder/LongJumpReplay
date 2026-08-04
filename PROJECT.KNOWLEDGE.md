@@ -105,7 +105,7 @@ Do not reuse `Pending` as a decision. `Pending` belongs to media/process state, 
 
 Rows are athletes; columns are attempts. Soft colors are secondary cues; text/symbols remain primary for accessibility.
 
-Every matrix cell is a single-click target. Clicking a cell containing a recording opens that exact attempt without changing the active rotation athlete; clicking an eligible empty cell selects that exact numbered attempt as the next recording target. Disabled cells retain the configured qualification/final-round rules. The exact-cell target is runtime-only, clears after the slot is filled or ordinary athlete navigation changes, and must not alter existing judging decisions or rotation completion.
+Every matrix cell is a single-click target. Clicking a cell containing a recording opens that exact attempt without changing the active rotation athlete; clicking an eligible empty cell selects that exact numbered attempt as the next recording target. The clicked cell owns the sole blue focus outline and uses a low-cost, smoothly interpolated light-accent pulse until navigation continues. Disabled cells retain the configured qualification/final-round rules. The exact-cell target is runtime-only, clears after the slot is filled or ordinary athlete navigation changes, and must not alter existing judging decisions or rotation completion. With automatic rotation enabled, a successful Freeze immediately projects the next round-major target (same attempt for the next athlete, wrapping from the final athlete to athlete 1 of the next attempt); returning Live commits the normal rotation to that same target.
 
 - `✓` Valid
 - `×` Foul

@@ -3,6 +3,8 @@
 ## Competition board interaction
 
 - Made every attempt cell respond to a single click: recorded cells open their exact replay, while eligible empty cells become the exact next recording target.
+- Added a persistent blue outline and smooth light-accent pulse to the clicked cell.
+- Corrected the post-Freeze board projection to advance across athletes within the same attempt before wrapping to athlete 1 of the next attempt.
 
 ## Unified selection controls
 
