@@ -4,7 +4,7 @@ Program slouží pro živý náhled a zpětnou kontrolu odrazu při skoku dalek�
 
 ## Režim pro slabší počítače
 
-Na starším nebo méně výkonném počítači spusťte `START_LOW_POWER.bat` nebo v nastavení Výkon zvolte **Režim pro slabší PC**. Kamera zůstane nastavena na požadovanou frekvenci, ale aplikace vykresluje rozhraní při 20 Hz, ukládá každý druhý snímek (60 FPS z kamery 120 FPS), používá 15sekundový živý buffer a nejvýše 1 GB RAM.
+Na starším nebo méně výkonném počítači v nastavení Výkon zvolte **Režim pro slabší PC**. Kamera zůstane nastavena na požadovanou frekvenci, ale aplikace vykresluje rozhraní při 20 Hz, ukládá každý druhý snímek (60 FPS z kamery 120 FPS), používá 15sekundový živý buffer a nejvýše 1 GB RAM.
 
 ## Nejdůležitější změna
 

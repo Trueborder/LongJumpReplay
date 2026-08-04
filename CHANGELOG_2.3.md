@@ -2,7 +2,7 @@
 
 ## Low-resource operation
 
-- Added an explicit Older PC mode in Settings and a `START_LOW_POWER.bat` one-click launcher.
+- Added an explicit Older PC mode in Settings.
 - The mode reduces preview/timeline refresh, assist analysis size, JPEG work, encoder queue pressure, live-buffer duration, and RAM use while leaving the configured camera capture rate unchanged.
 - A 120 FPS source retains 60 FPS in low-resource mode by intentionally storing every second frame; this quality tradeoff is operator-selected rather than silently applied by normal performance presets.
 - Adaptive preview throttling now drops to 12 Hz when the encoder is falling behind.

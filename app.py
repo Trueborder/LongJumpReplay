@@ -11,7 +11,7 @@ from tkinter import messagebox
 
 from src.attempts import AttemptManager
 from src.capture import CaptureEngine
-from src.config import apply_low_resource_mode, load_config
+from src.config import load_config
 from src.main_window import MainWindow
 from src.models import AttemptState
 from src.portable_paths import crash_log_path, prepare_config_path
@@ -25,7 +25,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--self-test", action="store_true", help="Run a headless pipeline and attempt-cache test")
     parser.add_argument("--self-test-report", default=None, help="Write self-test output to a text file")
     parser.add_argument("--windowed", action="store_true", help="Ignore fullscreen from config.json")
-    parser.add_argument("--low-power", action="store_true", help="Use the explicit low-resource profile for older PCs")
     return parser.parse_args()
 
 
@@ -121,7 +120,6 @@ def main() -> int:
     try:
         config = load_config(config_path)
         if args.synthetic: config.camera.source_type = "synthetic"
-        if args.low_power: apply_low_resource_mode(config)
         if args.windowed: config.display.fullscreen = False
         root = tk.Tk()
         MainWindow(root, config, config_path)

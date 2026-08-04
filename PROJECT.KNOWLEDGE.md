@@ -378,7 +378,7 @@ The PC fan/noise is a real product concern. Performance presets are:
 
 Settings with performance consequences display Low / Medium / High / Very high impact labels.
 
-The explicit Older PC mode is stronger than the ordinary Quiet presentation preset. It applies Quiet UI rendering, a 15-second/1 GB live buffer, JPEG quality 72, a 64-frame encoder queue, 128-pixel assist analysis, and `store_every_nth_frame = 2`. Camera capture remains at the configured FPS, so a 120 FPS source yields a 60 FPS retained replay. It is available through Settings, `app.py --low-power`, and `START_LOW_POWER.bat`.
+The explicit Older PC mode is stronger than the ordinary Quiet presentation preset. It applies Quiet UI rendering, a 15-second/1 GB live buffer, JPEG quality 72, a 64-frame encoder queue, 128-pixel assist analysis, and `store_every_nth_frame = 2`. Camera capture remains at the configured FPS, so a 120 FPS source yields a 60 FPS retained replay. It is available only through Settings.
 
 Optimization order:
 
