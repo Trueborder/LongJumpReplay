@@ -101,6 +101,8 @@ The most useful controls are:
 - adaptive performance;
 - menu rendering throttle;
 - live-buffer duration and RAM limit;
+
+The Camera settings page lists friendly Windows device names in a read-only dropdown, for example `0 · Integrated Camera` or `1 · OBS Virtual Camera`. The leading number remains the OpenCV camera index stored in the configuration. Reopen Settings to rescan devices connected after the window was opened, and restart the app after changing the camera.
 - Take-off Assist analysis width.
 
 ## Start Competition Wizard

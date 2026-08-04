@@ -202,6 +202,11 @@ Communication back to the GUI uses queues and scheduled polling. Do not update w
   - `CaptureEngine` and latest-frame storage;
   - camera reconnect and encoding pipeline.
 
+- `src/camera_devices.py`
+  - enumerates friendly Windows Camera/Image PnP names without adding a runtime dependency;
+  - maps displayed `index · name` labels back to the existing OpenCV `device_index`;
+  - preserves a configured-index fallback when enumeration is unavailable or a device is missing.
+
 - `src/ring_buffer.py`
   - thread-safe time-based JPEG packet ring buffer;
   - duration and memory limits;
@@ -455,6 +460,7 @@ Always test changes affecting workflow against:
 24. Older PC mode preserves configured camera FPS, applies bounded low-resource values, validates successfully, and is loadable from Settings.
 25. Main-screen pause stops and resumes capture, clears the live buffer/latest frame, blocks Freeze and timer actions, and leaves existing attempts intact.
 26. Near-screen saved geometry opens maximized while ordinary reduced geometry stays restored.
+27. Camera Settings enumerates friendly names, keeps a read-only `index · name` selector, and writes the selected numeric OpenCV index back to configuration.
 
 ### Headless note
 

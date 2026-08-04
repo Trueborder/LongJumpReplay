@@ -6,6 +6,7 @@ from tkinter import messagebox, ttk
 from collections.abc import Callable
 
 from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset
+from .camera_devices import enumerate_camera_devices
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
 
@@ -446,9 +447,22 @@ class SettingsDialog(tk.Toplevel):
             "width": tk.IntVar(value=c.width), "height": tk.IntVar(value=c.height), "fps": tk.DoubleVar(value=c.fps),
             "backend": tk.StringVar(value=c.backend), "fourcc": tk.StringVar(value=c.fourcc), "reconnect": tk.DoubleVar(value=c.reconnect_seconds),
         }
+        camera_devices = enumerate_camera_devices(c.device_index)
+        self._camera_choice_to_index = {device.label: device.index for device in camera_devices}
+        selected_device = next((device.label for device in camera_devices if device.index == c.device_index), camera_devices[0].label)
+        vals["camera_device_choice"] = tk.StringVar(value=selected_device)
+        vals["camera_device_choice"].trace_add(
+            "write",
+            lambda *_: vals["device"].set(self._camera_choice_to_index.get(str(vals["camera_device_choice"].get()), c.device_index)),
+        )
         self._vars.update(vals)
         self._row(f, r, "Source", "Zdroj", vals["source"], "combo", ("camera", "synthetic", "file"), impact="medium"); r += 1
-        self._row(f, r, "Camera selection (index)", "Výběr kamery (index)", vals["device"], desc_en="Usually 0 is the built-in/first camera and 1 is the second camera.", desc_cs="Obvykle je 0 vestavěná/první kamera a 1 druhá kamera.", impact="low"); r += 1
+        self.camera_device_combo = self._row(
+            f, r, "Camera", "Kamera", vals["camera_device_choice"], "combo", tuple(self._camera_choice_to_index),
+            desc_en="Available Windows camera names. The leading number is the OpenCV camera index; restart after changing it.",
+            desc_cs="Dostupné názvy kamer ve Windows. Úvodní číslo je index kamery OpenCV; po změně aplikaci restartujte.",
+            impact="low",
+        ); r += 1
         self._row(f, r, "Width", "Šířka", vals["width"], impact="very_high"); r += 1
         self._row(f, r, "Height", "Výška", vals["height"], impact="very_high"); r += 1
         self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate. Check Diagnostics.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu. Ověř v Diagnostice.", impact="very_high"); r += 1

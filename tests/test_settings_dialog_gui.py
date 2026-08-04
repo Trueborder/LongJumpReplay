@@ -1,10 +1,15 @@
 import tkinter as tk
 
 from src.config import AppConfig
+from src.camera_devices import CameraDevice
 from src.settings_dialog import SettingsDialog
 
 
-def test_category_settings_dialog_builds_all_pages():
+def test_category_settings_dialog_builds_all_pages(monkeypatch):
+    monkeypatch.setattr(
+        "src.settings_dialog.enumerate_camera_devices",
+        lambda current: [CameraDevice(0, "Lenovo Built-in"), CameraDevice(1, "OBS Virtual Camera")],
+    )
     root = tk.Tk(); root.withdraw(); applied = []
     dialog = SettingsDialog(root, AppConfig(), applied.append)
     dialog.update_idletasks()
@@ -14,6 +19,10 @@ def test_category_settings_dialog_builds_all_pages():
         "hotkeys", "shuttle", "recovery", "advanced",
     }
     assert dialog._vars["athlete_timer_duration"].get() == 60
+    assert str(dialog.camera_device_combo.cget("state")) == "readonly"
+    assert tuple(dialog.camera_device_combo.cget("values")) == ("0 · Lenovo Built-in", "1 · OBS Virtual Camera")
+    dialog._vars["camera_device_choice"].set("1 · OBS Virtual Camera")
+    assert dialog._vars["device"].get() == 1
     dialog._load_low_resource_mode()
     assert dialog._vars["preview_hz"].get() == 20
     assert dialog._vars["store_nth"].get() == 2

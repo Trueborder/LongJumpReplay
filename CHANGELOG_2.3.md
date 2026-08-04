@@ -1,5 +1,11 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Named camera selection
+
+- Replaced the free-form camera index field in Settings with a read-only dropdown of available Windows Camera/Image device names.
+- Dropdown labels retain the OpenCV index (`0 · Name`, `1 · Name`) so existing configuration and capture code stay compatible.
+- Added a safe configured-index fallback when Windows camera enumeration is unavailable or an older configuration references a missing device.
+
 ## Settings column alignment
 
 - Standardized setting rows into fixed Option, Description, and Value columns.

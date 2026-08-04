@@ -8,6 +8,8 @@ Na starším nebo méně výkonném počítači v nastavení Výkon zvolte **Re�
 
 V hlavním záhlaví je také viditelné tlačítko **Pozastavit systém**. Vypne kameru, zastaví živý záznam, vymaže živý RAM buffer a zablokuje rozhodování i časomíru. Již dokončené pokusy zůstanou zachovány. Tlačítko **Obnovit systém** znovu připojí kameru a začne s prázdným živým bufferem.
 
+Stránka Kamera v nastavení zobrazuje běžný rozevírací seznam s názvy zařízení Windows, například `0 · Integrated Camera` nebo `1 · OBS Virtual Camera`. Úvodní číslo zůstává indexem OpenCV uloženým v konfiguraci. Po připojení nové kamery znovu otevřete Nastavení a po změně kamery restartujte aplikaci.
+
 ## Nejdůležitější změna
 
 Po stisku mezerníku vznikne pokus se stavem **Nerozhodnuto**. Dalším stiskem mezerníku se vrátíš na živý obraz a program může automaticky přejít k dalšímu závodníkovi. Není nutné označit každý pokus jako Platný, Přešlap nebo Kontrola.
