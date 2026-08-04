@@ -39,6 +39,55 @@ class ThemeManager:
         self.root = root
         self.palette = DARK
         self.name = "dark"
+        self._image_assets: dict[str, tk.PhotoImage] = {}
+
+    def _checkbox_image(self, key: str, background: str, border: str, fill: str, checked: bool) -> tk.PhotoImage:
+        image = tk.PhotoImage(master=self.root, width=20, height=20)
+        image.put(background, to=(0, 0, 20, 20))
+        for x0, y0, x1, y1 in ((5, 2, 15, 3), (3, 3, 17, 4), (2, 5, 18, 15), (3, 16, 17, 17), (5, 17, 15, 18)):
+            image.put(border, to=(x0, y0, x1, y1))
+        image.put(border, to=(2, 5, 3, 15)); image.put(border, to=(17, 5, 18, 15))
+        for x0, y0, x1, y1 in ((5, 4, 15, 5), (4, 5, 16, 15), (5, 15, 15, 16)):
+            image.put(fill, to=(x0, y0, x1, y1))
+        if checked:
+            for x, y in ((6, 9), (7, 10), (8, 11), (9, 12), (10, 11), (11, 10), (12, 9), (13, 8), (14, 7)):
+                image.put("#ffffff", to=(x, y, x + 2, y + 2))
+        self._image_assets[key] = image
+        return image
+
+    def _install_checkbox_style(self, style: ttk.Style, p: dict[str, str]) -> None:
+        prefix = f"Modern{self.name.title()}"
+        unchecked = self._checkbox_image(f"{prefix}.unchecked", p["surface"], p["border"], p["surface2"], False)
+        checked = self._checkbox_image(f"{prefix}.checked", p["surface"], p["accent"], p["accent"], True)
+        disabled = self._checkbox_image(f"{prefix}.disabled", p["surface"], p["border"], p["surface"], False)
+        disabled_checked = self._checkbox_image(f"{prefix}.disabled_checked", p["surface"], p["muted"], p["muted"], True)
+        element = f"{prefix}.Check.indicator"
+        if element not in style.element_names():
+            style.element_create(
+                element, "image", unchecked,
+                ("disabled selected", disabled_checked), ("selected", checked), ("disabled", disabled),
+                sticky="",
+            )
+        style.layout("TCheckbutton", [
+            ("Checkbutton.padding", {"sticky": "nswe", "children": [
+                (element, {"side": "left", "sticky": ""}),
+                ("Checkbutton.focus", {"side": "left", "sticky": "w", "children": [
+                    ("Checkbutton.label", {"sticky": "nswe"}),
+                ]}),
+            ]}),
+        ])
+
+    def style_menu(self, menu: tk.Menu) -> None:
+        p = self.palette
+        try:
+            menu.configure(
+                background=p["surface"], foreground=p["text"],
+                activebackground=p["selection"], activeforeground=p["text"],
+                disabledforeground=p["muted"], selectcolor=p["accent"],
+                font=("Segoe UI", 10), borderwidth=1, relief="solid", activeborderwidth=0,
+            )
+        except tk.TclError:
+            pass
 
     def apply(self, requested: str) -> dict[str, str]:
         name = "dark" if requested == "dark" or (requested == "system" and system_prefers_dark()) else "light"
@@ -57,8 +106,10 @@ class ThemeManager:
         style.configure("ControlDock.TFrame", background=p["surface"], borderwidth=1, relief="solid")
         style.configure("Brand.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 15))
         style.configure("BrandSub.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
-        style.configure("Header.TMenubutton", background=p["surface"], foreground=p["muted"], padding=(9, 5), borderwidth=0)
-        style.map("Header.TMenubutton", background=[("active", p["surface2"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])])
+        style.configure("TMenubutton", background=p["surface2"], foreground=p["text"], padding=(10, 7), borderwidth=1, relief="flat", arrowcolor=p["muted"])
+        style.map("TMenubutton", background=[("active", p["selection"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])], arrowcolor=[("active", p["text"])])
+        style.configure("Header.TMenubutton", background=p["surface2"], foreground=p["text"], padding=(11, 7), borderwidth=1, relief="flat", arrowcolor=p["muted"])
+        style.map("Header.TMenubutton", background=[("active", p["selection"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])], arrowcolor=[("active", p["text"])])
         style.configure("ContextTitle.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 8))
         style.configure("ContextValue.TLabel", background=p["surface2"], foreground=p["text"], font=("Segoe UI Semibold", 10))
         style.configure("Title.TLabel", background=p["bg"], foreground=p["text"], font=("Segoe UI Semibold", 14))
@@ -94,14 +145,16 @@ class ThemeManager:
         style.configure("TNotebook", background=p["bg"], borderwidth=0)
         style.configure("TNotebook.Tab", padding=(12, 7), background=p["surface2"], foreground=p["muted"])
         style.map("TNotebook.Tab", background=[("selected", p["surface"])], foreground=[("selected", p["text"])])
-        style.configure("TCheckbutton", background=p["surface"], foreground=p["text"])
+        style.configure("TCheckbutton", background=p["surface"], foreground=p["text"], padding=(2, 3), indicatorsize=20, indicatormargin=(0, 0, 7, 0))
+        style.map("TCheckbutton", background=[("active", p["surface"])], foreground=[("disabled", p["muted"]), ("active", p["text"])])
+        self._install_checkbox_style(style, p)
         style.configure("TRadiobutton", background=p["surface"], foreground=p["text"])
         style.configure("TEntry", fieldbackground=p["surface2"], foreground=p["text"], insertcolor=p["text"])
         style.map("TEntry", fieldbackground=[("disabled", p["surface"]), ("readonly", p["surface2"])], foreground=[("disabled", p["muted"])])
         style.configure("TSpinbox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["text"], insertcolor=p["text"])
         style.map("TSpinbox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])])
-        style.configure("TCombobox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["text"], selectbackground=p["selection"], selectforeground=p["text"])
-        style.map("TCombobox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])], selectbackground=[("readonly", p["selection"])], selectforeground=[("readonly", p["text"])])
+        style.configure("TCombobox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["muted"], selectbackground=p["selection"], selectforeground=p["text"], padding=(9, 6), borderwidth=1, relief="flat", arrowsize=15)
+        style.map("TCombobox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])], bordercolor=[("focus", p["accent"]), ("active", p["accent"]), ("readonly", p["border"])], arrowcolor=[("active", p["text"]), ("readonly", p["muted"])], selectbackground=[("readonly", p["surface2"])], selectforeground=[("readonly", p["text"])])
         style.configure("Vertical.TScrollbar", background=p["surface2"], troughcolor=p["bg"], arrowcolor=p["text"])
         style.configure("Horizontal.TScrollbar", background=p["surface2"], troughcolor=p["bg"], arrowcolor=p["text"])
         style.configure("ImpactLow.TLabel", background=p["surface"], foreground=p["live"], font=("Segoe UI Semibold", 8))
@@ -129,8 +182,19 @@ class ThemeManager:
         self.root.option_add("*TCombobox*Listbox.foreground", p["text"])
         self.root.option_add("*TCombobox*Listbox.selectBackground", p["selection"])
         self.root.option_add("*TCombobox*Listbox.selectForeground", p["text"])
+        self.root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 10))
+        self.root.option_add("*TCombobox*Listbox.relief", "flat")
+        self.root.option_add("*TCombobox*Listbox.borderWidth", 1)
+        self.root.option_add("*TCombobox*Listbox.activestyle", "none")
         self.root.option_add("*Listbox.background", p["surface2"])
         self.root.option_add("*Listbox.foreground", p["text"])
         self.root.option_add("*Listbox.selectBackground", p["selection"])
         self.root.option_add("*Listbox.selectForeground", p["text"])
+        self.root.option_add("*Menu.background", p["surface"])
+        self.root.option_add("*Menu.foreground", p["text"])
+        self.root.option_add("*Menu.activeBackground", p["selection"])
+        self.root.option_add("*Menu.activeForeground", p["text"])
+        self.root.option_add("*Menu.disabledForeground", p["muted"])
+        self.root.option_add("*Menu.selectColor", p["accent"])
+        self.root.option_add("*Menu.font", ("Segoe UI", 10))
         return p

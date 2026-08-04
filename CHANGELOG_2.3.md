@@ -1,5 +1,11 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Unified selection controls
+
+- Replaced default checkbox indicators with larger theme-aware square controls, accent fill, and a high-contrast check mark.
+- Restyled combobox fields and their opening lists with consistent spacing, border focus, typography, selection colors, and arrow treatment.
+- Applied the same dark/light palette, typography, borders, and active selection treatment to File, View, Help, layout, theme, and special-result menus.
+
 ## Named camera selection
 
 - Replaced the free-form camera index field in Settings with a read-only dropdown of available Windows Camera/Image device names.

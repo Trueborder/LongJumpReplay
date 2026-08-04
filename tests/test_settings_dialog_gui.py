@@ -1,8 +1,10 @@
 import tkinter as tk
+from tkinter import ttk
 
 from src.config import AppConfig
 from src.camera_devices import CameraDevice
 from src.settings_dialog import SettingsDialog
+from src.theme import ThemeManager
 
 
 def test_category_settings_dialog_builds_all_pages(monkeypatch):
@@ -10,9 +12,15 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
         "src.settings_dialog.enumerate_camera_devices",
         lambda current: [CameraDevice(0, "Lenovo Built-in"), CameraDevice(1, "OBS Virtual Camera")],
     )
-    root = tk.Tk(); root.withdraw(); applied = []
+    root = tk.Tk(); root.withdraw(); theme_manager = ThemeManager(root); theme_manager.apply("dark"); applied = []
     dialog = SettingsDialog(root, AppConfig(), applied.append)
     dialog.update_idletasks()
+    style = ttk.Style(dialog)
+    assert "Modern" in str(style.layout("TCheckbutton"))
+    assert int(style.lookup("TCombobox", "arrowsize")) == 15
+    assert tuple(style.lookup("TCombobox", "padding")) == (9, 6)
+    theme_manager.apply("light")
+    assert "ModernLight" in str(style.layout("TCheckbutton"))
     assert set(dialog._pages) == {
         "general", "appearance", "performance", "camera", "board", "competition",
         "rounds", "decisions", "final", "replay", "views", "assist",

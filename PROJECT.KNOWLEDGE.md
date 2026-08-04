@@ -322,6 +322,8 @@ Settings uses four navigation groups (Essentials, Judging workflow, Replay works
 
 Every ordinary setting row follows the same three-column contract: Option (fixed width), Description (flexible), and Value (fixed width). Column headings are visible and localized. Checkboxes align to the same Value-column origin as entries, spinboxes, and selectors; individual label or description length must not move a control horizontally.
 
+Checkboxes, comboboxes, combobox list popups, and classic Tk menus are themed as one component family. Checkbox indicator images are owned by `ThemeManager` for their full Tk lifetime. Dark/light theme application must also restyle existing File/View/Help and nested menus; native-looking defaults must not reappear after a runtime theme change.
+
 Supported layouts:
 
 - `replay_pip`

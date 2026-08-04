@@ -131,6 +131,12 @@ def test_header_menu_is_static_and_throttles_expensive_redraws(tmp_path):
         for _ in range(5):
             app._tick(); root.update_idletasks()
         assert str(app.file_menu) == menu_id
+        assert str(app.file_menu.cget("background")) == app.palette["surface"]
+        assert str(app.file_menu.cget("activebackground")) == app.palette["selection"]
+        assert "Segoe UI" in str(app.file_menu.cget("font"))
+        app.config.display.theme = "light"; app._apply_theme()
+        assert str(app.file_menu.cget("background")) == app.palette["surface"]
+        assert str(app.file_menu.cget("activebackground")) == app.palette["selection"]
         assert throttled_hz <= 15
         assert throttled_hz <= normal_hz
     finally:

@@ -239,6 +239,13 @@ class MainWindow:
             self.help_menu.add_command(label="Camera diagnostic", command=self.open_camera_diagnostic)
         self.help_menu.add_separator()
         self.help_menu.add_command(label=self._t("menu.about"), command=lambda: messagebox.showinfo(self._t("menu.about"), "Long Jump Replay 2.3\nLive video review for long-jump take-off decisions."))
+        self._style_all_menus()
+
+    def _style_all_menus(self) -> None:
+        for name in ("file_menu", "view_menu", "layout_menu", "theme_menu", "help_menu", "special_result_menu"):
+            menu = getattr(self, name, None)
+            if isinstance(menu, tk.Menu):
+                self.theme.style_menu(menu)
 
     def _attach_header_menus(self, header: ttk.Frame) -> None:
         self.header_menu_frame = ttk.Frame(header, style="Panel.TFrame")
@@ -302,6 +309,7 @@ class MainWindow:
         self.special_result_menu.add_separator()
         self.special_result_menu.add_command(label=self._t("status.reattempt"), command=self.grant_reattempt)
         self.special_result_button.configure(menu=self.special_result_menu)
+        self.theme.style_menu(self.special_result_menu)
         self.special_result_button.pack(side="right", padx=(0, 8))
         self.competition_bar.pack(fill="x", pady=(0, 6))
         self.wizard_button = ttk.Button(self.outer, text=self._t("button.wizard"), style="Accent.TButton", command=self.start_competition_wizard)
@@ -1537,6 +1545,7 @@ class MainWindow:
         self.timeline.apply_palette(self.palette)
         if hasattr(self, "competition_board"):
             self.competition_board.apply_palette(self.palette)
+        self._style_all_menus()
         self._refresh_attempts(); self._update_video_labels()
         self._update_athlete_timer_display()
 
