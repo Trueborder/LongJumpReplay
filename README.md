@@ -54,7 +54,7 @@ The timer is available in competition and judge-only modes and is never written 
 
 ## Competition order
 
-The next-attempt strip is shown directly above the Competition Board. While that tab is selected, plain arrow keys move between cells regardless of which board control has focus and do not step replay frames. Press Enter to open or select the focused cell; Space remains Freeze/Live. Right-click a recorded cell to mark Not decided, Valid, Foul, Review, Passed, Missing, or Withdrawn, or to delete its attempt content.
+The next-attempt strip is shown directly above the Competition Board. While that tab is selected, plain arrow keys move between cells regardless of which board control has focus and do not step replay frames. Press Enter to open or select the focused cell; Space remains Freeze/Live. During Freeze, the blue box remains on the attempt being judged and advances only after returning Live. Right-click a recorded or eligible blank cell to mark Not decided, Valid, Foul, Review, Passed, Missing, or Withdrawn. A blank-cell result is stored without video; deletion becomes available once that cell has a record.
 
 For eight athletes and three qualification attempts, the order is:
 

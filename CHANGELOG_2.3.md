@@ -12,6 +12,8 @@
 - Made plain arrows consistently navigate cells whenever the Competition Board tab is selected, regardless of focused child widget; Recordings restores frame stepping immediately.
 - Kept Space exclusively assigned to Freeze/Live and Enter assigned to opening or selecting the focused board cell.
 - Added a right-click menu for every recorded attempt with all result variants and Delete attempt content.
+- Kept the blue active-cell outline on the frozen attempt during judging and delayed its move to the next athlete until return to Live.
+- Enabled the same right-click result menu on eligible blank cells; choosing a result creates a metadata-only cell that can be edited again without fabricating footage.
 - Moved the next-attempt strip into the Competition Board and removed its Boys/Girls dropdown and Previous/Next buttons.
 
 ## Unified selection controls

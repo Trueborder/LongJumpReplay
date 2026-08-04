@@ -38,6 +38,7 @@ class CompetitionBoard(ttk.Frame):
         on_open_attempt: Callable[[int], None],
         on_select_cell: Callable[[int, int], None] | None = None,
         on_mark_attempt: Callable[[int, AttemptDecision], None] | None = None,
+        on_mark_empty_cell: Callable[[int, int, AttemptDecision], None] | None = None,
         on_delete_attempt: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
@@ -45,6 +46,7 @@ class CompetitionBoard(ttk.Frame):
         self.on_open_attempt = on_open_attempt
         self.on_select_cell = on_select_cell
         self.on_mark_attempt = on_mark_attempt
+        self.on_mark_empty_cell = on_mark_empty_cell
         self.on_delete_attempt = on_delete_attempt
         self.canvas = tk.Canvas(self, highlightthickness=1, highlightbackground=palette["border"], bd=0, background=palette["surface"], takefocus=True)
         self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
@@ -56,6 +58,7 @@ class CompetitionBoard(ttk.Frame):
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self._cell_attempts: dict[tuple[int, int], int] = {}
+        self._editable_cells: set[tuple[int, int]] = set()
         self._cell_boxes: list[tuple[int, int, int, int, int, int]] = []
         self._cell_items: dict[tuple[int, int], tuple[int, str]] = {}
         self._cell_positions: dict[tuple[int, int], tuple[int, int]] = {}
@@ -79,6 +82,8 @@ class CompetitionBoard(ttk.Frame):
         self.canvas.bind("<MouseWheel>", self._wheel)
         self.context_menu = tk.Menu(self.canvas, tearoff=False)
         self._context_attempt_id: int | None = None
+        self._context_cell: tuple[int, int] | None = None
+        self._delete_menu_index = 0
         self._rebuild_context_menu()
 
     def apply_palette(self, palette: dict[str, str]) -> None:
@@ -111,6 +116,7 @@ class CompetitionBoard(ttk.Frame):
     def redraw(self) -> None:
         self.canvas.delete("all")
         self._cell_attempts = {}
+        self._editable_cells = set()
         self._cell_boxes = []
         self._cell_items = {}
         self._cell_positions = {}
@@ -185,6 +191,8 @@ class CompetitionBoard(ttk.Frame):
                 self._cell_items[cell] = (rectangle, fill)
                 self._cell_positions[cell] = (athlete - 1, col - 1)
                 grid_row.append(cell)
+                if eligible:
+                    self._editable_cells.add(cell)
                 if attempt:
                     self._cell_attempts[(athlete, attempt_no)] = attempt.attempt_id
             self._cell_grid.append(grid_row)
@@ -301,13 +309,20 @@ class CompetitionBoard(ttk.Frame):
         if hit is None:
             return "break"
         self.canvas.focus_set(); self.focus_cell(hit)
-        attempt_id = self._cell_attempts.get(hit)
-        if attempt_id is None:
+        if not self._prepare_context_cell(hit):
             return "break"
-        self._context_attempt_id = attempt_id
         try: self.context_menu.tk_popup(event.x_root, event.y_root)
         finally: self.context_menu.grab_release()
         return "break"
+
+    def _prepare_context_cell(self, hit: tuple[int, int]) -> bool:
+        attempt_id = self._cell_attempts.get(hit)
+        if attempt_id is None and hit not in self._editable_cells:
+            return False
+        self._context_attempt_id = attempt_id
+        self._context_cell = hit
+        self.context_menu.entryconfigure(self._delete_menu_index, state="normal" if attempt_id is not None else "disabled")
+        return True
 
     def _rebuild_context_menu(self) -> None:
         self.context_menu.delete(0, "end")
@@ -320,6 +335,7 @@ class CompetitionBoard(ttk.Frame):
             self.context_menu.add_command(label=tr(self._language, key), command=lambda value=decision: self._context_mark(value))
         self.context_menu.add_separator()
         self.context_menu.add_command(label=tr(self._language, "board.delete_attempt"), command=self._context_delete)
+        self._delete_menu_index = int(self.context_menu.index("end"))
         self._style_context_menu()
 
     def _style_context_menu(self) -> None:
@@ -330,6 +346,8 @@ class CompetitionBoard(ttk.Frame):
     def _context_mark(self, decision: AttemptDecision) -> None:
         if self._context_attempt_id is not None and self.on_mark_attempt:
             self.on_mark_attempt(self._context_attempt_id, decision)
+        elif self._context_cell is not None and self.on_mark_empty_cell:
+            self.on_mark_empty_cell(*self._context_cell, decision)
 
     def _context_delete(self) -> None:
         if self._context_attempt_id is not None and self.on_delete_attempt:

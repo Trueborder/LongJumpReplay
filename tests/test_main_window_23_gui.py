@@ -62,7 +62,7 @@ def test_not_decided_attempt_does_not_block_next_freeze(tmp_path):
     assert result["current_attempt"] == result["attempts"][1].attempt_id
 
 
-def test_freeze_projects_next_athlete_cell_before_live_rotation(tmp_path):
+def test_freeze_keeps_current_cell_and_live_advances_board(tmp_path):
     config, path = _config(tmp_path)
     root = tk.Tk(); app = MainWindow(root, config, path); result = {}
 
@@ -76,6 +76,7 @@ def test_freeze_projects_next_athlete_cell_before_live_rotation(tmp_path):
 
     def inspect_live():
         result["current_athlete"] = app.competition.current_competitor()
+        result["live_board_cell"] = (app.competition_board._active_athlete, app.competition_board._active_attempt)
         result["projection_after_live"] = app._board_next_assignment
         app.close()
 
@@ -85,9 +86,37 @@ def test_freeze_projects_next_athlete_cell_before_live_rotation(tmp_path):
     root.mainloop()
 
     assert result["projection"] == (2, 1)
-    assert result["board_cell"] == (2, 1)
+    assert result["board_cell"] == (1, 1)
     assert result["current_athlete"] == 2
+    assert result["live_board_cell"] == (2, 1)
     assert result["projection_after_live"] is None
+
+
+def test_blank_board_cell_can_receive_and_update_a_status_without_video(tmp_path):
+    config, path = _config(tmp_path)
+    root = tk.Tk(); app = MainWindow(root, config, path)
+    try:
+        current_before = app.competition.current_competitor()
+        app._mark_empty_cell_from_board(2, 2, AttemptDecision.FOUL)
+        attempts = [
+            attempt for attempt in app.attempts.attempts()
+            if attempt.competitor_number == 2 and attempt.competitor_attempt_number == 2
+        ]
+        assert len(attempts) == 1
+        assert attempts[0].decision is AttemptDecision.FOUL
+        assert attempts[0].frame_count == 0
+        assert attempts[0].rotation_completed
+        assert app.competition.current_competitor() == current_before
+
+        app._mark_empty_cell_from_board(2, 2, AttemptDecision.VALID)
+        updated = [
+            attempt for attempt in app.attempts.attempts()
+            if attempt.competitor_number == 2 and attempt.competitor_attempt_number == 2
+        ]
+        assert len(updated) == 1
+        assert updated[0].decision is AttemptDecision.VALID
+    finally:
+        app.close(); root.mainloop()
 
 
 def test_strict_decision_mode_can_still_block_return_live(tmp_path):

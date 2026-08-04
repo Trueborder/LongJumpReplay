@@ -330,7 +330,7 @@ Checkboxes, comboboxes, combobox list popups, and classic Tk menus are themed as
 
 All ttk button styles and combobox fields use compact, pill-like scalable image elements with transparent corners; the nine-slice image must not impose a larger minimum height than the control's own padding requires. Checkboxes use a circular accent indicator with a visible white check. On Windows, mapped classic menu windows and combobox popdowns request DWM rounded corners. Checkbox tests must verify both Tk selected state and different rendered checked/unchecked pixels so an invisible logical selection cannot regress unnoticed. The Settings category sidebar has its own always-visible scrollbar and mouse-wheel navigation, independent of the scrollable contents of each page.
 
-The competition target strip belongs inside the Competition Board tab. It shows only the projected next athlete number and attempt plus special-result actions; the old Boys/Girls selector and Previous/Next buttons must not return. Every board cell is focusable. While the Competition Board tab is selected and visible, plain arrow keys move the persistent blue, softly pulsing focus regardless of which child widget owns focus; they never step replay frames in that context. Enter opens recorded content or selects an empty cell. Space always remains Freeze/Live. Modified arrows and all unrelated configured shortcuts keep their normal actions. Right-clicking a recorded attempt exposes all decision variants and Delete attempt content.
+The competition target strip belongs inside the Competition Board tab. It shows only the projected next athlete number and attempt plus special-result actions; the old Boys/Girls selector and Previous/Next buttons must not return. Every board cell is focusable. While the Competition Board tab is selected and visible, plain arrow keys move the persistent blue, softly pulsing focus regardless of which child widget owns focus; they never step replay frames in that context. Enter opens recorded content or selects an empty cell. Space always remains Freeze/Live. Modified arrows and all unrelated configured shortcuts keep their normal actions. Freeze keeps the board's active outline on the recorded athlete/attempt throughout judging; only a successful return to Live advances it to the next rotation cell. Right-clicking either a recorded or eligible blank cell exposes all decision variants. Choosing a status on a blank cell creates a metadata-only, zero-frame placeholder without changing the current athlete; Delete attempt content is enabled only when a record exists.
 
 Supported layouts:
 
@@ -476,6 +476,8 @@ Always test changes affecting workflow against:
 28. When the Competition Board tab is selected, plain arrows navigate cells from every child focus target and never step frames; Enter activates the cell, while Space still controls Freeze/Live. Recordings restores normal frame stepping immediately.
 29. Status text and timeline guidance retain full layout rows at reduced window heights, and the visible timeline scheduler reaches the selected refresh target.
 30. Every Settings row has a localized description; the Show setting descriptions checkbox hides and restores the Description column immediately.
+31. Freeze keeps the active board cell on the attempt being judged, and return to Live advances it exactly once.
+32. Eligible blank board cells accept right-click decisions as zero-frame placeholders; repeated edits update the same record and deletion stays disabled until content exists.
 
 ### Headless note
 

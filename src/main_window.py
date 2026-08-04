@@ -433,7 +433,7 @@ class MainWindow:
 
         self.competition_board = CompetitionBoard(
             self.board_tab, self.palette, self._open_attempt_from_board, self._select_cell_from_board,
-            self._mark_attempt_from_board, self._delete_attempt_from_board,
+            self._mark_attempt_from_board, self._mark_empty_cell_from_board, self._delete_attempt_from_board,
         )
         self.theme.style_menu(self.competition_board.context_menu)
         self.competition_board.pack(fill="both", expand=True)
@@ -888,7 +888,14 @@ class MainWindow:
         if not hasattr(self, "competition_board"):
             return
         group = self.competition.current_group()
-        board_assignment = self._board_next_assignment if self.playback.mode is PlaybackMode.ATTEMPT and self._board_next_assignment else assignment
+        board_assignment = assignment
+        if self.playback.mode is PlaybackMode.ATTEMPT and self.playback.attempt_id is not None:
+            frozen_attempt = self.attempts.get_attempt(self.playback.attempt_id)
+            if frozen_attempt and frozen_attempt.competitor_number > 0 and frozen_attempt.competitor_attempt_number > 0:
+                board_assignment = RosterAssignment(
+                    frozen_attempt.competitor_group, frozen_attempt.competitor_number,
+                    frozen_attempt.competitor_attempt_number, frozen_attempt.competition_phase,
+                )
         athlete = board_assignment.competitor_number if board_assignment else self.competition.current_competitor()
         attempt_no = board_assignment.attempt_number if board_assignment else 0
         signature = (
@@ -950,6 +957,27 @@ class MainWindow:
         attempt = self.attempts.get_attempt(attempt_id)
         self._show_message(self._t("message.decision_marked", roster=self._attempt_roster_display(attempt), decision=self._decision_display(decision).upper()), 5)
         self._last_board_signature = None; self._last_attempts_refresh = 0; self._refresh_attempts()
+
+    def _mark_empty_cell_from_board(self, athlete: int, attempt_no: int, decision: AttemptDecision) -> None:
+        group = self.competition.current_group()
+        existing = max((
+            attempt for attempt in self.attempts.attempts()
+            if attempt.competitor_group == group
+            and attempt.competitor_number == athlete
+            and attempt.competitor_attempt_number == attempt_no
+        ), key=lambda attempt: attempt.created_wall_time, default=None)
+        if existing is not None:
+            self._mark_attempt_from_board(existing.attempt_id, decision)
+            return
+        qualification_limit = self.competition.qualification_limit(group, athlete)
+        phase = "qualification" if attempt_no <= qualification_limit else "final"
+        created = self.attempts.create_placeholder_attempt(group, athlete, attempt_no, decision, phase)
+        self._show_message(self._t(
+            "message.decision_marked", roster=self._attempt_roster_display(created),
+            decision=self._decision_display(decision).upper(),
+        ), 5)
+        self._last_board_signature = None; self._last_attempts_refresh = 0
+        self._refresh_attempts(); self._refresh_current_try()
 
     def _delete_attempt_from_board(self, attempt_id: int) -> None:
         if self.config.general.confirm_destructive_actions and not messagebox.askyesno(
