@@ -68,7 +68,7 @@ release\LongJumpReplay-2.3-Windows-x64.zip
 
 Příjemce ZIP jen rozbalí a spustí `LongJumpReplay.exe`. Python nepotřebuje.
 
-Na soutěžní tabuli lze mezi buňkami přecházet šipkami a volbu otevřít klávesou Enter nebo mezerníkem. Pravé tlačítko nad uloženým pokusem nabízí všechny varianty rozhodnutí i smazání obsahu pokusu. Panel dalšího pokusu je přímo nad tabulí; původní seznam Chlapci/Dívky a tlačítka Předchozí/Další byly odstraněny.
+Když je vybraná soutěžní tabule, obyčejné šipky vždy přecházejí mezi buňkami a neposouvají snímky bez ohledu na aktivní prvek. Enter otevře nebo vybere buňku, mezerník vždy ovládá Zmrazit/Živě. Pravé tlačítko nad uloženým pokusem nabízí všechny varianty rozhodnutí i smazání obsahu pokusu. Panel dalšího pokusu je přímo nad tabulí; původní seznam Chlapci/Dívky a tlačítka Předchozí/Další byly odstraněny.
 
 V Nastavení má každá volba vlastní popis. Přepínač Zobrazovat popisy nastavení okamžitě skryje nebo obnoví celý sloupec popisů. Tlačítka a rozbalovací seznamy používají kompaktní zaoblený vzhled a zaškrtávací políčka mají jasně viditelný kruhový indikátor.
 

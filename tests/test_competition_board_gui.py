@@ -90,13 +90,13 @@ def test_every_board_cell_is_clickable_and_recordings_open_on_one_click():
         assert board._focused_cell == (2, 3)
 
         board.focus_cell((1, 1))
-        assert board._move_focus(1, 0) == "break"
+        assert board.move_focus(1, 0) == "break"
         assert board._focused_cell == (1, 2)
-        assert board._move_focus(0, 1) == "break"
+        assert board.move_focus(0, 1) == "break"
         assert board._focused_cell == (2, 2)
-        assert board._move_focus(-1, 0) == "break"
+        assert board.move_focus(-1, 0) == "break"
         assert board._focused_cell == (2, 1)
-        board._activate_focused()
+        board.activate_focused()
         assert opened[-1] == 201
 
         board._context_attempt_id = 202

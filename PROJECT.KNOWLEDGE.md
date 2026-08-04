@@ -330,7 +330,7 @@ Checkboxes, comboboxes, combobox list popups, and classic Tk menus are themed as
 
 All ttk button styles and combobox fields use compact, pill-like scalable image elements with transparent corners; the nine-slice image must not impose a larger minimum height than the control's own padding requires. Checkboxes use a circular accent indicator with a visible white check. On Windows, mapped classic menu windows and combobox popdowns request DWM rounded corners. Checkbox tests must verify both Tk selected state and different rendered checked/unchecked pixels so an invisible logical selection cannot regress unnoticed. The Settings category sidebar has its own always-visible scrollbar and mouse-wheel navigation, independent of the scrollable contents of each page.
 
-The competition target strip belongs inside the Competition Board tab. It shows only the projected next athlete number and attempt plus special-result actions; the old Boys/Girls selector and Previous/Next buttons must not return. Every board cell is focusable. Mouse clicks and arrow keys move the persistent blue, softly pulsing focus; Enter/Space opens recorded content or selects an empty cell. Right-clicking a recorded attempt exposes all decision variants and Delete attempt content. Board Left/Right keys take precedence over the global frame-step hotkeys while the board owns keyboard focus.
+The competition target strip belongs inside the Competition Board tab. It shows only the projected next athlete number and attempt plus special-result actions; the old Boys/Girls selector and Previous/Next buttons must not return. Every board cell is focusable. While the Competition Board tab is selected and visible, plain arrow keys move the persistent blue, softly pulsing focus regardless of which child widget owns focus; they never step replay frames in that context. Enter opens recorded content or selects an empty cell. Space always remains Freeze/Live. Modified arrows and all unrelated configured shortcuts keep their normal actions. Right-clicking a recorded attempt exposes all decision variants and Delete attempt content.
 
 Supported layouts:
 
@@ -473,7 +473,7 @@ Always test changes affecting workflow against:
 25. Main-screen pause stops and resumes capture, clears the live buffer/latest frame, blocks Freeze and timer actions, and leaves existing attempts intact.
 26. Near-screen saved geometry opens maximized while ordinary reduced geometry stays restored.
 27. Camera Settings enumerates friendly names, keeps a read-only `index · name` selector, and writes the selected numeric OpenCV index back to configuration.
-28. Competition Board arrow navigation, focused-cell activation, right-click decision variants, and forced content deletion remain available without stealing board arrows for frame stepping.
+28. When the Competition Board tab is selected, plain arrows navigate cells from every child focus target and never step frames; Enter activates the cell, while Space still controls Freeze/Live. Recordings restores normal frame stepping immediately.
 29. Status text and timeline guidance retain full layout rows at reduced window heights, and the visible timeline scheduler reaches the selected refresh target.
 30. Every Settings row has a localized description; the Show setting descriptions checkbox hides and restores the Description column immediately.
 

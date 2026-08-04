@@ -5,6 +5,7 @@ import tkinter as tk
 
 
 Action = Callable[[], None]
+KeyOverride = Callable[[tk.Event], bool]
 
 
 ONE_SHOT_ACTIONS = {
@@ -48,6 +49,7 @@ class HotkeyRouter:
         self.bindtag = f"LongJumpReplayHotkeys{root.winfo_id()}"
         self._held: set[str] = set()
         self._sequences: list[str] = []
+        self._key_override: KeyOverride | None = None
 
     def attach_tree(self, widget: tk.Misc | None = None) -> None:
         current = widget or self.root
@@ -57,8 +59,14 @@ class HotkeyRouter:
         for child in current.winfo_children():
             self.attach_tree(child)
 
-    def install(self, bindings: dict[str, str], actions: dict[str, Action]) -> None:
+    def install(
+        self,
+        bindings: dict[str, str],
+        actions: dict[str, Action],
+        key_override: KeyOverride | None = None,
+    ) -> None:
         self.clear()
+        self._key_override = key_override
         for action_name, hotkey in bindings.items():
             action = actions.get(action_name)
             if not hotkey or action is None:
@@ -68,6 +76,8 @@ class HotkeyRouter:
                 release = hotkey_to_sequence(hotkey, release=True)
                 token = f"{action_name}:{hotkey}"
                 def on_press(_event, token=token, action=action):
+                    if self._handle_override(_event):
+                        return "break"
                     if token not in self._held:
                         self._held.add(token); action()
                     return "break"
@@ -78,12 +88,21 @@ class HotkeyRouter:
                 self.root.bind_class(self.bindtag, release, on_release)
                 self._sequences.extend([press, release])
             else:
-                def handler(_event, action=action, action_name=action_name):
-                    if action_name in {"previous_frame", "next_frame"} and getattr(_event.widget, "_competition_board_navigation", False):
-                        return None
+                def handler(_event, action=action):
+                    if self._handle_override(_event):
+                        return "break"
                     action(); return "break"
                 self.root.bind_class(self.bindtag, press, handler)
                 self._sequences.append(press)
+        if key_override is not None:
+            self.root.bind_class(self.bindtag, "<KeyPress>", self._generic_keypress)
+            self._sequences.append("<KeyPress>")
+
+    def _handle_override(self, event: tk.Event) -> bool:
+        return bool(self._key_override and self._key_override(event))
+
+    def _generic_keypress(self, event: tk.Event) -> str | None:
+        return "break" if self._handle_override(event) else None
 
     def clear(self) -> None:
         for sequence in self._sequences:
@@ -93,6 +112,7 @@ class HotkeyRouter:
                 pass
         self._held.clear()
         self._sequences.clear()
+        self._key_override = None
 
     def close(self) -> None:
         self.clear()

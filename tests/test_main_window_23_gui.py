@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import messagebox
+from types import SimpleNamespace
 
 from src.config import AppConfig, save_config
 from src.main_window import MainWindow
@@ -145,6 +146,38 @@ def test_judge_only_mode_hides_competition_board(tmp_path):
         assert not hasattr(app, "prev_athlete_button")
         assert not app.board_navigation.winfo_manager()
         assert app.side_notebook.tab(app.board_tab, "state") == "hidden"
+    finally:
+        app.close(); root.mainloop()
+
+
+def test_board_tab_owns_plain_arrows_and_enter_but_not_space(tmp_path):
+    config, path = _config(tmp_path)
+    root = tk.Tk(); app = MainWindow(root, config, path)
+    activated = []
+    try:
+        app.competition_board.on_select_cell = lambda athlete, attempt: activated.append((athlete, attempt))
+        app.side_notebook.select(app.board_tab)
+        app.competition_board.focus_cell((1, 1))
+        root.update()
+        assert app._competition_board_keyboard_active()
+        assert app.hotkeys.bindtag in app.special_result_button.bindtags()
+
+        def event(key, state=0):
+            return SimpleNamespace(keysym=key, state=state, widget=app.special_result_button)
+        assert app.hotkeys._handle_override(event("Right"))
+        assert app.competition_board._focused_cell == (1, 2)
+        assert app.hotkeys._handle_override(event("Down"))
+        assert app.competition_board._focused_cell == (2, 2)
+
+        assert app.hotkeys._handle_override(event("Return"))
+        assert activated == [(2, 2)]
+        assert not app.hotkeys._handle_override(event("space"))
+        assert activated == [(2, 2)]
+        assert not app.hotkeys._handle_override(event("Right", state=0x0004))
+
+        app.side_notebook.select(app.recordings_tab); root.update()
+        assert not app.hotkeys._handle_override(event("Left"))
+        assert app.competition_board._focused_cell == (2, 2)
     finally:
         app.close(); root.mainloop()
 

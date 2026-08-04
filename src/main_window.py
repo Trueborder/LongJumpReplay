@@ -484,8 +484,32 @@ class MainWindow:
             for name in ("previous_athlete", "next_athlete", "mark_passed"):
                 actions.pop(name, None)
         self.hotkeys.attach_tree()
-        if self.config.hotkeys.enabled:
-            self.hotkeys.install(self.config.hotkeys.bindings, actions)
+        bindings = self.config.hotkeys.bindings if self.config.hotkeys.enabled else {}
+        self.hotkeys.install(bindings, actions, key_override=self._handle_context_key)
+
+    def _competition_board_keyboard_active(self) -> bool:
+        if not (self.config.competition.enabled and self._attempts_pane_added):
+            return False
+        try:
+            return self.side_notebook.select() == str(self.board_tab) and self.side_notebook.tab(self.board_tab, "state") != "hidden"
+        except tk.TclError:
+            return False
+
+    def _handle_context_key(self, event: tk.Event) -> bool:
+        if not self._competition_board_keyboard_active() or int(event.state) & 0x000D:
+            return False
+        directions = {
+            "Left": (-1, 0), "Right": (1, 0),
+            "Up": (0, -1), "Down": (0, 1),
+        }
+        direction = directions.get(str(event.keysym))
+        if direction is not None:
+            self.competition_board.move_focus(*direction)
+            return True
+        if str(event.keysym) in {"Return", "KP_Enter"}:
+            self.competition_board.activate_focused()
+            return True
+        return False
 
     def _effective_preview_hz(self) -> int:
         p = self.config.performance

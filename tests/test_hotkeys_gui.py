@@ -21,4 +21,26 @@ def test_space_beats_focused_button():
     root.update()
     assert freezes == [1]
     assert clicks == []
+    frames = []
+    overridden = []
+
+    def override(event):
+        if event.keysym in {"Right", "Up", "Return"}:
+            overridden.append(event.keysym)
+            return True
+        return False
+
+    router.install(
+        {"next_frame": "Right", "freeze_toggle": "space"},
+        {"next_frame": lambda: frames.append(1), "freeze_toggle": lambda: freezes.append(1)},
+        key_override=override,
+    )
+    for sequence in ("<KeyPress-Right>", "<KeyPress-Up>", "<KeyPress-Return>"):
+        button.event_generate(sequence); root.update()
+    button.event_generate("<KeyPress-space>"); root.update()
+    button.event_generate("<KeyRelease-space>"); root.update()
+
+    assert overridden == ["Right", "Up", "Return"]
+    assert frames == []
+    assert freezes == [1, 1]
     router.close(); root.destroy()

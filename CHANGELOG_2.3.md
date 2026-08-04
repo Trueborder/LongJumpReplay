@@ -9,7 +9,8 @@
 - Made every attempt cell respond to a single click: recorded cells open their exact replay, while eligible empty cells become the exact next recording target.
 - Added a persistent blue outline and smooth light-accent pulse to the clicked cell.
 - Corrected the post-Freeze board projection to advance across athletes within the same attempt before wrapping to athlete 1 of the next attempt.
-- Added arrow-key cell navigation and Enter/Space activation without conflicting with global frame-step shortcuts.
+- Made plain arrows consistently navigate cells whenever the Competition Board tab is selected, regardless of focused child widget; Recordings restores frame stepping immediately.
+- Kept Space exclusively assigned to Freeze/Live and Enter assigned to opening or selecting the focused board cell.
 - Added a right-click menu for every recorded attempt with all result variants and Delete attempt content.
 - Moved the next-attempt strip into the Competition Board and removed its Boys/Girls dropdown and Previous/Next buttons.
 

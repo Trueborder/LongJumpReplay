@@ -47,7 +47,6 @@ class CompetitionBoard(ttk.Frame):
         self.on_mark_attempt = on_mark_attempt
         self.on_delete_attempt = on_delete_attempt
         self.canvas = tk.Canvas(self, highlightthickness=1, highlightbackground=palette["border"], bd=0, background=palette["surface"], takefocus=True)
-        self.canvas._competition_board_navigation = True
         self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.hbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=self.vbar.set, xscrollcommand=self.hbar.set)
@@ -72,12 +71,11 @@ class CompetitionBoard(ttk.Frame):
         self._language = "en"
         self.canvas.bind("<Button-1>", self._click)
         self.canvas.bind("<Button-3>", self._right_click)
-        self.canvas.bind("<Up>", lambda _event: self._move_focus(0, -1))
-        self.canvas.bind("<Down>", lambda _event: self._move_focus(0, 1))
-        self.canvas.bind("<Left>", lambda _event: self._move_focus(-1, 0))
-        self.canvas.bind("<Right>", lambda _event: self._move_focus(1, 0))
-        self.canvas.bind("<Return>", self._activate_focused)
-        self.canvas.bind("<space>", self._activate_focused)
+        self.canvas.bind("<Up>", lambda _event: self.move_focus(0, -1))
+        self.canvas.bind("<Down>", lambda _event: self.move_focus(0, 1))
+        self.canvas.bind("<Left>", lambda _event: self.move_focus(-1, 0))
+        self.canvas.bind("<Right>", lambda _event: self.move_focus(1, 0))
+        self.canvas.bind("<Return>", self.activate_focused)
         self.canvas.bind("<MouseWheel>", self._wheel)
         self.context_menu = tk.Menu(self.canvas, tearoff=False)
         self._context_attempt_id: int | None = None
@@ -264,12 +262,12 @@ class CompetitionBoard(ttk.Frame):
         if self.on_select_cell:
             self.on_select_cell(*hit)
 
-    def _activate_focused(self, _event=None) -> str:
+    def activate_focused(self, _event=None) -> str:
         if self._focused_cell is not None:
             self._activate_cell(self._focused_cell)
         return "break"
 
-    def _move_focus(self, dx: int, dy: int) -> str:
+    def move_focus(self, dx: int, dy: int) -> str:
         if not self._cell_grid:
             return "break"
         current = self._focused_cell
