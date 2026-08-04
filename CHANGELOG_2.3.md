@@ -1,5 +1,9 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Competition board interaction
+
+- Made every attempt cell respond to a single click: recorded cells open their exact replay, while eligible empty cells become the exact next recording target.
+
 ## Unified selection controls
 
 - Fixed checkbox selected-state rendering with an explicit state map, stronger border contrast, accent fill, and a large high-contrast check mark.

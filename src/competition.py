@@ -27,10 +27,12 @@ class CompetitionSession:
 
     def __init__(self, config: CompetitionConfig) -> None:
         self.config = config
+        self._selected_assignment: RosterAssignment | None = None
         self._normalise_current()
 
     def update_config(self, config: CompetitionConfig) -> None:
         self.config = config
+        self._selected_assignment = None
         self._normalise_current()
 
     def enabled_groups(self) -> list[str]:
@@ -77,6 +79,28 @@ class CompetitionSession:
             raise ValueError(f"{group} has no configured competitors")
         self.config.active_group = group
         self.config.current_competitor_by_group[group] = max(1, min(count, int(competitor_number)))
+        self._selected_assignment = None
+
+    def select_attempt_cell(self, group: str, competitor_number: int, attempt_number: int) -> RosterAssignment | None:
+        """Select an exact empty board cell as the next recording target."""
+        if not self.config.enabled or group not in self.enabled_groups():
+            return None
+        number = int(competitor_number)
+        attempt = int(attempt_number)
+        if not 1 <= number <= self.competitor_count(group):
+            return None
+        base = self.qualification_limit(group, number)
+        if self.final_started(group):
+            if not self.is_finalist(group, number) or not base < attempt <= base + self.config.final_attempts:
+                return None
+            phase = "final"
+        else:
+            if not 1 <= attempt <= base:
+                return None
+            phase = "qualification"
+        self.set_current(group, number)
+        self._selected_assignment = RosterAssignment(group, number, attempt, phase)
+        return self._selected_assignment
 
     def final_started(self, group: str) -> bool:
         return bool(self.config.final_round_started_by_group.get(group, False))
@@ -129,11 +153,17 @@ class CompetitionSession:
     def assignment_for_current(self, attempts: Iterable[AttemptSession]) -> RosterAssignment | None:
         if not self.config.enabled:
             return None
+        attempts_list = list(attempts)
         group = self.current_group()
         number = self.current_competitor()
+        selected = self._selected_assignment
+        if selected is not None:
+            if selected.group == group and selected.competitor_number == number and selected.attempt_number not in self.used_attempt_numbers(attempts_list, group, number):
+                return selected
+            self._selected_assignment = None
         if self.final_started(group) and not self.is_finalist(group, number):
             return None
-        used = self.used_attempt_numbers(attempts, group, number)
+        used = self.used_attempt_numbers(attempts_list, group, number)
         base = self.qualification_limit(group, number)
         if self.final_started(group):
             start, end, phase = base + 1, base + self.config.final_attempts, "final"

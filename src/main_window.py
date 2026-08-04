@@ -418,7 +418,7 @@ class MainWindow:
         tree.bind("<Double-1>", lambda _e: self._attempt_tree_selected(None))
         self.attempt_tree = tree
 
-        self.competition_board = CompetitionBoard(self.board_tab, self.palette, self._open_attempt_from_board, self._select_athlete_from_board)
+        self.competition_board = CompetitionBoard(self.board_tab, self.palette, self._open_attempt_from_board, self._select_cell_from_board)
         self.competition_board.pack(fill="both", expand=True)
 
         footer = ttk.Frame(frame, style="Panel.TFrame")
@@ -877,9 +877,12 @@ class MainWindow:
         self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
-    def _select_athlete_from_board(self, athlete: int) -> None:
-        try: self.competition.set_current(self.competition.current_group(), athlete)
-        except ValueError: return
+    def _select_cell_from_board(self, athlete: int, attempt_no: int) -> None:
+        group = self.competition.current_group()
+        assignment = self.competition.select_attempt_cell(group, athlete, attempt_no)
+        if assignment is None:
+            try: self.competition.set_current(group, athlete)
+            except ValueError: return
         self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 

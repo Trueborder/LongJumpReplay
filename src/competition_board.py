@@ -33,12 +33,12 @@ class CompetitionBoard(ttk.Frame):
         parent,
         palette: dict[str, str],
         on_open_attempt: Callable[[int], None],
-        on_select_athlete: Callable[[int], None] | None = None,
+        on_select_cell: Callable[[int, int], None] | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
         self.palette = palette
         self.on_open_attempt = on_open_attempt
-        self.on_select_athlete = on_select_athlete
+        self.on_select_cell = on_select_cell
         self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, background=palette["surface"])
         self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.hbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
@@ -56,7 +56,6 @@ class CompetitionBoard(ttk.Frame):
         self._active_attempt = 1
         self._language = "en"
         self.canvas.bind("<Button-1>", self._click)
-        self.canvas.bind("<Double-1>", self._double_click)
         self.canvas.bind("<MouseWheel>", self._wheel)
 
     def apply_palette(self, palette: dict[str, str]) -> None:
@@ -163,17 +162,12 @@ class CompetitionBoard(ttk.Frame):
         hit = self._hit(event.x, event.y)
         if not hit:
             return
-        athlete, _attempt_no = hit
-        if self.on_select_athlete:
-            self.on_select_athlete(athlete)
-
-    def _double_click(self, event) -> None:
-        hit = self._hit(event.x, event.y)
-        if not hit:
-            return
         attempt_id = self._cell_attempts.get(hit)
-        if attempt_id:
+        if attempt_id is not None:
             self.on_open_attempt(attempt_id)
+            return
+        if self.on_select_cell:
+            self.on_select_cell(*hit)
 
     def _wheel(self, event) -> str:
         self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")

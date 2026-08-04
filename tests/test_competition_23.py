@@ -43,3 +43,19 @@ def test_three_rounds_then_manual_finalists_receive_three_more_attempts():
     pending = session.pending_assignments(attempts, "Boys")
     assert [(a.competitor_number, a.attempt_number) for a in pending[:4]] == [(2, 4), (4, 4), (6, 4), (8, 4)]
     assert [(a.competitor_number, a.attempt_number) for a in pending[-4:]] == [(2, 6), (4, 6), (6, 6), (8, 6)]
+
+
+def test_board_cell_can_target_an_exact_empty_attempt():
+    config = CompetitionConfig(
+        boys_competitors=3,
+        girls_enabled=False,
+        default_attempts_per_competitor=3,
+    )
+    session = CompetitionSession(config)
+
+    selected = session.select_attempt_cell("Boys", 2, 3)
+    assert selected is not None
+    assert session.assignment_for_current([]) == selected
+
+    # Once that exact slot exists, normal pending-attempt selection resumes.
+    assert session.assignment_for_current([made(2, 3)]).attempt_number == 1
