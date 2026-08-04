@@ -141,7 +141,9 @@ def test_judge_only_mode_hides_competition_board(tmp_path):
     root = tk.Tk(); app = MainWindow(root, config, path)
     try:
         root.update_idletasks()
-        assert not app.competition_bar.winfo_manager()
+        assert not hasattr(app, "group_combo")
+        assert not hasattr(app, "prev_athlete_button")
+        assert not app.board_navigation.winfo_manager()
         assert app.side_notebook.tab(app.board_tab, "state") == "hidden"
     finally:
         app.close(); root.mainloop()

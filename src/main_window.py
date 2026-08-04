@@ -153,6 +153,7 @@ class MainWindow:
         self.group_var = tk.StringVar(value=self.config.competition.active_group)
         self.competitor_var = tk.StringVar(value=str(self.config.competition.current_competitor_by_group.get(self.config.competition.active_group, 1)))
         self.current_try_var = tk.StringVar(value="Try 1")
+        self.board_target_var = tk.StringVar(value="")
 
     def _t(self, key: str, **kwargs) -> str:
         return self.translator(key, **kwargs)
@@ -298,29 +299,6 @@ class MainWindow:
         self.warning_banner = tk.Label(self.outer, textvariable=self.warning_var, anchor="w", padx=10, pady=5, font=("Segoe UI Semibold", 9))
         self.competition_banner = tk.Label(self.outer, textvariable=self.competition_banner_var, anchor="center", padx=10, pady=5, font=("Segoe UI Semibold", 9))
 
-        self.competition_bar = ttk.Frame(self.outer, style="Toolbar.TFrame", padding=(12, 8))
-        self.current_athlete_label = ttk.Label(self.competition_bar, text=self._t("competition.current"), style="ContextTitle.TLabel")
-        self.current_athlete_label.pack(side="left", padx=(0, 8))
-        self.group_combo = ttk.Combobox(self.competition_bar, textvariable=self.group_var, state="readonly", width=9)
-        self.group_combo.pack(side="left"); self.group_combo.bind("<<ComboboxSelected>>", self._group_changed)
-        self.competitor_combo = ttk.Combobox(self.competition_bar, textvariable=self.competitor_var, state="readonly", width=7)
-        self.competitor_combo.pack(side="left", padx=(6, 8)); self.competitor_combo.bind("<<ComboboxSelected>>", self._competitor_changed)
-        ttk.Label(self.competition_bar, textvariable=self.current_try_var, style="ContextValue.TLabel").pack(side="left")
-        self.prev_athlete_button = ttk.Button(self.competition_bar, text=self._t("competition.previous"), style="Control.TButton", command=lambda: self._select_competitor_delta(-1))
-        self.prev_athlete_button.pack(side="right", padx=(5, 0))
-        self.next_athlete_button = ttk.Button(self.competition_bar, text=self._t("competition.next"), style="Control.TButton", command=lambda: self._select_competitor_delta(1))
-        self.next_athlete_button.pack(side="right")
-        self.special_result_button = ttk.Menubutton(self.competition_bar, text=self._t("button.more"))
-        self.special_result_menu = tk.Menu(self.special_result_button, tearoff=False)
-        self.special_result_menu.add_command(label=self._t("status.passed"), command=lambda: self.mark_special_result(AttemptDecision.PASSED))
-        self.special_result_menu.add_command(label=self._t("status.missing"), command=lambda: self.mark_special_result(AttemptDecision.MISSING))
-        self.special_result_menu.add_command(label=self._t("status.withdrawn"), command=lambda: self.mark_special_result(AttemptDecision.WITHDRAWN))
-        self.special_result_menu.add_separator()
-        self.special_result_menu.add_command(label=self._t("status.reattempt"), command=self.grant_reattempt)
-        self.special_result_button.configure(menu=self.special_result_menu)
-        self.theme.style_menu(self.special_result_menu)
-        self.special_result_button.pack(side="right", padx=(0, 8))
-        self.competition_bar.pack(fill="x", pady=(0, 6))
         self.wizard_button = ttk.Button(self.outer, text=self._t("button.wizard"), style="Accent.TButton", command=self.start_competition_wizard)
         self.wizard_button.pack(anchor="w", pady=(0, 6))
 
@@ -329,9 +307,11 @@ class MainWindow:
         self.workspace = ttk.Frame(self.content_pane, style="App.TFrame")
         self.attempts_panel = self._build_attempts_panel(self.content_pane)
         self.content_pane.add(self.workspace, weight=5)
+        self.workspace.rowconfigure(0, weight=1)
+        self.workspace.columnconfigure(0, weight=1)
 
         self.media_pane = ttk.Panedwindow(self.workspace, orient="vertical")
-        self.media_pane.pack(fill="both", expand=True)
+        self.media_pane.grid(row=0, column=0, sticky="nsew")
         self.video_host = ttk.Frame(self.media_pane, style="Panel.TFrame", height=520)
         kwargs = self._video_calibration_kwargs()
         self.replay_canvas = VideoCanvas(self.video_host, self.palette, guide_changed=self._guide_changed, calibration_changed=self._calibration_changed, language=self.config.general.language, **kwargs)
@@ -340,7 +320,9 @@ class MainWindow:
         self.comparison_prev_canvas = VideoCanvas(self.video_host, self.palette, compact=True, guide_enabled=False, board_roi_enabled=False, board_roi_visible=False, language=self.config.general.language)
         self.comparison_next_canvas = VideoCanvas(self.video_host, self.palette, compact=True, guide_enabled=False, board_roi_enabled=False, board_roi_visible=False, language=self.config.general.language)
 
-        self.timeline_wrap = ttk.Frame(self.workspace, style="Panel.TFrame", padding=(8, 7), height=max(165, self.config.display.timeline_height))
+        self.timeline_wrap = ttk.Frame(self.workspace, style="Panel.TFrame", padding=(8, 7), height=max(176, self.config.display.timeline_height))
+        self.timeline_wrap.rowconfigure(0, weight=1)
+        self.timeline_wrap.columnconfigure(0, weight=1)
         self.timeline = ProfessionalTimeline(
             self.timeline_wrap, self.palette, self.seek_timeline,
             detail_window_seconds=self.config.timeline.detail_window_seconds,
@@ -348,7 +330,12 @@ class MainWindow:
             max_detail_seconds=self.config.timeline.max_detail_seconds,
             language=self.config.general.language,
         )
-        self.timeline.pack(fill="both", expand=True)
+        self.timeline.grid(row=0, column=0, sticky="nsew")
+        self.timeline_hint_label = ttk.Label(
+            self.timeline_wrap, text=self._t("timeline.hint"), style="TimelineHint.TLabel",
+            anchor="center", justify="center",
+        )
+        self.timeline_hint_label.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         self.media_pane.add(self.video_host, weight=5)
         self.media_pane.add(self.timeline_wrap, weight=1)
         self._timeline_pane_added = True
@@ -356,7 +343,7 @@ class MainWindow:
         self.root.after(180, self._set_timeline_sash)
 
         self.controls = ttk.Frame(self.workspace, style="ControlDock.TFrame", padding=(10, 8))
-        self.controls.pack(fill="x", pady=(8, 0))
+        self.controls.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), style="PrimaryJudge.TButton", command=self.toggle_freeze)
         self.freeze_button.pack(side="left")
         self.live_button = ttk.Button(self.controls, text=self._t("button.live"), style="LiveJudge.TButton", command=self.return_live)
@@ -384,9 +371,10 @@ class MainWindow:
         self.center_overlay = tk.Label(self.video_host, text="", justify="center", padx=18, pady=10, font=("Segoe UI Semibold", 14), borderwidth=0)
 
         self.status_bar = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(10, 5))
-        self.status_bar.pack(fill="x", pady=(5, 0))
-        ttk.Label(self.status_bar, textvariable=self.status_var, style="Status.TLabel").pack(side="left")
-        ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel").pack(side="right")
+        self.status_bar.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        self.status_bar.columnconfigure(0, weight=1)
+        ttk.Label(self.status_bar, textvariable=self.status_var, style="Status.TLabel", anchor="w").grid(row=0, column=0, sticky="ew")
+        ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel", anchor="e").grid(row=0, column=1, sticky="e", padx=(12, 0))
 
     def _video_calibration_kwargs(self) -> dict:
         d = self.config.display
@@ -427,7 +415,27 @@ class MainWindow:
         tree.bind("<Double-1>", lambda _e: self._attempt_tree_selected(None))
         self.attempt_tree = tree
 
-        self.competition_board = CompetitionBoard(self.board_tab, self.palette, self._open_attempt_from_board, self._select_cell_from_board)
+        self.board_navigation = ttk.Frame(self.board_tab, style="Toolbar.TFrame", padding=(10, 7))
+        self.board_navigation.pack(fill="x", pady=(0, 5))
+        self.board_target_title_label = ttk.Label(self.board_navigation, text=self._t("board.next_target"), style="ContextTitle.TLabel")
+        self.board_target_title_label.pack(anchor="w")
+        ttk.Label(self.board_navigation, textvariable=self.board_target_var, style="ContextValue.TLabel").pack(side="left", anchor="w")
+        self.special_result_button = ttk.Menubutton(self.board_navigation, text=self._t("button.more"))
+        self.special_result_menu = tk.Menu(self.special_result_button, tearoff=False)
+        self.special_result_menu.add_command(label=self._t("status.passed"), command=lambda: self.mark_special_result(AttemptDecision.PASSED))
+        self.special_result_menu.add_command(label=self._t("status.missing"), command=lambda: self.mark_special_result(AttemptDecision.MISSING))
+        self.special_result_menu.add_command(label=self._t("status.withdrawn"), command=lambda: self.mark_special_result(AttemptDecision.WITHDRAWN))
+        self.special_result_menu.add_separator(); self.special_result_menu.add_command(label=self._t("status.reattempt"), command=self.grant_reattempt)
+        self.special_result_button.configure(menu=self.special_result_menu); self.theme.style_menu(self.special_result_menu)
+        self.special_result_button.pack(side="right")
+        self.board_keyboard_hint = ttk.Label(self.board_navigation, text=self._t("board.keyboard_hint"), style="ContextTitle.TLabel")
+        self.board_keyboard_hint.pack(side="right", padx=(0, 8))
+
+        self.competition_board = CompetitionBoard(
+            self.board_tab, self.palette, self._open_attempt_from_board, self._select_cell_from_board,
+            self._mark_attempt_from_board, self._delete_attempt_from_board,
+        )
+        self.theme.style_menu(self.competition_board.context_menu)
         self.competition_board.pack(fill="both", expand=True)
 
         footer = ttk.Frame(frame, style="Panel.TFrame")
@@ -499,7 +507,10 @@ class MainWindow:
 
     def _schedule_tick(self) -> None:
         if self._closing: return
-        interval = max(4, round(1000 / self._effective_preview_hz()))
+        hz = self._effective_preview_hz()
+        if self._timeline_pane_added and not self._window_interacting:
+            hz = max(hz, int(self.config.performance.timeline_refresh_hz))
+        interval = max(4, round(1000 / hz))
         self._tick_job = self.root.after(interval, self._tick)
 
     def _preview_frame(self, frame: np.ndarray) -> np.ndarray:
@@ -805,19 +816,16 @@ class MainWindow:
     # ------------------------------------------------------------ competition
     def _refresh_competitor_selector(self) -> None:
         c = self.config.competition
-        visible = c.enabled and c.show_competitor_selector and not self._operator_mode
-        if visible and not self.competition_bar.winfo_manager(): self.competition_bar.pack(fill="x", before=self.content_pane, pady=(0, 6))
-        elif not visible and self.competition_bar.winfo_manager(): self.competition_bar.pack_forget()
-        groups = self.competition.enabled_groups()
-        self.group_combo.configure(values=[self._group_display(value) for value in groups])
+        show_target = bool(c.enabled and c.show_competitor_selector)
+        if show_target and not self.board_navigation.winfo_manager():
+            self.board_navigation.pack(fill="x", pady=(0, 5), before=self.competition_board)
+        elif not show_target and self.board_navigation.winfo_manager():
+            self.board_navigation.pack_forget()
         group = self.competition.current_group()
         self.group_var.set(self._group_display(group))
-        count = self.competition.competitor_count(group)
-        values = [str(i) for i in range(1, count + 1)]
-        self.competitor_combo.configure(values=values)
         self.competitor_var.set(str(self.competition.current_competitor()))
-        if c.enable_special_results and visible:
-            if not self.special_result_button.winfo_manager(): self.special_result_button.pack(side="right", padx=(0, 8))
+        if c.enable_special_results and c.enabled:
+            if not self.special_result_button.winfo_manager(): self.special_result_button.pack(side="right")
         elif self.special_result_button.winfo_manager():
             self.special_result_button.pack_forget()
         if c.wizard_button_visible and not self._operator_mode:
@@ -834,6 +842,7 @@ class MainWindow:
     def _refresh_current_try(self) -> None:
         attempts = self.attempts.attempts()
         assignment = self.competition.assignment_for_current(attempts)
+        display_assignment = self._board_next_assignment if self.playback.mode is PlaybackMode.ATTEMPT and self._board_next_assignment else assignment
         if assignment:
             limit = self.competition.attempt_limit(assignment.group, assignment.competitor_number)
             self.current_try_var.set(self._t("competition.try", current=assignment.attempt_number, limit=limit))
@@ -844,6 +853,11 @@ class MainWindow:
         else:
             self.current_try_var.set(self._t("competition.roster_disabled"))
             self.competition_banner_var.set("")
+        if display_assignment:
+            limit = self.competition.attempt_limit(display_assignment.group, display_assignment.competitor_number)
+            self.board_target_var.set(self._t("board.target", athlete=display_assignment.competitor_number, attempt=display_assignment.attempt_number, limit=limit))
+        else:
+            self.board_target_var.set(self._t("competition.roster_disabled"))
         self._refresh_competition_board(attempts, assignment)
 
     def _refresh_competition_board(self, attempts: list[AttemptSession], assignment: RosterAssignment | None) -> None:
@@ -855,6 +869,7 @@ class MainWindow:
         attempt_no = board_assignment.attempt_number if board_assignment else 0
         signature = (
             group, athlete, attempt_no, self.config.competition.enabled, self.config.competition.show_competition_board,
+            self.config.general.language,
             self.config.competition.boys_competitors, self.config.competition.girls_competitors,
             self.config.competition.default_attempts_per_competitor, self.config.competition.final_round_enabled,
             self.config.competition.final_attempts, tuple(self.config.competition.finalist_numbers_by_group.get(group, [])),
@@ -904,6 +919,25 @@ class MainWindow:
         self._cancel_scheduled_review()
         if self.playback.select_attempt(attempt_id):
             self._last_replay_key = None; self.timeline.detail_center_ns = None; self._refresh_attempts()
+
+    def _mark_attempt_from_board(self, attempt_id: int, decision: AttemptDecision) -> None:
+        if not self.attempts.set_decision(attempt_id, decision):
+            return
+        attempt = self.attempts.get_attempt(attempt_id)
+        self._show_message(self._t("message.decision_marked", roster=self._attempt_roster_display(attempt), decision=self._decision_display(decision).upper()), 5)
+        self._last_board_signature = None; self._last_attempts_refresh = 0; self._refresh_attempts()
+
+    def _delete_attempt_from_board(self, attempt_id: int) -> None:
+        if self.config.general.confirm_destructive_actions and not messagebox.askyesno(
+            self._t("dialog.delete.title"), self._t("dialog.delete.text", attempt=attempt_id), parent=self.root,
+        ):
+            return
+        if self.playback.attempt_id == attempt_id:
+            self._enter_live(complete_rotation=False)
+        if self.attempts.delete(attempt_id, force=True):
+            self.competition_board.clear_focus(); self._last_board_signature = None; self._refresh_attempts(); self._refresh_current_try()
+        else:
+            self._show_message(self._t("board.delete_failed"), 5)
 
     # ------------------------------------------------------------ attempt log
     def _decision_tag(self, decision: AttemptDecision) -> str:
@@ -1511,8 +1545,8 @@ class MainWindow:
         elif not show_timeline and self._timeline_pane_added:
             self.media_pane.forget(self.timeline_wrap); self._timeline_pane_added = False
         show_status = bool(self.var_show_status.get())
-        if show_status and not self.status_bar.winfo_manager(): self.status_bar.pack(fill="x", pady=(4, 0))
-        elif not show_status and self.status_bar.winfo_manager(): self.status_bar.pack_forget()
+        if show_status and not self.status_bar.winfo_manager(): self.status_bar.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        elif not show_status and self.status_bar.winfo_manager(): self.status_bar.grid_remove()
         show_decisions = self.config.competition.decision_controls_enabled and self.config.display.show_decision_controls
         if show_decisions and not self.decision_frame.winfo_manager(): self.decision_frame.pack(side="left")
         elif not show_decisions and self.decision_frame.winfo_manager(): self.decision_frame.pack_forget()
@@ -1535,7 +1569,7 @@ class MainWindow:
     def _set_timeline_sash(self) -> None:
         if not self._timeline_pane_added: return
         try:
-            total = self.media_pane.winfo_height(); self.media_pane.sashpos(0, max(240, total - max(165, self.config.display.timeline_height)))
+            total = self.media_pane.winfo_height(); self.media_pane.sashpos(0, max(240, total - max(176, self.config.display.timeline_height)))
         except tk.TclError: pass
 
     def _apply_layout(self) -> None:
@@ -1580,6 +1614,7 @@ class MainWindow:
         self.translator.set_language(self.config.general.language)
         if hasattr(self, "timeline"):
             self.timeline.set_language(self.config.general.language)
+            self.timeline_hint_label.configure(text=self._t("timeline.hint"))
         if hasattr(self, "replay_canvas"):
             for canvas in self._all_video_canvases():
                 canvas.set_language(self.config.general.language)
@@ -1602,11 +1637,10 @@ class MainWindow:
         self.board_setup_button.configure(text=self._t("button.board_setup"))
         self.wizard_button.configure(text=self._t("button.wizard"))
         self.special_result_button.configure(text=self._t("button.more"))
+        self.board_target_title_label.configure(text=self._t("board.next_target"))
+        self.board_keyboard_hint.configure(text=self._t("board.keyboard_hint"))
         for key, label in (("group", self._t("table.group")), ("athlete", "#"), ("try", self._t("table.attempt")), ("result", self._t("table.result")), ("time", self._t("table.time")), ("media", self._t("table.media")), ("keep", self._t("table.keep"))):
             self.attempt_tree.heading(key, text=label)
-        self.current_athlete_label.configure(text=self._t("competition.current"))
-        self.prev_athlete_button.configure(text=self._t("competition.previous"))
-        self.next_athlete_button.configure(text=self._t("competition.next"))
         self.attempts_title_label.configure(text=self._t("attempts.title"))
         self.export_button.configure(text=self._t("attempts.export"))
         self.delete_button.configure(text=self._t("attempts.delete"))

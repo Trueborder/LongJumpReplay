@@ -30,7 +30,12 @@ def test_every_board_cell_is_clickable_and_recordings_open_on_one_click():
     ThemeManager(root).apply("dark")
     opened: list[int] = []
     selected: list[tuple[int, int]] = []
-    board = CompetitionBoard(root, DARK, opened.append, lambda athlete, attempt: selected.append((athlete, attempt)))
+    marked: list[tuple[int, AttemptDecision]] = []
+    deleted: list[int] = []
+    board = CompetitionBoard(
+        root, DARK, opened.append, lambda athlete, attempt: selected.append((athlete, attempt)),
+        lambda attempt_id, decision: marked.append((attempt_id, decision)), deleted.append,
+    )
     board.pack(fill="both", expand=True)
     config = CompetitionConfig(
         boys_competitors=2,
@@ -83,5 +88,22 @@ def test_every_board_cell_is_clickable_and_recordings_open_on_one_click():
         assert opened == [101, 102, 201, 202]
         assert selected == [(2, 3)]
         assert board._focused_cell == (2, 3)
+
+        board.focus_cell((1, 1))
+        assert board._move_focus(1, 0) == "break"
+        assert board._focused_cell == (1, 2)
+        assert board._move_focus(0, 1) == "break"
+        assert board._focused_cell == (2, 2)
+        assert board._move_focus(-1, 0) == "break"
+        assert board._focused_cell == (2, 1)
+        board._activate_focused()
+        assert opened[-1] == 201
+
+        board._context_attempt_id = 202
+        board._context_mark(AttemptDecision.PASSED)
+        board._context_delete()
+        assert marked == [(202, AttemptDecision.PASSED)]
+        assert deleted == [202]
+        assert board.context_menu.entrycget(board.context_menu.index("end"), "label")
     finally:
         root.destroy()

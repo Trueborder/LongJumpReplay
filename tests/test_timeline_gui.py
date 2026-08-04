@@ -36,7 +36,7 @@ def test_timeline_reuses_canvas_items_and_fixed_playhead(tmp_path):
     timeline.set_model(_model(15_000_000_000))
     root.update_idletasks()
     item_count = len(timeline.find_all())
-    assert timeline.itemcget(timeline._items["help"], "text")
+    assert "help" not in timeline._items  # Guidance lives below the canvas and cannot be clipped.
     assert timeline.coords(timeline._items["focus_band"])
     first_x = timeline.coords(timeline._items["fixed_playhead"])[0]
 

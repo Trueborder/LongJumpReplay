@@ -19,7 +19,7 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert "Modern" in str(style.layout("TCheckbutton"))
     assert "ModernDark.neutral.Button.background" in str(style.layout("TButton"))
     assert "ModernDark.Combo.field" in str(style.layout("TCombobox"))
-    assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 20
+    assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 22
     assert int(style.lookup("TCombobox", "arrowsize")) == 15
     assert tuple(style.lookup("TCombobox", "padding")) == (9, 0)
     checked_image = theme_manager._image_assets["ModernDark.checked"]
@@ -59,7 +59,13 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert len({widget.winfo_x() for _card, widget, _desc in general_rows}) == 1
     assert all(widget.winfo_x() >= 500 for _card, widget, _desc in general_rows)
     described = [desc for _card, _widget, desc in general_rows if desc is not None]
+    assert len(described) == len(general_rows)
     assert len({desc.winfo_x() for desc in described}) == 1
+    dialog._vars["show_tooltips"].set(False); dialog.update_idletasks()
+    assert all(not desc.winfo_manager() for desc in described)
+    assert all(not header.winfo_manager() for _columns, header in dialog._description_headers)
+    dialog._vars["show_tooltips"].set(True); dialog.update_idletasks()
+    assert all(desc.winfo_manager() == "grid" for desc in described)
     dialog._show_page("competition")
     assert dialog._current_page == "competition"
     assert dialog.roster_tree is not None

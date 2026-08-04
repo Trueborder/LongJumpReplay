@@ -179,7 +179,7 @@ class PerformanceConfig:
 PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
     "quiet": {
         "preview_refresh_hz": 20,
-        "timeline_refresh_hz": 10,
+        "timeline_refresh_hz": 30,
         "status_refresh_hz": 2,
         "attempts_refresh_hz": 1,
         "preview_scale": 0.65,
@@ -190,7 +190,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
     },
     "balanced": {
         "preview_refresh_hz": 60,
-        "timeline_refresh_hz": 30,
+        "timeline_refresh_hz": 60,
         "status_refresh_hz": 4,
         "attempts_refresh_hz": 3,
         "preview_scale": 1.0,
@@ -201,7 +201,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
     },
     "high": {
         "preview_refresh_hz": 90,
-        "timeline_refresh_hz": 45,
+        "timeline_refresh_hz": 90,
         "status_refresh_hz": 6,
         "attempts_refresh_hz": 4,
         "preview_scale": 1.0,
@@ -212,7 +212,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
     },
     "evidence": {
         "preview_refresh_hz": 60,
-        "timeline_refresh_hz": 30,
+        "timeline_refresh_hz": 60,
         "status_refresh_hz": 4,
         "attempts_refresh_hz": 3,
         "preview_scale": 1.0,

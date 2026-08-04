@@ -44,15 +44,16 @@ class ThemeManager:
         self._popup_binding_installed = False
 
     def _checkbox_image(self, key: str, border: str, fill: str, checked: bool) -> tk.PhotoImage:
-        image = tk.PhotoImage(master=self.root, width=22, height=22)
-        for x0, y0, x1, y1 in ((6, 1, 16, 3), (3, 3, 19, 5), (1, 6, 21, 16), (3, 17, 19, 19), (6, 19, 16, 21)):
-            image.put(border, to=(x0, y0, x1, y1))
-        image.put(border, to=(1, 6, 3, 16)); image.put(border, to=(19, 6, 21, 16))
-        for x0, y0, x1, y1 in ((6, 5, 16, 6), (5, 6, 17, 16), (6, 16, 16, 17)):
-            image.put(fill, to=(x0, y0, x1, y1))
+        size, centre, outer, inner = 20, 9.5, 9.0, 7.0
+        image = tk.PhotoImage(master=self.root, width=size, height=size)
+        for y in range(size):
+            for x in range(size):
+                distance = ((x - centre) ** 2 + (y - centre) ** 2) ** .5
+                if distance <= outer:
+                    image.put(fill if distance <= inner else border, to=(x, y))
         if checked:
-            for x, y in ((5, 9), (6, 10), (7, 11), (8, 12), (9, 13), (10, 12), (11, 11), (12, 10), (13, 9), (14, 8), (15, 7)):
-                image.put("#ffffff", to=(x, y, x + 3, y + 3))
+            for x, y in ((5, 9), (6, 10), (7, 11), (8, 12), (9, 11), (10, 10), (11, 9), (12, 8), (13, 7), (14, 6)):
+                image.put("#ffffff", to=(x, y, min(size, x + 2), min(size, y + 2)))
         self._image_assets[key] = image
         return image
 
@@ -78,10 +79,10 @@ class ThemeManager:
             ]}),
         ])
 
-    def _rounded_image(self, key: str, fill: str, border: str, radius: int = 7) -> tk.PhotoImage:
+    def _rounded_image(self, key: str, fill: str, border: str, radius: int = 10) -> tk.PhotoImage:
         # This is a scalable nine-slice background, not the final control size.
         # Keep its centre compact so rounding does not inflate every button.
-        width, height = 32, 20
+        width, height = 40, 22
         image = tk.PhotoImage(master=self.root, width=width, height=height)
         for y in range(height):
             colors: list[str] = []
@@ -114,7 +115,7 @@ class ThemeManager:
             style.element_create(
                 element, "image", normal_image,
                 ("disabled", disabled_image), ("pressed", pressed_image), ("active", active_image),
-                border=(7, 7, 7, 7), sticky="nswe",
+                border=(10, 5, 10, 5), sticky="nswe",
             )
         style.layout(style_name, [(element, {"sticky": "nswe", "children": [
             ("Button.padding", {"sticky": "nswe", "children": [("Button.label", {"sticky": "nswe"})]}),
@@ -156,7 +157,7 @@ class ThemeManager:
             style.element_create(
                 combo_element, "image", combo_normal,
                 ("disabled", combo_disabled), ("focus", combo_focus), ("active", combo_focus),
-                border=(10, 10, 10, 10), sticky="nswe",
+                border=(10, 5, 10, 5), sticky="nswe",
             )
         style.layout("TCombobox", [(combo_element, {"sticky": "nswe", "children": [
             ("Combobox.downarrow", {"side": "right", "sticky": "ns"}),
@@ -240,6 +241,7 @@ class ThemeManager:
         style.configure("Warning.TLabel", background=p["surface"], foreground=p["warning"])
         style.configure("HeaderMuted.TLabel", background=p["bg"], foreground=p["muted"])
         style.configure("Status.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 8))
+        style.configure("TimelineHint.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8), padding=(4, 1))
         style.configure("Control.TButton", padding=(9, 0), font=("Segoe UI", 9))
         style.map("Control.TButton", background=[("active", p["surface2"]), ("pressed", p["selection"])])
         style.configure("Accent.TButton", padding=(11, 0), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")

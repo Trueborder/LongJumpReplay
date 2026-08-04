@@ -40,6 +40,7 @@ The timer is available in competition and judge-only modes and is never written 
 - Correct round-by-round athlete rotation.
 - Qualification plus an optional manually selected final round.
 - Athlete × attempt competition board.
+- Arrow-key board navigation, Enter/Space activation, and a right-click menu for changing or deleting recorded attempts.
 - Start Competition Wizard.
 - Complete judge-only mode with competition management disabled.
 - Configurable operator-controlled athlete attempt countdown in the header.
@@ -48,9 +49,12 @@ The timer is available in competition and judge-only modes and is never written 
 - Performance presets and impact labels.
 - Static, throttled File/View/Help menus for better responsiveness.
 - Improved dark-theme inputs and dropdowns.
+- Compact pill-shaped buttons/dropdowns and circular checkboxes throughout both themes.
 - Optional recovery, event export, special statuses, operator mode, keyboard controls, next-athlete overlay, and camera diagnostics.
 
 ## Competition order
+
+The next-attempt strip is shown directly above the Competition Board. Click any cell or move with the arrow keys; press Enter/Space to open or select it. Right-click a recorded cell to mark Not decided, Valid, Foul, Review, Passed, Missing, or Withdrawn, or to delete its attempt content.
 
 For eight athletes and three qualification attempts, the order is:
 

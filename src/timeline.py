@@ -113,7 +113,6 @@ class ProfessionalTimeline(tk.Canvas):
         self._items["mode"] = self.create_text(self.SIDE_PAD, 12, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 8))
         self._items["timecode"] = self.create_text(1, 12, anchor="center", text="+0.000s", fill=p["text"], font=("Consolas", 10, "bold"))
         self._items["zoom"] = self.create_text(1, 12, anchor="e", text=tr(self.language, "timeline.view", seconds=2.0), fill=p["muted"], font=("Segoe UI", 8))
-        self._items["help"] = self.create_text(1, 146, anchor="center", text=tr(self.language, "timeline.hint"), fill=p["muted"], font=("Segoe UI", 7))
 
         self._items["detail_bg"] = self.create_rectangle(1, self.DETAIL_TOP, 2, self.DETAIL_BOTTOM, fill=p["timeline"], outline=p["border"])
         self._items["detail_available"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 2, self.DETAIL_BOTTOM - 1, fill=p["surface2"], outline="")
@@ -142,7 +141,6 @@ class ProfessionalTimeline(tk.Canvas):
     def set_language(self, language: str) -> None:
         self.language = language if language in {"en", "cs"} else "en"
         self.itemconfigure(self._items["freeze_label"], text=tr(self.language, "timeline.freeze"))
-        self.itemconfigure(self._items["help"], text=tr(self.language, "timeline.hint"))
         self.request_render(force=True)
 
     def apply_palette(self, palette: dict[str, str]) -> None:
@@ -157,7 +155,6 @@ class ProfessionalTimeline(tk.Canvas):
         self.itemconfigure(self._items["mode"], fill=p["muted"])
         self.itemconfigure(self._items["timecode"], fill=p["text"])
         self.itemconfigure(self._items["zoom"], fill=p["muted"])
-        self.itemconfigure(self._items["help"], fill=p["muted"])
         self.itemconfigure(self._items["detail_bg"], fill=p["timeline"], outline=p["border"])
         self.itemconfigure(self._items["detail_available"], fill=p["surface2"])
         self.itemconfigure(self._items["unavailable_left"], fill=p["bg"])
@@ -235,7 +232,6 @@ class ProfessionalTimeline(tk.Canvas):
         self.coords(self._items["mode"], x0, 12)
         self.coords(self._items["timecode"], cx, 12)
         self.coords(self._items["zoom"], x1, 12)
-        self.coords(self._items["help"], cx, min(h - 7, 147))
         self.coords(self._items["detail_bg"], x0, self.DETAIL_TOP, x1, self.DETAIL_BOTTOM)
         self.coords(self._items["overview_bg"], x0, self.OVERVIEW_TOP, x1, self.OVERVIEW_BOTTOM)
         self.coords(self._items["focus_band"], cx - 22, self.DETAIL_TOP + 1, cx + 22, self.DETAIL_BOTTOM - 1)

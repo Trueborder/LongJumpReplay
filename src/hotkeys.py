@@ -78,7 +78,9 @@ class HotkeyRouter:
                 self.root.bind_class(self.bindtag, release, on_release)
                 self._sequences.extend([press, release])
             else:
-                def handler(_event, action=action):
+                def handler(_event, action=action, action_name=action_name):
+                    if action_name in {"previous_frame", "next_frame"} and getattr(_event.widget, "_competition_board_navigation", False):
+                        return None
                     action(); return "break"
                 self.root.bind_class(self.bindtag, press, handler)
                 self._sequences.append(press)

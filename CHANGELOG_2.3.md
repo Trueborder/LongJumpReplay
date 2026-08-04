@@ -9,6 +9,9 @@
 - Made every attempt cell respond to a single click: recorded cells open their exact replay, while eligible empty cells become the exact next recording target.
 - Added a persistent blue outline and smooth light-accent pulse to the clicked cell.
 - Corrected the post-Freeze board projection to advance across athletes within the same attempt before wrapping to athlete 1 of the next attempt.
+- Added arrow-key cell navigation and Enter/Space activation without conflicting with global frame-step shortcuts.
+- Added a right-click menu for every recorded attempt with all result variants and Delete attempt content.
+- Moved the next-attempt strip into the Competition Board and removed its Boys/Girls dropdown and Previous/Next buttons.
 
 ## Unified selection controls
 
@@ -17,6 +20,7 @@
 - Reduced the rounded background footprint so buttons retain their compact pre-rounding height.
 - Added rounded image fields to comboboxes and Windows compositor-rounded corners to combobox popups and File/View/Help menu windows.
 - Preserved the same rounded component system through runtime dark/light theme changes.
+- Recreated the family as compact pill-shaped buttons and dropdown fields with circular, visibly checked selection controls.
 
 ## Settings category navigation
 
@@ -33,6 +37,13 @@
 - Standardized setting rows into fixed Option, Description, and Value columns.
 - Labels, impact badges, help text, checkboxes, entries, spinboxes, and selectors now align vertically across each Settings page.
 - Added visible localized column headings and a wider minimum Settings workspace to prevent controls from drifting or wrapping into inconsistent positions.
+- Added a localized description to every ordinary option and made Show setting descriptions immediately hide or restore the whole Description column.
+
+## Timeline and compact-window layout
+
+- Reserved full-height grid rows for the judging dock and status bar so neither can be partially hidden by the expanding media area.
+- Moved timeline interaction instructions below the canvas into a dedicated row so the text cannot be clipped.
+- Raised timeline targets to 30/60/90/60 Hz for Quiet/Balanced/High/Evidence and let a visible timeline drive the UI scheduler independently of preview FPS.
 
 ## Camera and judging pause
 

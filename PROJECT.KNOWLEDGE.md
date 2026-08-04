@@ -324,11 +324,13 @@ The main window is organized into stable task zones: application/camera/timer he
 
 Settings uses four navigation groups (Essentials, Judging workflow, Replay workspace, Controls & system), active-page highlighting, page-introduction cards, card-based setting rows, visible impact badges, and a fixed Apply footer. The underlying sixteen pages remain separate to avoid presenting one very long form.
 
-Every ordinary setting row follows the same three-column contract: Option (fixed width), Description (flexible), and Value (fixed width). Column headings are visible and localized. Checkboxes align to the same Value-column origin as entries, spinboxes, and selectors; individual label or description length must not move a control horizontally.
+Every ordinary setting row follows the same three-column contract: Option (fixed width), Description (flexible), and Value (fixed width). Column headings are visible and localized. Every row has a useful localized description; `general.show_tooltips` immediately hides or restores the complete middle column, including its headings, without moving the Value column inconsistently. Checkboxes align to the same Value-column origin as entries, spinboxes, and selectors; individual label or description length must not move a control horizontally.
 
 Checkboxes, comboboxes, combobox list popups, and classic Tk menus are themed as one component family. Checkbox indicator images are owned by `ThemeManager` for their full Tk lifetime. Dark/light theme application must also restyle existing File/View/Help and nested menus; native-looking defaults must not reappear after a runtime theme change.
 
-All ttk button styles and combobox fields use compact, scalable rounded image elements with transparent corners; the nine-slice image must not impose a larger minimum height than the control's own padding requires. On Windows, mapped classic menu windows and combobox popdowns request DWM rounded corners. Checkbox tests must verify both Tk selected state and different rendered checked/unchecked pixels so an invisible logical selection cannot regress unnoticed. The Settings category sidebar has its own always-visible scrollbar and mouse-wheel navigation, independent of the scrollable contents of each page.
+All ttk button styles and combobox fields use compact, pill-like scalable image elements with transparent corners; the nine-slice image must not impose a larger minimum height than the control's own padding requires. Checkboxes use a circular accent indicator with a visible white check. On Windows, mapped classic menu windows and combobox popdowns request DWM rounded corners. Checkbox tests must verify both Tk selected state and different rendered checked/unchecked pixels so an invisible logical selection cannot regress unnoticed. The Settings category sidebar has its own always-visible scrollbar and mouse-wheel navigation, independent of the scrollable contents of each page.
+
+The competition target strip belongs inside the Competition Board tab. It shows only the projected next athlete number and attempt plus special-result actions; the old Boys/Girls selector and Previous/Next buttons must not return. Every board cell is focusable. Mouse clicks and arrow keys move the persistent blue, softly pulsing focus; Enter/Space opens recorded content or selects an empty cell. Right-clicking a recorded attempt exposes all decision variants and Delete attempt content. Board Left/Right keys take precedence over the global frame-step hotkeys while the board owns keyboard focus.
 
 Supported layouts:
 
@@ -376,10 +378,12 @@ Do not regress these properties:
 - canvas objects are created once and reused;
 - requests are coalesced with idle/scheduled updates;
 - update rate is limited by the performance profile;
+- the visible timeline can raise the main UI scheduler above preview FPS so its cursor is not accidentally capped by a slower preview setting;
 - hidden or suspended timeline does no expensive work;
 - dragging and overview seeking remain responsive;
 - window move/resize suspends expensive rendering and resumes with the latest frame.
-- the taller layered ruler retains a fixed shaded focus band, strong centre playhead, distinct Freeze marker, availability band, full-media overview, and an interaction hint without creating canvas items during updates.
+- the taller layered ruler retains a fixed shaded focus band, strong centre playhead, distinct Freeze marker, availability band, and full-media overview without creating canvas items during updates;
+- interaction guidance is a dedicated layout row below the canvas, so it cannot be clipped by the ruler height or paned-window sash.
 
 When changing timeline code, run both logic and GUI tests plus `tools/benchmark_timeline.py`.
 
@@ -469,6 +473,9 @@ Always test changes affecting workflow against:
 25. Main-screen pause stops and resumes capture, clears the live buffer/latest frame, blocks Freeze and timer actions, and leaves existing attempts intact.
 26. Near-screen saved geometry opens maximized while ordinary reduced geometry stays restored.
 27. Camera Settings enumerates friendly names, keeps a read-only `index · name` selector, and writes the selected numeric OpenCV index back to configuration.
+28. Competition Board arrow navigation, focused-cell activation, right-click decision variants, and forced content deletion remain available without stealing board arrows for frame stepping.
+29. Status text and timeline guidance retain full layout rows at reduced window heights, and the visible timeline scheduler reaches the selected refresh target.
+30. Every Settings row has a localized description; the Show setting descriptions checkbox hides and restores the Description column immediately.
 
 ### Headless note
 

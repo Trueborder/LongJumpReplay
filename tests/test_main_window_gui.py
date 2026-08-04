@@ -176,6 +176,8 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     def inspect():
         sizes['video'] = app.video_host.winfo_height()
         sizes['timeline'] = app.timeline_wrap.winfo_height()
+        sizes['timeline_hint'] = app.timeline_hint_label.winfo_height()
+        sizes['status'] = app.status_bar.winfo_height()
         sizes['replay_width'] = app.replay_canvas.winfo_width()
         app.close()
 
@@ -184,6 +186,8 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     root.mainloop()
     assert sizes['video'] > 250
     assert 90 <= sizes['timeline'] <= 260
+    assert sizes['timeline_hint'] >= 10
+    assert sizes['status'] >= 20
     assert sizes['replay_width'] > 400
 
 

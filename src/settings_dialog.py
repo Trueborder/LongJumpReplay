@@ -115,7 +115,11 @@ class SettingsDialog(tk.Toplevel):
         self.roster_tree: ttk.Treeview | None = None
         self.shuttle_vars: dict[int, tk.StringVar] = {}
         self._setting_rows: list[tuple[ttk.Frame, tk.Widget, ttk.Label | None]] = []
+        self._description_headers: list[tuple[ttk.Frame, ttk.Label]] = []
         self._build()
+        if "show_tooltips" in self._vars:
+            self._vars["show_tooltips"].trace_add("write", lambda *_args: self._update_description_visibility())
+            self._update_description_visibility()
         self._initialising = False
         self._attach_dirty_traces()
         self.protocol("WM_DELETE_WINDOW", self._cancel)
@@ -297,7 +301,9 @@ class SettingsDialog(tk.Toplevel):
         columns.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 2))
         self._configure_row_columns(columns)
         ttk.Label(columns, text=self.tr("settings.column.option"), style="SettingsGroup.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(columns, text=self.tr("settings.column.description"), style="SettingsGroup.TLabel").grid(row=0, column=1, sticky="w", padx=(18, 18))
+        description_header = ttk.Label(columns, text=self.tr("settings.column.description"), style="SettingsGroup.TLabel")
+        description_header.grid(row=0, column=1, sticky="w", padx=(18, 18))
+        self._description_headers.append((columns, description_header))
         ttk.Label(columns, text=self.tr("settings.column.value"), style="SettingsGroup.TLabel").grid(row=0, column=2, sticky="w")
         frame.columnconfigure(0, weight=1)
         return 2
@@ -341,13 +347,24 @@ class SettingsDialog(tk.Toplevel):
             widget = ttk.Spinbox(card, textvariable=var, from_=0, to=10000, increment=1, width=width)
         else:
             widget = ttk.Entry(card, textvariable=var, width=width)
-        description: ttk.Label | None = None
-        if desc_en or desc_cs:
-            description = ttk.Label(card, text=self._txt(desc_en, desc_cs), style="SettingsRowDesc.TLabel", wraplength=300, justify="left")
-            description.grid(row=0, column=1, sticky="nw", padx=(18, 18))
+        if not (desc_en or desc_cs):
+            desc_en = f"Sets {label_en.lower()}. Changes take effect after Apply."
+            desc_cs = f"Nastavuje volbu „{label_cs}“. Změna se projeví po stisku Použít."
+        description = ttk.Label(card, text=self._txt(desc_en, desc_cs), style="SettingsRowDesc.TLabel", wraplength=260, justify="left")
+        description.grid(row=0, column=1, sticky="nw", padx=(18, 18))
         widget.grid(row=0, column=2, sticky="w" if kind == "check" else "ew")
         self._setting_rows.append((card, widget, description))
         return widget
+
+    def _update_description_visibility(self) -> None:
+        visible = bool(self._vars.get("show_tooltips") and self._vars["show_tooltips"].get())
+        for card, _widget, description in self._setting_rows:
+            card.columnconfigure(1, minsize=300 if visible else 0, weight=1 if visible else 0)
+            if description is not None:
+                description.grid() if visible else description.grid_remove()
+        for columns, header in self._description_headers:
+            columns.columnconfigure(1, minsize=300 if visible else 0, weight=1 if visible else 0)
+            header.grid() if visible else header.grid_remove()
 
     def _section(self, frame: ttk.Frame, row: int, title_en: str, title_cs: str) -> ttk.LabelFrame:
         box = ttk.LabelFrame(frame, text=self._txt(title_en, title_cs), padding=10, style="SettingsSection.TLabelframe")
@@ -363,7 +380,11 @@ class SettingsDialog(tk.Toplevel):
         self._vars["fullscreen"] = tk.BooleanVar(value=self.working.display.fullscreen)
         self._vars["remember_geometry"] = tk.BooleanVar(value=self.working.display.remember_geometry)
         self._row(f, r, "Confirm destructive actions", "Potvrzovat mazání", self._vars["confirm_destructive"], "check", desc_en="Shows a confirmation before clearing or deleting recordings.", desc_cs="Před smazáním záznamů zobrazí potvrzení."); r += 1
-        self._row(f, r, "Show setting descriptions", "Zobrazovat popisy nastavení", self._vars["show_tooltips"], "check"); r += 1
+        self._row(
+            f, r, "Show setting descriptions", "Zobrazovat popisy nastavení", self._vars["show_tooltips"], "check",
+            desc_en="Shows or hides the middle Description column immediately throughout Settings.",
+            desc_cs="Okamžitě zobrazí nebo skryje prostřední sloupec Popis v celém Nastavení.",
+        ); r += 1
         self._row(f, r, "Start fullscreen", "Spustit přes celou obrazovku", self._vars["fullscreen"], "check", impact="low"); r += 1
         self._row(f, r, "Remember window and panel sizes", "Pamatovat velikost okna a panelů", self._vars["remember_geometry"], "check")
 
@@ -538,7 +559,12 @@ class SettingsDialog(tk.Toplevel):
         }
         self._vars.update(vals)
         self._row(f, r, "Enable competition management", "Zapnout správu soutěže", vals["competition_enabled"], "check", impact="low"); r += 1
-        self._row(f, r, "Show current-athlete selector", "Zobrazit výběr závodníka", vals["show_selector"], "check", impact="low"); r += 1
+        self._row(
+            f, r, "Show next-attempt panel on board", "Zobrazit panel dalšího pokusu na tabuli",
+            vals["show_selector"], "check",
+            desc_en="Shows the next athlete number and attempt directly above the Competition Board.",
+            desc_cs="Zobrazí číslo dalšího závodníka a pokusu přímo nad soutěžní tabulí.", impact="low",
+        ); r += 1
         self._row(f, r, "Show competition board", "Zobrazit tabulku soutěže", vals["show_board"], "check", impact="medium"); r += 1
         self._row(f, r, "Show competition state banner", "Zobrazit stavový banner soutěže", vals["show_banner"], "check", desc_en="Off by default.", desc_cs="Ve výchozím stavu vypnuto.", impact="low"); r += 1
         self._row(f, r, "Show next-athlete overlay", "Zobrazit překryv dalšího závodníka", vals["next_overlay"], "check", impact="low"); r += 1
