@@ -1,5 +1,11 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Settings column alignment
+
+- Standardized setting rows into fixed Option, Description, and Value columns.
+- Labels, impact badges, help text, checkboxes, entries, spinboxes, and selectors now align vertically across each Settings page.
+- Added visible localized column headings and a wider minimum Settings workspace to prevent controls from drifting or wrapping into inconsistent positions.
+
 ## Camera and judging pause
 
 - Added a prominent Pause system / Resume system switch to the main header.

@@ -114,6 +114,7 @@ class ThemeManager:
         style.configure("SettingsHero.TFrame", background=p["surface2"], borderwidth=1, relief="solid")
         style.configure("SettingsHeroTitle.TLabel", background=p["surface2"], foreground=p["text"], font=("Segoe UI Semibold", 18))
         style.configure("SettingsHeroDesc.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 9))
+        style.configure("SettingsGroup.TFrame", background=p["surface2"])
         style.configure("SettingsGroup.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 8))
         style.configure("SettingsDirty.TLabel", background=p["surface"], foreground=p["warning"], font=("Segoe UI Semibold", 8))
         style.configure("SettingsRow.TFrame", background=p["surface"], borderwidth=1, relief="solid")

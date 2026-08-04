@@ -98,7 +98,7 @@ class SettingsDialog(tk.Toplevel):
         self.tr = Translator(self.lang)
         self.title(self.tr("settings.title"))
         self.geometry("1220x820")
-        self.minsize(980, 700)
+        self.minsize(1100, 700)
         self.transient(parent)
         self.grab_set()
         self._vars: dict[str, tk.Variable] = {}
@@ -113,6 +113,7 @@ class SettingsDialog(tk.Toplevel):
         self.hotkey_tree: ttk.Treeview | None = None
         self.roster_tree: ttk.Treeview | None = None
         self.shuttle_vars: dict[int, tk.StringVar] = {}
+        self._setting_rows: list[tuple[ttk.Frame, tk.Widget, ttk.Label | None]] = []
         self._build()
         self._initialising = False
         self._attach_dirty_traces()
@@ -259,8 +260,20 @@ class SettingsDialog(tk.Toplevel):
         ttk.Label(hero, text=self._txt(title_en, title_cs), style="SettingsHeroTitle.TLabel").pack(anchor="w")
         if desc_en or desc_cs:
             ttk.Label(hero, text=self._txt(desc_en, desc_cs), style="SettingsHeroDesc.TLabel", wraplength=780, justify="left").pack(anchor="w", pady=(5, 0))
-        frame.columnconfigure(1, weight=1)
-        return 1
+        columns = ttk.Frame(frame, style="SettingsGroup.TFrame", padding=(14, 5))
+        columns.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 2))
+        self._configure_row_columns(columns)
+        ttk.Label(columns, text=self.tr("settings.column.option"), style="SettingsGroup.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(columns, text=self.tr("settings.column.description"), style="SettingsGroup.TLabel").grid(row=0, column=1, sticky="w", padx=(18, 18))
+        ttk.Label(columns, text=self.tr("settings.column.value"), style="SettingsGroup.TLabel").grid(row=0, column=2, sticky="w")
+        frame.columnconfigure(0, weight=1)
+        return 2
+
+    @staticmethod
+    def _configure_row_columns(container: ttk.Frame) -> None:
+        container.columnconfigure(0, minsize=220, weight=0)
+        container.columnconfigure(1, minsize=300, weight=1)
+        container.columnconfigure(2, minsize=210, weight=0)
 
     def _impact_text(self, impact: str) -> str:
         return self.tr(f"settings.impact.{impact}")
@@ -281,12 +294,10 @@ class SettingsDialog(tk.Toplevel):
     ) -> tk.Widget:
         card = ttk.Frame(frame, style="SettingsRow.TFrame", padding=(14, 11))
         card.grid(row=row, column=0, columnspan=4, sticky="ew", pady=4)
-        card.columnconfigure(0, weight=2)
-        card.columnconfigure(1, weight=1)
-        card.columnconfigure(2, weight=2)
+        self._configure_row_columns(card)
         left = ttk.Frame(card, style="Panel.TFrame")
-        left.grid(row=0, column=0, sticky="nw", padx=(0, 14))
-        ttk.Label(left, text=self._txt(label_en, label_cs), style="SettingsRowTitle.TLabel").pack(anchor="w")
+        left.grid(row=0, column=0, sticky="nw")
+        ttk.Label(left, text=self._txt(label_en, label_cs), style="SettingsRowTitle.TLabel", wraplength=205, justify="left").pack(anchor="w")
         if impact != "none":
             ttk.Label(left, text=self._impact_text(impact), style=IMPACT_STYLES[impact]).pack(anchor="w", pady=(2, 0))
         if kind == "check":
@@ -297,9 +308,12 @@ class SettingsDialog(tk.Toplevel):
             widget = ttk.Spinbox(card, textvariable=var, from_=0, to=10000, increment=1, width=width)
         else:
             widget = ttk.Entry(card, textvariable=var, width=width)
-        widget.grid(row=0, column=1, sticky="ew", padx=(0, 14))
+        description: ttk.Label | None = None
         if desc_en or desc_cs:
-            ttk.Label(card, text=self._txt(desc_en, desc_cs), style="SettingsRowDesc.TLabel", wraplength=360, justify="left").grid(row=0, column=2, sticky="nw")
+            description = ttk.Label(card, text=self._txt(desc_en, desc_cs), style="SettingsRowDesc.TLabel", wraplength=300, justify="left")
+            description.grid(row=0, column=1, sticky="nw", padx=(18, 18))
+        widget.grid(row=0, column=2, sticky="w" if kind == "check" else "ew")
+        self._setting_rows.append((card, widget, description))
         return widget
 
     def _section(self, frame: ttk.Frame, row: int, title_en: str, title_cs: str) -> ttk.LabelFrame:

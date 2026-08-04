@@ -21,6 +21,13 @@ def test_category_settings_dialog_builds_all_pages():
     assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
     assert set(dialog._nav_group_labels) == {"essentials", "judging", "replay", "system"}
     assert dialog._nav_buttons["general"].cget("style") == "SettingsNav.TButton"
+    general_inner = dialog._page_inners["general"]
+    general_rows = [(card, widget, desc) for card, widget, desc in dialog._setting_rows if card.master is general_inner]
+    dialog._show_page("general"); dialog.update_idletasks()
+    assert len({widget.winfo_x() for _card, widget, _desc in general_rows}) == 1
+    assert all(widget.winfo_x() >= 500 for _card, widget, _desc in general_rows)
+    described = [desc for _card, _widget, desc in general_rows if desc is not None]
+    assert len({desc.winfo_x() for desc in described}) == 1
     dialog._show_page("competition")
     assert dialog._current_page == "competition"
     assert dialog.roster_tree is not None

@@ -315,6 +315,8 @@ The main window is organized into stable task zones: application/camera/timer he
 
 Settings uses four navigation groups (Essentials, Judging workflow, Replay workspace, Controls & system), active-page highlighting, page-introduction cards, card-based setting rows, visible impact badges, and a fixed Apply footer. The underlying sixteen pages remain separate to avoid presenting one very long form.
 
+Every ordinary setting row follows the same three-column contract: Option (fixed width), Description (flexible), and Value (fixed width). Column headings are visible and localized. Checkboxes align to the same Value-column origin as entries, spinboxes, and selectors; individual label or description length must not move a control horizontally.
+
 Supported layouts:
 
 - `replay_pip`
