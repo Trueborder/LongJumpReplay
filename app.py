@@ -119,10 +119,11 @@ def main() -> int:
         return run_self_test(config_path, args.self_test_report)
     try:
         config = load_config(config_path)
+        persistent_camera_source = config.camera.source_type if args.synthetic else None
         if args.synthetic: config.camera.source_type = "synthetic"
         if args.windowed: config.display.fullscreen = False
         root = tk.Tk()
-        MainWindow(root, config, config_path)
+        MainWindow(root, config, config_path, persistent_camera_source_type=persistent_camera_source)
         root.mainloop()
         return 0
     except Exception as exc:

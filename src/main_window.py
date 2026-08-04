@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 import json
 import math
 import os
@@ -41,10 +42,17 @@ from .video_canvas import VideoCanvas
 
 
 class MainWindow:
-    def __init__(self, root: tk.Tk, config: AppConfig, config_path: Path) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        config: AppConfig,
+        config_path: Path,
+        persistent_camera_source_type: str | None = None,
+    ) -> None:
         self.root = root
         self.config = config
         self.config_path = config_path
+        self._persistent_camera_source_type = persistent_camera_source_type
         self.translator = Translator(config.general.language)
         self.root.title(self.translator("app.title"))
         self.root.minsize(1100, 700)
@@ -1621,6 +1629,8 @@ class MainWindow:
         camera_changed = new_config.camera != self.config.camera or new_config.buffer != self.config.buffer
         language_changed = new_config.general.language != self.config.general.language
         timer_duration_changed = new_config.athlete_timer.duration_seconds != self.config.athlete_timer.duration_seconds
+        if self._persistent_camera_source_type is not None and new_config.camera.source_type != self.config.camera.source_type:
+            self._persistent_camera_source_type = new_config.camera.source_type
         self.config = new_config
         if timer_duration_changed:
             self.athlete_timer.set_duration(new_config.athlete_timer.duration_seconds)
@@ -1654,7 +1664,7 @@ class MainWindow:
         self.shuttle.stop()
         self.shuttle = ShuttleHIDPoller(new_config.shuttle, self.action_queue)
         self.shuttle.start()
-        save_config(new_config, self.config_path)
+        save_config(self._config_for_persistence(new_config), self.config_path)
         if camera_changed:
             messagebox.showinfo(
                 "Camera settings" if new_config.general.language == "en" else "Nastavení kamery",
@@ -1857,8 +1867,15 @@ class MainWindow:
     def _show_message(self, text: str, seconds: float = 5.0) -> None:
         self.message_var.set(text); self._message_until = time.perf_counter() + max(0, seconds)
     def _save_config_safely(self) -> None:
-        try: save_config(self.config, self.config_path)
+        try: save_config(self._config_for_persistence(self.config), self.config_path)
         except OSError: pass
+
+    def _config_for_persistence(self, config: AppConfig) -> AppConfig:
+        if self._persistent_camera_source_type is None:
+            return config
+        persistent = deepcopy(config)
+        persistent.camera.source_type = self._persistent_camera_source_type
+        return persistent
 
     # -------------------------------------------------------------- shutdown
     def close(self) -> None:

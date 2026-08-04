@@ -1,8 +1,23 @@
 import time
 import tkinter as tk
 
-from src.config import AppConfig, save_config
+from src.config import AppConfig, load_config, save_config
 from src.main_window import MainWindow
+
+
+def test_synthetic_cli_override_does_not_replace_saved_camera_source(tmp_path):
+    config = AppConfig()
+    config.camera.source_type = "synthetic"
+    path = tmp_path / "config.json"
+    app = object.__new__(MainWindow)
+    app.config = config
+    app.config_path = path
+    app._persistent_camera_source_type = "camera"
+
+    app._save_config_safely()
+
+    assert app.config.camera.source_type == "synthetic"
+    assert load_config(path).camera.source_type == "camera"
 
 
 def test_main_window_closes_from_live_mode(tmp_path):

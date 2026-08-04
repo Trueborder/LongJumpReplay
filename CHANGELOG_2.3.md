@@ -1,5 +1,9 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Camera source startup
+
+- Kept Camera as the normal-launch and new-configuration default, and made the `--synthetic` test flag transient so it cannot overwrite the saved source selection.
+
 ## Competition board interaction
 
 - Made every attempt cell respond to a single click: recorded cells open their exact replay, while eligible empty cells become the exact next recording target.

@@ -304,6 +304,8 @@ The current default camera requests:
 1280 × 720, 120 FPS, MJPG, DirectShow, device 0
 ```
 
+Normal launches use the saved `camera` source, and new configurations default to Camera. The `--synthetic` CLI option is a transient test override: automatic config saves preserve the operator's saved source choice instead of replacing it with Synthetic.
+
 A webcam may negotiate a lower real rate. Requested FPS is not proof of actual FPS; use capture diagnostics.
 
 ### Config compatibility
