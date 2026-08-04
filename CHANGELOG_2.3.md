@@ -4,8 +4,13 @@
 
 - Fixed checkbox selected-state rendering with an explicit state map, stronger border contrast, accent fill, and a large high-contrast check mark.
 - Added scalable rounded image backgrounds to every ttk button style, including default, navigation, header, judging, warning, and destructive actions.
+- Reduced the rounded background footprint so buttons retain their compact pre-rounding height.
 - Added rounded image fields to comboboxes and Windows compositor-rounded corners to combobox popups and File/View/Help menu windows.
 - Preserved the same rounded component system through runtime dark/light theme changes.
+
+## Settings category navigation
+
+- Added an always-visible scrollbar and mouse-wheel browsing to the Settings category sidebar, independent of each page's content scrollbar.
 
 ## Named camera selection
 

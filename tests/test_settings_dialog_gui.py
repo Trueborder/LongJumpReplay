@@ -19,8 +19,9 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert "Modern" in str(style.layout("TCheckbutton"))
     assert "ModernDark.neutral.Button.background" in str(style.layout("TButton"))
     assert "ModernDark.Combo.field" in str(style.layout("TCombobox"))
+    assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 20
     assert int(style.lookup("TCombobox", "arrowsize")) == 15
-    assert tuple(style.lookup("TCombobox", "padding")) == (9, 6)
+    assert tuple(style.lookup("TCombobox", "padding")) == (9, 0)
     checked_image = theme_manager._image_assets["ModernDark.checked"]
     unchecked_image = theme_manager._image_assets["ModernDark.unchecked"]
     assert checked_image.get(11, 11) != unchecked_image.get(11, 11)
@@ -48,6 +49,10 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
     assert set(dialog._nav_group_labels) == {"essentials", "judging", "replay", "system"}
     assert dialog._nav_buttons["general"].cget("style") == "SettingsNav.TButton"
+    assert dialog._nav_buttons["general"].winfo_reqheight() <= 36
+    assert dialog.nav_scrollbar.winfo_manager() == "grid"
+    assert dialog.nav_canvas.cget("yscrollcommand")
+    assert dialog.nav_canvas.bbox("all") is not None
     general_inner = dialog._page_inners["general"]
     general_rows = [(card, widget, desc) for card, widget, desc in dialog._setting_rows if card.master is general_inner]
     dialog._show_page("general"); dialog.update_idletasks()

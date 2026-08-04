@@ -78,8 +78,10 @@ class ThemeManager:
             ]}),
         ])
 
-    def _rounded_image(self, key: str, fill: str, border: str, radius: int = 10) -> tk.PhotoImage:
-        width, height = 40, 32
+    def _rounded_image(self, key: str, fill: str, border: str, radius: int = 7) -> tk.PhotoImage:
+        # This is a scalable nine-slice background, not the final control size.
+        # Keep its centre compact so rounding does not inflate every button.
+        width, height = 32, 20
         image = tk.PhotoImage(master=self.root, width=width, height=height)
         for y in range(height):
             colors: list[str] = []
@@ -112,7 +114,7 @@ class ThemeManager:
             style.element_create(
                 element, "image", normal_image,
                 ("disabled", disabled_image), ("pressed", pressed_image), ("active", active_image),
-                border=(10, 10, 10, 10), sticky="nswe",
+                border=(7, 7, 7, 7), sticky="nswe",
             )
         style.layout(style_name, [(element, {"sticky": "nswe", "children": [
             ("Button.padding", {"sticky": "nswe", "children": [("Button.label", {"sticky": "nswe"})]}),
@@ -224,9 +226,10 @@ class ThemeManager:
         style.configure("ControlDock.TFrame", background=p["surface"], borderwidth=1, relief="solid")
         style.configure("Brand.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 15))
         style.configure("BrandSub.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
-        style.configure("TMenubutton", background=p["surface2"], foreground=p["text"], padding=(10, 7), borderwidth=1, relief="flat", arrowcolor=p["muted"])
+        style.configure("TButton", padding=(8, 0))
+        style.configure("TMenubutton", background=p["surface2"], foreground=p["text"], padding=(10, 0), borderwidth=1, relief="flat", arrowcolor=p["muted"])
         style.map("TMenubutton", background=[("active", p["selection"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])], arrowcolor=[("active", p["text"])])
-        style.configure("Header.TMenubutton", background=p["surface2"], foreground=p["text"], padding=(11, 7), borderwidth=1, relief="flat", arrowcolor=p["muted"])
+        style.configure("Header.TMenubutton", background=p["surface2"], foreground=p["text"], padding=(11, 0), borderwidth=1, relief="flat", arrowcolor=p["muted"])
         style.map("Header.TMenubutton", background=[("active", p["selection"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])], arrowcolor=[("active", p["text"])])
         style.configure("ContextTitle.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 8))
         style.configure("ContextValue.TLabel", background=p["surface2"], foreground=p["text"], font=("Segoe UI Semibold", 10))
@@ -237,24 +240,24 @@ class ThemeManager:
         style.configure("Warning.TLabel", background=p["surface"], foreground=p["warning"])
         style.configure("HeaderMuted.TLabel", background=p["bg"], foreground=p["muted"])
         style.configure("Status.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 8))
-        style.configure("Control.TButton", padding=(9, 6), font=("Segoe UI", 9))
+        style.configure("Control.TButton", padding=(9, 0), font=("Segoe UI", 9))
         style.map("Control.TButton", background=[("active", p["surface2"]), ("pressed", p["selection"])])
-        style.configure("Accent.TButton", padding=(11, 6), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")
+        style.configure("Accent.TButton", padding=(11, 0), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")
         style.map("Accent.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
-        style.configure("Live.TButton", padding=(11, 6), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
-        style.configure("PrimaryJudge.TButton", padding=(18, 11), font=("Segoe UI Semibold", 11), background=p["accent"], foreground="#ffffff")
+        style.configure("Live.TButton", padding=(11, 0), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
+        style.configure("PrimaryJudge.TButton", padding=(18, 4), font=("Segoe UI Semibold", 11), background=p["accent"], foreground="#ffffff")
         style.map("PrimaryJudge.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
-        style.configure("LiveJudge.TButton", padding=(14, 11), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
-        style.configure("Danger.TButton", padding=(9, 6), background=p["danger"], foreground="#ffffff")
-        style.configure("SystemPause.TButton", padding=(12, 7), background=p["warning"], foreground="#111111", font=("Segoe UI Semibold", 9))
-        style.configure("SystemResume.TButton", padding=(12, 7), background=p["live"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
-        style.configure("Valid.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
-        style.configure("Foul.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["danger"], foreground="#ffffff")
-        style.configure("Review.TButton", padding=(12, 7), font=("Segoe UI Semibold", 9), background=p["warning"], foreground="#111111")
-        style.configure("JudgeValid.TButton", padding=(16, 10), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
-        style.configure("JudgeFoul.TButton", padding=(16, 10), font=("Segoe UI Semibold", 10), background=p["danger"], foreground="#ffffff")
-        style.configure("JudgeReview.TButton", padding=(16, 10), font=("Segoe UI Semibold", 10), background=p["warning"], foreground="#111111")
-        style.configure("Sidebar.TButton", padding=(12, 9), anchor="w", background=p["surface2"], foreground=p["text"])
+        style.configure("LiveJudge.TButton", padding=(14, 4), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
+        style.configure("Danger.TButton", padding=(9, 0), background=p["danger"], foreground="#ffffff")
+        style.configure("SystemPause.TButton", padding=(12, 0), background=p["warning"], foreground="#111111", font=("Segoe UI Semibold", 9))
+        style.configure("SystemResume.TButton", padding=(12, 0), background=p["live"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
+        style.configure("Valid.TButton", padding=(12, 0), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
+        style.configure("Foul.TButton", padding=(12, 0), font=("Segoe UI Semibold", 9), background=p["danger"], foreground="#ffffff")
+        style.configure("Review.TButton", padding=(12, 0), font=("Segoe UI Semibold", 9), background=p["warning"], foreground="#111111")
+        style.configure("JudgeValid.TButton", padding=(16, 3), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
+        style.configure("JudgeFoul.TButton", padding=(16, 3), font=("Segoe UI Semibold", 10), background=p["danger"], foreground="#ffffff")
+        style.configure("JudgeReview.TButton", padding=(16, 3), font=("Segoe UI Semibold", 10), background=p["warning"], foreground="#111111")
+        style.configure("Sidebar.TButton", padding=(12, 2), anchor="w", background=p["surface2"], foreground=p["text"])
         style.map("Sidebar.TButton", background=[("active", p["selection"]), ("pressed", p["selection"])])
         style.configure("Treeview", background=p["surface"], fieldbackground=p["surface"], foreground=p["text"], rowheight=28, borderwidth=0)
         style.configure("Treeview.Heading", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 8), relief="flat")
@@ -271,7 +274,7 @@ class ThemeManager:
         style.map("TEntry", fieldbackground=[("disabled", p["surface"]), ("readonly", p["surface2"])], foreground=[("disabled", p["muted"])])
         style.configure("TSpinbox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["text"], insertcolor=p["text"])
         style.map("TSpinbox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])])
-        style.configure("TCombobox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["muted"], selectbackground=p["selection"], selectforeground=p["text"], padding=(9, 6), borderwidth=1, relief="flat", arrowsize=15)
+        style.configure("TCombobox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["muted"], selectbackground=p["selection"], selectforeground=p["text"], padding=(9, 0), borderwidth=1, relief="flat", arrowsize=15)
         style.map("TCombobox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])], bordercolor=[("focus", p["accent"]), ("active", p["accent"]), ("readonly", p["border"])], arrowcolor=[("active", p["text"]), ("readonly", p["muted"])], selectbackground=[("readonly", p["surface2"])], selectforeground=[("readonly", p["text"])])
         style.configure("Vertical.TScrollbar", background=p["surface2"], troughcolor=p["bg"], arrowcolor=p["text"])
         style.configure("Horizontal.TScrollbar", background=p["surface2"], troughcolor=p["bg"], arrowcolor=p["text"])
@@ -293,7 +296,7 @@ class ThemeManager:
         style.configure("SettingsRowDesc.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
         style.configure("SettingsSection.TLabelframe", background=p["surface"], bordercolor=p["border"], relief="solid", borderwidth=1)
         style.configure("SettingsSection.TLabelframe.Label", background=p["surface"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
-        style.configure("SettingsNav.TButton", padding=(14, 9), anchor="w", background=p["surface2"], foreground=p["muted"], borderwidth=0)
+        style.configure("SettingsNav.TButton", padding=(14, 3), anchor="w", background=p["surface2"], foreground=p["muted"], borderwidth=0)
         style.map("SettingsNav.TButton", background=[("active", p["selection"]), ("pressed", p["selection"]), ("selected", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"]), ("selected", p["text"])])
         self._install_rounded_controls(style, p)
         # ttk combobox pop-downs use a classic Tk Listbox on Windows.

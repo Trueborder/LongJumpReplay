@@ -159,8 +159,22 @@ class SettingsDialog(tk.Toplevel):
         search = ttk.Entry(sidebar, textvariable=self.search_var)
         search.pack(fill="x", pady=(0, 10))
         search.insert(0, "")
-        self.nav_host = ttk.Frame(sidebar, style="Toolbar.TFrame")
-        self.nav_host.pack(fill="both", expand=True)
+        nav_wrapper = ttk.Frame(sidebar, style="Toolbar.TFrame")
+        nav_wrapper.pack(fill="both", expand=True)
+        nav_wrapper.rowconfigure(0, weight=1)
+        nav_wrapper.columnconfigure(0, weight=1)
+        nav_bg = ttk.Style(self).lookup("Toolbar.TFrame", "background") or self.cget("background")
+        self.nav_canvas = tk.Canvas(nav_wrapper, highlightthickness=0, bd=0, background=nav_bg)
+        self.nav_scrollbar = ttk.Scrollbar(nav_wrapper, orient="vertical", command=self.nav_canvas.yview)
+        self.nav_canvas.configure(yscrollcommand=self.nav_scrollbar.set)
+        self.nav_canvas.grid(row=0, column=0, sticky="nsew")
+        self.nav_scrollbar.grid(row=0, column=1, sticky="ns", padx=(5, 0))
+        self.nav_host = ttk.Frame(self.nav_canvas, style="Toolbar.TFrame")
+        self._nav_window = self.nav_canvas.create_window((0, 0), window=self.nav_host, anchor="nw")
+        self.nav_host.bind("<Configure>", self._update_navigation_scrollregion)
+        self.nav_canvas.bind("<Configure>", self._resize_navigation_host)
+        self._bind_navigation_wheel(self.nav_canvas)
+        self._bind_navigation_wheel(self.nav_host)
 
         self.page_host = ttk.Frame(body, style="Panel.TFrame", padding=1)
         self.page_host.grid(row=0, column=1, sticky="nsew")
@@ -168,12 +182,14 @@ class SettingsDialog(tk.Toplevel):
         for group_key, group_en, group_cs, keys in self.CATEGORY_GROUPS:
             label = ttk.Label(self.nav_host, text=self._txt(group_en, group_cs), style="SettingsGroup.TLabel")
             label.pack(fill="x", padx=5, pady=(10 if self._nav_group_labels else 2, 4))
+            self._bind_navigation_wheel(label)
             self._nav_group_labels[group_key] = label
             for key in keys:
                 en, cs = definitions[key]
                 self._category_group[key] = group_key
                 button = ttk.Button(self.nav_host, text=self._txt(en, cs), style="SettingsNav.TButton", command=lambda k=key: self._show_page(k))
                 button.pack(fill="x", pady=1)
+                self._bind_navigation_wheel(button)
                 self._nav_buttons[key] = button
         for key, _en, _cs in self.CATEGORY_DEFS:
             wrapper, inner = self._new_scroll_page()
@@ -225,6 +241,20 @@ class SettingsDialog(tk.Toplevel):
         canvas.bind("<MouseWheel>", lambda e, c=canvas: (c.yview_scroll(-1 if e.delta > 0 else 1, "units"), "break")[1])
         return wrapper, inner
 
+    def _bind_navigation_wheel(self, widget: tk.Misc) -> None:
+        widget.bind("<MouseWheel>", self._scroll_navigation, add="+")
+
+    def _scroll_navigation(self, event: tk.Event) -> str:
+        if event.delta:
+            self.nav_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+        return "break"
+
+    def _update_navigation_scrollregion(self, _event: tk.Event | None = None) -> None:
+        self.nav_canvas.configure(scrollregion=self.nav_canvas.bbox("all"))
+
+    def _resize_navigation_host(self, event: tk.Event) -> None:
+        self.nav_canvas.itemconfigure(self._nav_window, width=event.width)
+
     def _show_page(self, key: str) -> None:
         if key == self._current_page:
             return
@@ -254,6 +284,8 @@ class SettingsDialog(tk.Toplevel):
         first = visible_keys[0] if visible_keys else None
         if first and self._current_page not in visible_keys:
             self._show_page(first)
+        self.nav_canvas.yview_moveto(0.0)
+        self.after_idle(self._update_navigation_scrollregion)
 
     def _title(self, frame: ttk.Frame, title_en: str, title_cs: str, desc_en: str = "", desc_cs: str = "") -> int:
         hero = ttk.Frame(frame, style="SettingsHero.TFrame", padding=(18, 15))
