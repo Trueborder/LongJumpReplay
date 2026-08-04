@@ -2,9 +2,10 @@
 
 ## Unified selection controls
 
-- Replaced default checkbox indicators with larger theme-aware square controls, accent fill, and a high-contrast check mark.
-- Restyled combobox fields and their opening lists with consistent spacing, border focus, typography, selection colors, and arrow treatment.
-- Applied the same dark/light palette, typography, borders, and active selection treatment to File, View, Help, layout, theme, and special-result menus.
+- Fixed checkbox selected-state rendering with an explicit state map, stronger border contrast, accent fill, and a large high-contrast check mark.
+- Added scalable rounded image backgrounds to every ttk button style, including default, navigation, header, judging, warning, and destructive actions.
+- Added rounded image fields to comboboxes and Windows compositor-rounded corners to combobox popups and File/View/Help menu windows.
+- Preserved the same rounded component system through runtime dark/light theme changes.
 
 ## Named camera selection
 

@@ -324,6 +324,8 @@ Every ordinary setting row follows the same three-column contract: Option (fixed
 
 Checkboxes, comboboxes, combobox list popups, and classic Tk menus are themed as one component family. Checkbox indicator images are owned by `ThemeManager` for their full Tk lifetime. Dark/light theme application must also restyle existing File/View/Help and nested menus; native-looking defaults must not reappear after a runtime theme change.
 
+All ttk button styles and combobox fields use scalable rounded image elements with transparent corners. On Windows, mapped classic menu windows and combobox popdowns request DWM rounded corners. Checkbox tests must verify both Tk selected state and different rendered checked/unchecked pixels so an invisible logical selection cannot regress unnoticed.
+
 Supported layouts:
 
 - `replay_pip`

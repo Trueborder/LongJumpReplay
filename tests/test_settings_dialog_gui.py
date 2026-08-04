@@ -17,10 +17,20 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     dialog.update_idletasks()
     style = ttk.Style(dialog)
     assert "Modern" in str(style.layout("TCheckbutton"))
+    assert "ModernDark.neutral.Button.background" in str(style.layout("TButton"))
+    assert "ModernDark.Combo.field" in str(style.layout("TCombobox"))
     assert int(style.lookup("TCombobox", "arrowsize")) == 15
     assert tuple(style.lookup("TCombobox", "padding")) == (9, 6)
+    checked_image = theme_manager._image_assets["ModernDark.checked"]
+    unchecked_image = theme_manager._image_assets["ModernDark.unchecked"]
+    assert checked_image.get(11, 11) != unchecked_image.get(11, 11)
+    first_checkbox = next(widget for _card, widget, _desc in dialog._setting_rows if isinstance(widget, ttk.Checkbutton))
+    assert first_checkbox.instate(["selected"])
+    first_checkbox.invoke(); dialog.update_idletasks()
+    assert first_checkbox.instate(["!selected"])
     theme_manager.apply("light")
     assert "ModernLight" in str(style.layout("TCheckbutton"))
+    assert "ModernLight.neutral.Button.background" in str(style.layout("TButton"))
     assert set(dialog._pages) == {
         "general", "appearance", "performance", "camera", "board", "competition",
         "rounds", "decisions", "final", "replay", "views", "assist",
