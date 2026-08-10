@@ -1,5 +1,13 @@
 # Long Jump Replay 2.3
 
+## Reliability instrumentation and native migration preview
+
+The production application remains the verified Python 3.12/Tkinter/OpenCV build. It now writes a bounded structured runtime log to `LongJumpReplay-runtime.jsonl` beside the active configuration and shows UI tick average, p95, maximum, stall count, and uptime in Help > Diagnostics. Camera start/open/reconnect/stop, Freeze, decision, Live, system pause, shutdown, worker exceptions, and fatal startup failures are recorded without adding data to attempt metadata or evidence.
+
+Run the repeatable 30-second synthetic capture gate with `RUN_STABILITY_CHECK.bat`. The JSON report checks measured capture rate, queue drops, encoder failures, live-buffer statistics, and remaining workers.
+
+An incremental Windows-native preview lives in `native/` and targets .NET 10 WPF. It contains separated Core, Windows Video, Infrastructure, App, and Tests projects; English/Czech preview text; a synthetic camera; bounded Live/Freeze/Replay buffering; frame stepping; camera pause/resume; compatible config reading; bounded shutdown; and a selectable Media Foundation source with friendly-name enumeration and real-time BGRA frames. Launch it with `RUN_NATIVE_PREVIEW.bat`, or create a runtime-independent Windows x64 folder with `BUILD_NATIVE_PREVIEW.bat`. The preview starts synthetically and offers discovered cameras in its source list, with safe synthetic fallback after an open failure. Mode negotiation/reconnect, hardware validation, MP4 evidence, competition workflows, full settings, HID, and exports must reach parity before cutover. Continue using `RUN_CAMERA.bat` for real judging and camera work.
+
 A Windows-oriented live replay application for reviewing long-jump take-off-board decisions. It keeps a rolling live buffer, freezes attempts without stopping capture, preserves attempts as temporary MP4 sessions, supports frame-by-frame ShuttleXpress control, and can optionally manage athletes and rounds.
 
 > This is an operator-assistance prototype, not a certified measuring or officiating system. Test the complete camera, computer, USB connection, lighting, and calibration before an event.

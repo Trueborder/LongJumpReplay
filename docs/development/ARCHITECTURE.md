@@ -1,5 +1,17 @@
 # Architecture reference
 
+## Staged Windows-native architecture
+
+The Python process below remains the production implementation during migration. The parallel `native/` .NET 10 solution enforces these boundaries:
+
+- `LongJumpReplay.Core`: UI-independent replay state and bounded frame retention.
+- `LongJumpReplay.Video.Windows`: `IVideoSource`, synthetic validation source, and the isolated Media Foundation camera boundary.
+- `LongJumpReplay.Infrastructure`: backward-compatible JSON loading and atomic persistence primitives.
+- `LongJumpReplay.App`: WPF presentation and keyboard commands; no capture loop runs on the dispatcher thread.
+- `LongJumpReplay.Tests`: dependency-free executable regression gate.
+
+The native preview proves the synthetic Live/Freeze/Replay slice. `MediaFoundationCameraSource` also implements friendly-name enumeration, CPU BGRA delivery, monotonic timestamps, real-time latest-frame acquisition, bounded disposal, and operator selection with synthetic fallback, but it has not been exercised against physical hardware. The Python camera pipeline remains authoritative until native mode negotiation, buffering, encoding, reconnect, and hardware tests pass.
+
 The authoritative product and engineering rules are in `PROJECT.KNOWLEDGE.md`. This document is a compact module and responsibility map.
 
 ## Process model

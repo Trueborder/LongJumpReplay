@@ -4,6 +4,7 @@ from collections import deque
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
+import logging
 import time
 from typing import Protocol
 
@@ -208,6 +209,7 @@ class CaptureEngine:
         self._capture_times: deque[float] = deque()
         self._encode_times: deque[float] = deque()
         self._encode_duration_sum_ms = 0.0
+        self._logger = logging.getLogger("long_jump_replay.capture")
 
     def _make_source(self) -> VideoSource:
         if self.camera_config.source_type == "synthetic":
@@ -228,6 +230,7 @@ class CaptureEngine:
         self._encoder_thread = Thread(target=self._encoder_loop, name="jpeg-encoder", daemon=True)
         self._encoder_thread.start()
         self._capture_thread.start()
+        self._logger.info("capture_started", extra={"event_data": {"event": "capture_started", "source_type": self.camera_config.source_type}})
 
     def stop(self, timeout: float = 2.5) -> list[str]:
         """Stop without allowing a broken camera driver to trap the GUI forever."""
@@ -254,6 +257,7 @@ class CaptureEngine:
                 thread.join(max(0.0, deadline - time.perf_counter()))
                 if thread.is_alive():
                     alive.append(thread.name)
+        self._logger.info("capture_stopped", extra={"event_data": {"event": "capture_stopped", "alive_workers": alive}})
         return alive
 
     @staticmethod
@@ -277,6 +281,7 @@ class CaptureEngine:
                 source.open()
                 with self._stats_lock:
                     self._source_description, self._last_error = source.description, ""
+                self._logger.info("camera_opened", extra={"event_data": {"event": "camera_opened", "source": source.description}})
                 consecutive_failures = 0
                 while not self._stop_event.is_set():
                     ok, frame = source.read()
@@ -316,6 +321,7 @@ class CaptureEngine:
                     with self._stats_lock:
                         self._last_error = str(exc)
                         self._source_description = "Reconnecting camera…"
+                    self._logger.warning("camera_read_failure", extra={"event_data": {"event": "camera_read_failure", "error": str(exc)}})
             finally:
                 try:
                     source.close()

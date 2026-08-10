@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../LongJumpReplay.Core/LongJumpReplay.Core.csproj" />
+  </ItemGroup>
+</Project>

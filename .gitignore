@@ -7,12 +7,15 @@ htmlcov/
 
 # Virtual environments
 .venv/
+.venv.stale-*/
 venv/
 
 # Build and release
 build/
 dist/
 release/
+native/**/bin/
+native/**/obj/
 *.spec.bak
 
 # Runtime data and generated media
@@ -21,9 +24,11 @@ exports/
 evidence/
 logs/
 *.log
+LongJumpReplay-runtime.jsonl*
 SELF_TEST_SOURCE.txt
 SELF_TEST_FROZEN.txt
 SELF_TEST_SINGLE_EXE.txt
+stability-report.json
 
 # Local configuration and backups
 config.local.json

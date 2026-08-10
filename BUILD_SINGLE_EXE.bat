@@ -24,7 +24,7 @@ python app.py --self-test --self-test-report SELF_TEST_SOURCE.txt || goto :fail
 
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name LongJumpReplay --icon assets\long_jump_replay.ico --version-file windows_version_info.txt --add-data "config.json;." --hidden-import hid app.py || goto :fail
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name LongJumpReplay --icon assets\long_jump_replay.ico --version-file windows_version_info.txt --add-data "config.json;." --add-data "assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
 
 if not exist release mkdir release
 copy /y dist\LongJumpReplay.exe release\LongJumpReplay-2.3.exe >nul

@@ -42,6 +42,7 @@ class GeneralConfig:
     language: str = "en"  # en | cs
     confirm_destructive_actions: bool = True
     show_tooltips: bool = True
+    onboarding_completed: bool = False
 
 
 @dataclass(slots=True)
@@ -414,6 +415,8 @@ class AppConfig:
             raise ValueError("export.target_fps must be between 0 and 1000")
         if not isinstance(self.hotkeys.bindings, dict):
             raise ValueError("hotkeys.bindings must be an object")
+        if not isinstance(self.general.onboarding_completed, bool):
+            raise ValueError("general.onboarding_completed must be true or false")
         assigned: dict[str, str] = {}
         for action, binding in self.hotkeys.bindings.items():
             if not isinstance(action, str) or not isinstance(binding, str):

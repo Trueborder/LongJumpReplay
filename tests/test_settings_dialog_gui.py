@@ -17,7 +17,7 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     dialog.update_idletasks()
     style = ttk.Style(dialog)
     assert "Modern" in str(style.layout("TCheckbutton"))
-    assert "ModernDark.neutral.Button.background" in str(style.layout("TButton"))
+    assert "ModernDark.neutral.Button.background" not in str(style.layout("TButton"))
     assert "ModernDark.Combo.field" in str(style.layout("TCombobox"))
     assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 22
     assert int(style.lookup("TCombobox", "arrowsize")) == 15
@@ -31,10 +31,10 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert first_checkbox.instate(["!selected"])
     theme_manager.apply("light")
     assert "ModernLight" in str(style.layout("TCheckbutton"))
-    assert "ModernLight.neutral.Button.background" in str(style.layout("TButton"))
+    assert "ModernLight.neutral.Button.background" not in str(style.layout("TButton"))
     assert set(dialog._pages) == {
         "general", "appearance", "performance", "camera", "board", "competition",
-        "rounds", "decisions", "final", "replay", "views", "assist",
+        "rounds", "decisions", "timer", "final", "replay", "views", "assist",
         "hotkeys", "shuttle", "recovery", "advanced",
     }
     assert dialog._vars["athlete_timer_duration"].get() == 60

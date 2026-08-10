@@ -45,3 +45,17 @@ Introduce a focused `BackgroundTaskController` owned by the main window.
 - Move remaining user-visible literals into `src/i18n.py` and add a translation-key parity test.
 - Add pull-request CI, coverage reporting, corrupt-cache fixtures, stalled-camera tests, export-failure tests, and Windows UI smoke tests.
 - Keep physical camera, ShuttleXpress, and packaged EXE verification as explicit release gates.
+
+## Phase 6 â€” staged Windows-native migration
+
+The initial .NET 10 WPF vertical slice is present under `native/`: separated projects, compatible config reading, a deterministic synthetic source, bounded continuous capture, Live/Freeze/Replay, stepping, pause/resume, shutdown, and executable tests.
+
+Cutover remains gated in this order:
+
+1. Add explicit Media Foundation mode negotiation and reconnect to the selectable source, then pass a physical-camera friendly-name/open/soak test.
+2. Add low-copy pre/post-roll retention plus temporary MP4 encoding while preserving partial-attempt recovery and evidence quality.
+3. Port attempt persistence/recovery and compare Python/native outputs from the same synthetic packet fixtures.
+4. Port the numbered competition board, optional judging, timer, settings, English/Czech localization, exports, evidence, and HID input.
+5. Pass four-hour soak, repeated start/stop, low-disk, forced-failure, DPI/theme/input, physical camera, and packaged self-contained Windows tests before changing the default launcher.
+
+Do not remove or weaken the Python implementation during these gates.

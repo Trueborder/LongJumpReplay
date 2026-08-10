@@ -26,6 +26,7 @@ class VideoCanvas(tk.Canvas):
         guide_x_ratio: float = .5,
         guide_y_ratio: float = .5,
         guide_angle_deg: float = 0.0,
+        guide_width_px: int = 2,
         guide_changed: Callable[..., None] | None = None,
         board_roi: tuple[float, float, float, float] = (.35, .35, .30, .45),
         board_roi_enabled: bool = True,
@@ -47,6 +48,7 @@ class VideoCanvas(tk.Canvas):
         self.guide_x_ratio = guide_x_ratio
         self.guide_y_ratio = guide_y_ratio
         self.guide_angle_deg = guide_angle_deg
+        self.guide_width_px = max(1, min(20, int(guide_width_px)))
         self.guide_changed = guide_changed
         self.board_roi = tuple(board_roi)
         self.board_roi_enabled = board_roi_enabled
@@ -115,6 +117,7 @@ class VideoCanvas(tk.Canvas):
         roi: tuple[float, float, float, float],
         roi_enabled: bool,
         roi_visible: bool,
+        guide_width_px: int | None = None,
     ) -> None:
         self.guide_x_ratio = max(0.0, min(1.0, guide_x))
         self.guide_y_ratio = max(0.0, min(1.0, guide_y))
@@ -122,6 +125,8 @@ class VideoCanvas(tk.Canvas):
         self.board_roi = self._clamp_roi(roi)
         self.board_roi_enabled = roi_enabled
         self.board_roi_visible = roi_visible
+        if guide_width_px is not None:
+            self.guide_width_px = max(1, min(20, int(guide_width_px)))
         self.request_render()
 
     def reset_view(self) -> None:
@@ -183,7 +188,7 @@ class VideoCanvas(tk.Canvas):
         angle = math.radians(self.guide_angle_deg)
         half = math.hypot(dw, dh)
         dx, dy = math.sin(angle) * half, math.cos(angle) * half
-        self.create_line(gx - dx, gy - dy, gx + dx, gy + dy, fill=self.palette["danger"], width=2)
+        self.create_line(gx - dx, gy - dy, gx + dx, gy + dy, fill=self.palette["danger"], width=self.guide_width_px)
         if not self.compact:
             self.create_oval(gx - 4, gy - 4, gx + 4, gy + 4, fill=self.palette["danger"], outline="")
             hx, hy = gx + math.sin(angle) * 54, gy - math.cos(angle) * 54

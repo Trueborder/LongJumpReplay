@@ -16,6 +16,14 @@
 
 The application shows live camera video while retaining a rolling buffer. An operator can freeze an attempt, inspect it frame by frame, preserve the attempt independently of the rolling buffer, optionally record a decision, and immediately return to live capture. It can also manage athletes and rounds, but competition management can be disabled for a clean judge-only interface.
 
+### Staged native migration status
+
+- The production/event path remains Python 3.12 with Tkinter and OpenCV.
+- `native/` contains a compiled .NET 10 WPF migration preview split into Core, Windows Video, Infrastructure, App, and Tests.
+- The native preview currently supports a deterministic synthetic source, continuous bounded capture during Replay, Freeze/Live, frame stepping, pause/resume, compatible JSON config reading, and bounded shutdown.
+- `MediaFoundationCameraSource` provides friendly-name enumeration, CPU BGRA frame delivery, monotonic timestamps, real-time latest-frame acquisition, and bounded stop/disposal. The preview starts synthetically, lets the operator select a discovered camera, and falls back to synthetic after an open failure. Do not present it as event-ready until negotiated modes, reconnect, encoding, and physical-camera soak tests pass.
+- `BUILD_NATIVE_PREVIEW.bat` publishes a self-contained Windows x64 preview folder under `release/`; this improves launch portability but does not promote the preview to the event-ready application.
+
 ## 2. Non-negotiable product rules
 
 Preserve these rules unless the product owner explicitly changes them:
@@ -389,6 +397,14 @@ When changing timeline code, run both logic and GUI tests plus `tools/benchmark_
 
 ## 11. Performance philosophy
 
+### Runtime observability
+
+- Source and portable runs write a rotating `LongJumpReplay-runtime.jsonl` beside the active config: 2 MB per file with three backups.
+- Logs cover application/camera lifecycle, reconnect errors, Freeze success/failure, Live return, decision changes, system pause/resume, shutdown duration, unhandled worker exceptions, and fatal startup failures.
+- Help > Diagnostics reports bounded UI tick average, p95, maximum, stalls at or above 100 ms, and uptime alongside capture/buffer statistics.
+- Runtime diagnostics are operational data only and must never be copied into attempt metadata, evidence, or exports.
+- `tools/soak_diagnostics.py` and `RUN_STABILITY_CHECK.bat` provide a repeatable synthetic capture report. Passing requires at least 90% of requested synthetic FPS, zero queue drops, zero encoder failures, and no remaining capture workers.
+
 The PC fan/noise is a real product concern. Performance presets are:
 
 - `quiet`
@@ -485,7 +501,7 @@ Tkinter GUI tests require a display. On Windows, run them normally in an interac
 
 ### Current handoff verification
 
-At the time this handoff was prepared, the source test suite passed **43 tests** under a virtual display. This does not replace testing on the target Windows machine, physical webcam, target 120 FPS camera, and actual ShuttleXpress.
+At the time this handoff was prepared, the Windows source suite passed **67 tests**, the synthetic pipeline self-test completed attempt MP4/export with no remaining workers, and the short 120 FPS diagnostic soak retained 600/600 frames with zero drops or failures. The .NET 10 Release solution built with zero warnings, all six native lifecycle/retention/config tests passed, and the self-contained published preview remained alive through its bounded startup/camera-enumeration smoke before closing. This does not replace visual GUI inspection, a four-hour soak, physical webcam/120 FPS camera, full native feature parity, and actual ShuttleXpress testing.
 
 ## 14. Build and release
 
@@ -601,7 +617,28 @@ Highest-value future work, in rough order:
 6. Add Windows-native UI automation smoke tests for menus, dark combobox popups, window move/resize, and shutdown.
 7. Validate the physical 120 FPS camera and ShuttleXpress before any official event usage.
 
-## 19. Definition of done for changes
+## 19. Recent UI workflow changes
+
+- Settings and Competition Board scrolling now handle Windows and Linux wheel/button events consistently, refresh scroll regions after content changes, and use themed scrollbar states. Settings Hotkeys rows expose a right-click menu for Change/Clear/Restore default with duplicate protection. A first-run guided tutorial is persisted in `general.onboarding_completed` and can be reopened from General settings. Applying camera/live-buffer changes asks whether to restart immediately; the relaunch preserves the script or frozen executable arguments. Board guide width is passed to all video canvases and evidence overlays instead of using a fixed preview width.
+
+- Judge controls are grouped into frame review and judging categories. Frame, verdict, and Board setup buttons use equal widths and square native ttk rendering; Board setup stays on the right edge.
+- Verdict controls are greyed whenever there is no active frozen attempt to judge (including Live and system-paused states).
+- Competition-board scrolling handles Windows and Linux wheel events, including horizontal Shift-wheel scrolling, while preserving keyboard cell navigation.
+- Export, cache clearing, and camera pause expose an indeterminate progress bar in the status bar while work is active.
+- Camera startup and resume use the same bounded status progress feedback. When no live frame arrives, the video workspace offers a themed Help button with source/index, permissions, competing-app, capture-mode, and diagnostic guidance. A branded splash screen keeps startup state visible while the judge station is prepared.
+- The splash uses the original `assets/long_jump_splash.png` hero image unchanged, with a high-contrast LONG JUMP / REPLAY header, startup badge, progress bar, and small `© 2026 · Developed by Tomáš Pisár` credit. PyInstaller build entry points include the image asset.
+- `py app.py --splash-preview` opens that splash by itself for visual review and exits when the user presses Escape; it does not start camera, shuttle, buffer, or attempt workers.
+- Normal startup runs a randomized 0.5–2.0 second preparation sequence from 0% to 80%, updates a themed action-status strip beneath the bar, initializes the application at 80%, then advances to 100% and removes the splash as the main window becomes ready.
+- Splash presentation uses a bounded centered geometry reveal on startup and a matching geometry contraction on close. This avoids relying on platform alpha/transparency support, which can make a Tk splash appear and disappear instantly on Windows.
+- The main control dock has one larger Freeze/Live toggle. Frame review and judging buttons are enabled only for a frozen attempt and use the same disabled/faded treatment; Not decided uses a neutral pending style rather than black. Board Setup is a matching labeled group, and the system pause button/mode badge share a fixed width.
+- The athlete countdown duration is managed in a dedicated Athlete timer settings category with a Low performance-impact badge.
+- On the Competition Board, Up/Down may move between athlete rows; Left/Right are reserved for replay frame stepping after Freeze and never change the selected attempt column.
+
+## 20. Build entry points
+
+- `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-2.3.exe`, and writes its SHA-256 sidecar.
+
+## 21. Definition of done for changes
 
 A change is done only when:
 

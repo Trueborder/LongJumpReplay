@@ -71,3 +71,7 @@ def resolve_user_path(config_path: Path, value: str) -> Path:
 
 def crash_log_path(config_path: Path) -> Path:
     return config_path.parent / "LongJumpReplay-crash.log"
+
+
+def runtime_log_path(config_path: Path) -> Path:
+    return config_path.parent / "LongJumpReplay-runtime.jsonl"

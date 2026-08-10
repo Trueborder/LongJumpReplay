@@ -76,10 +76,19 @@ class CompetitionBoard(ttk.Frame):
         self.canvas.bind("<Button-3>", self._right_click)
         self.canvas.bind("<Up>", lambda _event: self.move_focus(0, -1))
         self.canvas.bind("<Down>", lambda _event: self.move_focus(0, 1))
-        self.canvas.bind("<Left>", lambda _event: self.move_focus(-1, 0))
-        self.canvas.bind("<Right>", lambda _event: self.move_focus(1, 0))
         self.canvas.bind("<Return>", self.activate_focused)
         self.canvas.bind("<MouseWheel>", self._wheel)
+        self.canvas.bind("<Shift-MouseWheel>", self._horizontal_wheel)
+        self.canvas.bind("<Button-4>", lambda _event: self._scroll_units(-1, vertical=True))
+        self.canvas.bind("<Button-5>", lambda _event: self._scroll_units(1, vertical=True))
+        self.canvas.bind("<Shift-Button-4>", lambda _event: self._scroll_units(-1, vertical=False))
+        self.canvas.bind("<Shift-Button-5>", lambda _event: self._scroll_units(1, vertical=False))
+        self.bind("<MouseWheel>", self._wheel)
+        self.bind("<Shift-MouseWheel>", self._horizontal_wheel)
+        self.bind("<Button-4>", lambda _e: self._scroll_units(-1, vertical=True))
+        self.bind("<Button-5>", lambda _e: self._scroll_units(1, vertical=True))
+        self.bind("<Shift-Button-4>", lambda _e: self._scroll_units(-1, vertical=False))
+        self.bind("<Shift-Button-5>", lambda _e: self._scroll_units(1, vertical=False))
         self.context_menu = tk.Menu(self.canvas, tearoff=False)
         self._context_attempt_id: int | None = None
         self._context_cell: tuple[int, int] | None = None
@@ -354,7 +363,19 @@ class CompetitionBoard(ttk.Frame):
             self.on_delete_attempt(self._context_attempt_id)
 
     def _wheel(self, event) -> str:
-        self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+        delta = getattr(event, "delta", 0)
+        amount = max(1, abs(delta) // 120) if delta else 1
+        self._scroll_units(-amount if delta >= 0 else amount, vertical=True)
+        return "break"
+
+    def _horizontal_wheel(self, event) -> str:
+        delta = getattr(event, "delta", 0)
+        amount = max(1, abs(delta) // 120) if delta else 1
+        self._scroll_units(-amount if delta >= 0 else amount, vertical=False)
+        return "break"
+
+    def _scroll_units(self, amount: int, vertical: bool = True) -> str:
+        (self.canvas.yview_scroll if vertical else self.canvas.xview_scroll)(amount, "units")
         return "break"
 
     def destroy(self) -> None:

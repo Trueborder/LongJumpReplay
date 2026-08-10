@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../LongJumpReplay.Core/LongJumpReplay.Core.csproj" />
+    <ProjectReference Include="../LongJumpReplay.Video.Windows/LongJumpReplay.Video.Windows.csproj" />
+    <ProjectReference Include="../LongJumpReplay.Infrastructure/LongJumpReplay.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

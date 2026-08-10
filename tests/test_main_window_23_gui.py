@@ -193,20 +193,20 @@ def test_board_tab_owns_plain_arrows_and_enter_but_not_space(tmp_path):
 
         def event(key, state=0):
             return SimpleNamespace(keysym=key, state=state, widget=app.special_result_button)
-        assert app.hotkeys._handle_override(event("Right"))
-        assert app.competition_board._focused_cell == (1, 2)
+        assert not app.hotkeys._handle_override(event("Right"))
+        assert app.competition_board._focused_cell == (1, 1)
         assert app.hotkeys._handle_override(event("Down"))
-        assert app.competition_board._focused_cell == (2, 2)
+        assert app.competition_board._focused_cell == (2, 1)
 
         assert app.hotkeys._handle_override(event("Return"))
-        assert activated == [(2, 2)]
+        assert activated == [(2, 1)]
         assert not app.hotkeys._handle_override(event("space"))
-        assert activated == [(2, 2)]
+        assert activated == [(2, 1)]
         assert not app.hotkeys._handle_override(event("Right", state=0x0004))
 
         app.side_notebook.select(app.recordings_tab); root.update()
         assert not app.hotkeys._handle_override(event("Left"))
-        assert app.competition_board._focused_cell == (2, 2)
+        assert app.competition_board._focused_cell == (2, 1)
     finally:
         app.close(); root.mainloop()
 

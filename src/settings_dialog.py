@@ -68,6 +68,7 @@ class SettingsDialog(tk.Toplevel):
         ("competition", "Competition", "Soutěž"),
         ("rounds", "Athletes & rounds", "Závodníci a kola"),
         ("decisions", "Attempts & decisions", "Pokusy a rozhodnutí"),
+        ("timer", "Athlete timer", "Časomíra závodníka"),
         ("final", "Final round", "Finále"),
         ("replay", "Replay & storage", "Replay a úložiště"),
         ("views", "Views", "Pohledy"),
@@ -79,7 +80,7 @@ class SettingsDialog(tk.Toplevel):
     ]
     CATEGORY_GROUPS = [
         ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "appearance", "camera")),
-        ("judging", "JUDGING WORKFLOW", "ROZHODOVÁNÍ", ("competition", "rounds", "decisions", "final")),
+        ("judging", "JUDGING WORKFLOW", "ROZHODOVÁNÍ", ("competition", "rounds", "decisions", "timer", "final")),
         ("replay", "REPLAY WORKSPACE", "PRACOVNÍ PLOCHA", ("board", "replay", "views", "assist")),
         ("system", "CONTROLS & SYSTEM", "OVLÁDÁNÍ A SYSTÉM", ("hotkeys", "shuttle", "performance", "recovery", "advanced")),
     ]
@@ -90,11 +91,13 @@ class SettingsDialog(tk.Toplevel):
         config: AppConfig,
         on_apply: Callable[[AppConfig], None],
         on_camera_diagnostic: Callable[[], None] | None = None,
+        on_show_onboarding: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.working = deepcopy(config)
         self.on_apply = on_apply
         self.on_camera_diagnostic = on_camera_diagnostic
+        self.on_show_onboarding = on_show_onboarding
         self.lang = self.working.general.language
         self.tr = Translator(self.lang)
         self.title(self.tr("settings.title"))
@@ -105,6 +108,7 @@ class SettingsDialog(tk.Toplevel):
         self._vars: dict[str, tk.Variable] = {}
         self._pages: dict[str, ttk.Frame] = {}
         self._page_inners: dict[str, ttk.Frame] = {}
+        self._page_canvases: dict[str, tk.Canvas] = {}
         self._nav_buttons: dict[str, ttk.Button] = {}
         self._nav_group_labels: dict[str, ttk.Label] = {}
         self._category_group: dict[str, str] = {}
@@ -199,6 +203,7 @@ class SettingsDialog(tk.Toplevel):
             wrapper, inner = self._new_scroll_page()
             self._pages[key] = wrapper
             self._page_inners[key] = inner
+            self._page_canvases[key] = self._pending_page_canvas
 
         self.search_var.trace_add("write", lambda *_: self._filter_navigation())
         self._build_general(self._page_inners["general"])
@@ -209,6 +214,7 @@ class SettingsDialog(tk.Toplevel):
         self._build_competition(self._page_inners["competition"])
         self._build_rounds(self._page_inners["rounds"])
         self._build_decisions(self._page_inners["decisions"])
+        self._build_timer(self._page_inners["timer"])
         self._build_final(self._page_inners["final"])
         self._build_replay(self._page_inners["replay"])
         self._build_views(self._page_inners["views"])
@@ -217,6 +223,10 @@ class SettingsDialog(tk.Toplevel):
         self._build_shuttle(self._page_inners["shuttle"])
         self._build_recovery(self._page_inners["recovery"])
         self._build_advanced(self._page_inners["advanced"])
+        for page_key, inner in self._page_inners.items():
+            canvas = self._page_canvases.get(page_key)
+            if canvas:
+                self._bind_scroll_descendants(inner, canvas)
 
         footer = ttk.Frame(shell, style="SettingsHeader.TFrame", padding=(12, 9))
         self.footer = footer
@@ -242,11 +252,28 @@ class SettingsDialog(tk.Toplevel):
         window = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda _e, c=canvas: c.configure(scrollregion=c.bbox("all")))
         canvas.bind("<Configure>", lambda e, c=canvas, w=window: c.itemconfigure(w, width=e.width))
-        canvas.bind("<MouseWheel>", lambda e, c=canvas: (c.yview_scroll(-1 if e.delta > 0 else 1, "units"), "break")[1])
+        self._bind_scroll_events(canvas, lambda direction, c=canvas: c.yview_scroll(direction, "units"))
+        self._pending_page_canvas = canvas
         return wrapper, inner
 
+    def _bind_scroll_descendants(self, widget: tk.Misc, canvas: tk.Canvas) -> None:
+        self._bind_scroll_events(widget, lambda direction, c=canvas: c.yview_scroll(direction, "units"))
+        for child in widget.winfo_children():
+            self._bind_scroll_descendants(child, canvas)
+
+    @staticmethod
+    def _bind_scroll_events(widget: tk.Misc, scroll: Callable[[int], None]) -> None:
+        def wheel(event: tk.Event) -> str:
+            delta = getattr(event, "delta", 0)
+            if delta:
+                scroll(-1 if delta > 0 else 1)
+            return "break"
+        widget.bind("<MouseWheel>", wheel, add="+")
+        widget.bind("<Button-4>", lambda _e: (scroll(-1), "break")[1], add="+")
+        widget.bind("<Button-5>", lambda _e: (scroll(1), "break")[1], add="+")
+
     def _bind_navigation_wheel(self, widget: tk.Misc) -> None:
-        widget.bind("<MouseWheel>", self._scroll_navigation, add="+")
+        self._bind_scroll_events(widget, lambda direction: self.nav_canvas.yview_scroll(direction, "units"))
 
     def _scroll_navigation(self, event: tk.Event) -> str:
         if event.delta:
@@ -387,6 +414,14 @@ class SettingsDialog(tk.Toplevel):
         ); r += 1
         self._row(f, r, "Start fullscreen", "Spustit přes celou obrazovku", self._vars["fullscreen"], "check", impact="low"); r += 1
         self._row(f, r, "Remember window and panel sizes", "Pamatovat velikost okna a panelů", self._vars["remember_geometry"], "check")
+
+        glossary = self._section(f, r + 1, "Plain-language glossary", "Slovníček jednoduchými slovy")
+        ttk.Label(glossary, text=self._txt(
+            "Buffer: short rolling memory of recent camera frames. ROI: the selected area where take-off motion is analysed. FPS: frames per second. Codec: the format used to store video. HID: direct communication with a USB controller. JPEG quality: how much the live preview is compressed.",
+            "Buffer: krátká paměť posledních snímků z kamery. ROI: vybraná oblast, kde se analyzuje pohyb při odrazu. FPS: počet snímků za sekundu. Kodek: formát pro uložení videa. HID: přímá komunikace s USB ovladačem. Kvalita JPEG: míra komprese živého náhledu."
+        ), style="SettingsRowDesc.TLabel", wraplength=760, justify="left").grid(row=0, column=0, sticky="w")
+        if self.on_show_onboarding:
+            ttk.Button(f, text=self._txt("Show the tutorial again", "Znovu zobrazit výukový program"), command=self.on_show_onboarding).grid(row=r + 2, column=0, sticky="w", pady=(10, 0))
 
     def _build_appearance(self, f: ttk.Frame) -> None:
         r = self._title(f, "Language & appearance", "Jazyk a vzhled", "The language is applied to the main interface after Apply.", "Jazyk se na hlavní rozhraní použije po stisku Použít.")
@@ -646,7 +681,6 @@ class SettingsDialog(tk.Toplevel):
             "auto_live": tk.BooleanVar(value=c.auto_return_live),
             "auto_live_delay": tk.DoubleVar(value=c.auto_return_delay_seconds),
             "special_results": tk.BooleanVar(value=c.enable_special_results),
-            "athlete_timer_duration": tk.IntVar(value=self.working.athlete_timer.duration_seconds),
         }
         self._vars.update(vals)
         self._row(f, r, "Show decision buttons", "Zobrazit rozhodovací tlačítka", vals["decision_controls"], "check", impact="low"); r += 1
@@ -658,14 +692,19 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Automatic Live delay (seconds)", "Prodleva automatického návratu (s)", vals["auto_live_delay"]); r += 1
         self._row(f, r, "Enable Passed / DNS / Withdrawn / Reattempt", "Zapnout Vynecháno / DNS / Odstoupení / Opakování", vals["special_results"], "check")
 
-        r += 1
+
+    def _build_timer(self, f: ttk.Frame) -> None:
+        r = self._title(
+            f, "Athlete timer", "Časomíra závodníka",
+            "Operator-started countdown for the current attempt. It does not affect judging, recordings, or exports.",
+            "Odpočet spouštěný obsluhou pro aktuální pokus. Neovlivňuje rozhodnutí, záznamy ani exporty.",
+        )
+        value = tk.IntVar(value=self.working.athlete_timer.duration_seconds)
+        self._vars["athlete_timer_duration"] = value
         self._row(
-            f, r,
-            self.tr("settings.athlete_timer_duration"), self.tr("settings.athlete_timer_duration"),
-            vals["athlete_timer_duration"], "spin",
+            f, r, self.tr("settings.athlete_timer_duration"), self.tr("settings.athlete_timer_duration"), value, "spin",
             desc_en=self.tr("settings.athlete_timer_duration_help"),
-            desc_cs=self.tr("settings.athlete_timer_duration_help"),
-            impact="low", width=8,
+            desc_cs=self.tr("settings.athlete_timer_duration_help"), impact="low", width=8,
         )
 
     def _build_final(self, f: ttk.Frame) -> None:
@@ -761,10 +800,32 @@ class SettingsDialog(tk.Toplevel):
         for action in ACTION_LABELS:
             tree.insert("", "end", iid=action, values=(self._action_label(action), self.working.hotkeys.bindings.get(action, "")))
         self.hotkey_tree = tree
+        tree.bind("<Button-3>", self._hotkey_context_menu)
         bar = ttk.Frame(f, style="Panel.TFrame"); bar.grid(row=r, column=0, columnspan=3, sticky="w", pady=(7, 0))
         ttk.Button(bar, text=self._txt("Change…", "Změnit…"), command=self._change_hotkey).pack(side="left")
         ttk.Button(bar, text=self._txt("Clear", "Vymazat"), command=self._clear_hotkey).pack(side="left", padx=5)
         ttk.Button(bar, text=self._txt("Defaults", "Výchozí"), command=self._reset_hotkeys).pack(side="left")
+
+    def _hotkey_context_menu(self, event: tk.Event) -> str:
+        if not self.hotkey_tree:
+            return "break"
+        row = self.hotkey_tree.identify_row(event.y)
+        if not row:
+            return "break"
+        self.hotkey_tree.selection_set(row)
+        menu = tk.Menu(self, tearoff=False)
+        menu.add_command(label=self._txt("Change…", "Změnit…"), command=self._change_hotkey)
+        menu.add_command(label=self._txt("Clear", "Vymazat"), command=self._clear_hotkey)
+        menu.add_command(label=self._txt("Restore default", "Obnovit výchozí"), command=self._restore_selected_hotkey)
+        menu.tk_popup(event.x_root, event.y_root)
+        return "break"
+
+    def _restore_selected_hotkey(self) -> None:
+        if self.hotkey_tree and self.hotkey_tree.selection():
+            action = self.hotkey_tree.selection()[0]
+            self.working.hotkeys.bindings[action] = DEFAULT_HOTKEYS.get(action, "")
+            self.hotkey_tree.set(action, "key", self.working.hotkeys.bindings[action])
+            self._mark_dirty()
 
     def _build_shuttle(self, f: ttk.Frame) -> None:
         r = self._title(f, "Contour ShuttleXpress", "Contour ShuttleXpress", "Jog steps frames; the spring-loaded outer ring selects recordings. Buttons are configurable.", "Jog posouvá po snímcích; vnější pružinový prstenec vybírá záznamy. Tlačítka jsou nastavitelná.")

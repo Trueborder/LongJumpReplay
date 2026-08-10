@@ -1,12 +1,13 @@
 {
   "general": {
     "language": "en",
-    "confirm_destructive_actions": true,
-    "show_tooltips": true
+    "confirm_destructive_actions": false,
+    "show_tooltips": true,
+    "onboarding_completed": true
   },
   "camera": {
     "source_type": "camera",
-    "device_index": 1,
+    "device_index": 0,
     "file_path": "",
     "width": 1280,
     "height": 720,
@@ -18,11 +19,11 @@
     "reconnect_seconds": 2.0
   },
   "buffer": {
-    "duration_seconds": 30.0,
-    "jpeg_quality": 82,
-    "encoder_queue_size": 128,
-    "max_memory_mb": 4096,
-    "store_every_nth_frame": 1
+    "duration_seconds": 15.0,
+    "jpeg_quality": 72,
+    "encoder_queue_size": 64,
+    "max_memory_mb": 1024,
+    "store_every_nth_frame": 2
   },
   "attempts": {
     "pre_seconds": 30.0,
@@ -33,6 +34,9 @@
     "cache_directory": "cache",
     "temp_codec": "mp4v",
     "auto_select_new": true
+  },
+  "athlete_timer": {
+    "duration_seconds": 60
   },
   "competition": {
     "enabled": true,
@@ -45,10 +49,12 @@
     "boys_competitors": 8,
     "girls_competitors": 8,
     "default_attempts_per_competitor": 3,
-    "attempts_overrides": {},
+    "attempts_overrides": {
+      "Girls:5": 1
+    },
     "active_group": "Boys",
     "current_competitor_by_group": {
-      "Boys": 4,
+      "Boys": 3,
       "Girls": 1
     },
     "auto_advance_after_decision": false,
@@ -57,12 +63,12 @@
     "auto_return_delay_seconds": 1.5,
     "show_competitor_selector": true,
     "show_competition_board": true,
-    "show_state_banner": false,
+    "show_state_banner": true,
     "next_athlete_overlay": false,
     "final_round_enabled": false,
     "finalists_count": 8,
     "final_attempts": 3,
-    "final_order": "reverse",
+    "final_order": "same",
     "finalist_numbers_by_group": {
       "Boys": [],
       "Girls": []
@@ -78,10 +84,10 @@
     "operator_mode_enabled": false,
     "camera_diagnostic_enabled": false,
     "wizard_button_visible": true,
-    "clear_temp_on_new_competition": false
+    "clear_temp_on_new_competition": true
   },
   "display": {
-    "refresh_hz": 60,
+    "refresh_hz": 20,
     "fullscreen": false,
     "theme": "dark",
     "layout": "replay_pip",
@@ -92,34 +98,35 @@
     "show_decision_controls": true,
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
-    "attempts_panel_width": 518,
-    "timeline_height": 138,
+    "attempts_panel_width": 820,
+    "timeline_height": 176,
     "guide_enabled": true,
-    "guide_x_ratio": 0.5460069444444444,
-    "guide_y_ratio": 0.4398148148148148,
-    "guide_angle_deg": 7.594643368591445,
-    "guide_width_px": 2,
+    "guide_x_ratio": 0.6553308823529411,
+    "guide_y_ratio": 0.886437908496732,
+    "guide_angle_deg": 6.458816378718656,
+    "guide_width_px": 10,
     "board_roi_enabled": true,
-    "board_roi_x": 0.49843749999999964,
-    "board_roi_y": 0.45648148148148204,
+    "board_roi_x": 0.38590990954392834,
+    "board_roi_y": 0.265459939205008,
     "board_roi_width": 0.23767361111111163,
     "board_roi_height": 0.43703703703703634,
     "board_roi_visible": false,
     "comparison_enabled": true,
     "comparison_offset_frames": 1,
     "remember_geometry": true,
-    "window_geometry": "1920x1009+26+26"
+    "window_maximized": true,
+    "window_geometry": "1920x1009+-14+0"
   },
   "performance": {
-    "preset": "balanced",
-    "preview_refresh_hz": 60,
+    "preset": "quiet",
+    "preview_refresh_hz": 20,
     "timeline_refresh_hz": 30,
-    "status_refresh_hz": 4,
-    "attempts_refresh_hz": 3,
-    "preview_scale": 1.0,
+    "status_refresh_hz": 2,
+    "attempts_refresh_hz": 1,
+    "preview_scale": 0.65,
     "pause_hidden_panels": true,
     "reduce_when_minimized": true,
-    "adaptive_enabled": false,
+    "adaptive_enabled": true,
     "menu_throttle_enabled": true
   },
   "timeline": {
@@ -133,12 +140,12 @@
     "enabled": true,
     "auto_seek_after_freeze": true,
     "quick_review_enabled": true,
-    "quick_review_speed": 0.25,
+    "quick_review_speed": 0.15,
     "analysis_seconds_before_freeze": 2.5,
     "analysis_seconds_after_freeze": 0.25,
     "seek_lead_frames": 0,
     "minimum_confidence": 0.18,
-    "downscale_width": 240
+    "downscale_width": 128
   },
   "export": {
     "directory": "exports",
@@ -177,7 +184,8 @@
       "reset_view": "r",
       "toggle_guide": "g",
       "toggle_comparison": "c",
-      "start_competition_wizard": "Control-n"
+      "start_competition_wizard": "Control-n",
+      "timer_toggle": "Alt-BackSpace"
     }
   },
   "shuttle": {

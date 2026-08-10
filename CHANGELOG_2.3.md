@@ -1,5 +1,38 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Usability and operator guidance
+
+- Fixed cross-platform scrolling in Settings and the Competition Board, including themed scrollbar hover/pressed states.
+- Added right-click editing for every listed application hotkey, with duplicate-binding protection and restore-default actions.
+- Added a plain-language Settings glossary for Buffer, ROI, FPS, Codec, HID, and JPEG quality.
+- Added a persisted first-run guided tutorial with a Settings action to show it again.
+- Added a restart confirmation after applying camera/live-buffer changes; the relaunch preserves script or frozen-executable arguments. Wired the board guide-line width through preview, calibration, and evidence rendering.
+- Added a camera Help button when no live frame is available, with plain-language checks for source type, camera index, permissions, competing apps, capture mode, and diagnostics.
+- Added a branded startup preparation window and bounded indeterminate progress feedback while starting/resuming/stopping the camera system.
+- Refined the startup splash with the original long-jump hero photograph, stronger two-tone product header, startup state badge, and the restored `© 2026 · Developed by Tomáš Pisár` footer credit.
+- Added `--splash-preview` so the splash can be inspected without starting the camera or judge station.
+- Replaced the indeterminate splash bar with a themed 0–100% startup sequence, staged at 80% while the application initializes, and added a live action-status strip beneath it.
+- Added a visible centered geometry reveal and contraction to the startup splash and its standalone preview, avoiding unreliable platform alpha transitions.
+- Unified Freeze and Live into one larger primary toggle; frame stepping now enables only for a frozen attempt, disabled controls share the faded theme treatment, and Board Setup has its own matching control group. The system pause button and mode badge now use the same width.
+
+## Judge controls and timer settings
+
+- Replaced rounded button artwork with compact square ttk controls and grouped frame-review/verdict actions at equal widths; Board setup remains on the right.
+- Verdict controls now grey out when no frozen attempt is being judged.
+- Improved Competition Board wheel scrolling and added status-bar progress feedback for exports, clearing, and camera pause.
+- Moved athlete-timer duration into its own translated settings category.
+
+## Reliability telemetry and staged native migration
+
+- Added bounded JSON-lines runtime logging for application lifecycle, camera recovery, Freeze/Live, decision changes, system pause, shutdown timing, worker failures, and fatal startup failures.
+- Added UI tick average, p95, maximum, stall count, and uptime to Diagnostics without placing telemetry in attempts, evidence, or exports.
+- Added a repeatable synthetic soak command with machine-readable FPS, queue, failure, buffer, and worker acceptance results.
+- Added a compiled .NET 10 WPF migration preview with isolated Core, Windows Video, Infrastructure, App, and Tests projects.
+- Implemented the native synthetic Live/Freeze/Replay vertical slice, continuous capture during review, bounded buffer retention, frame stepping, camera pause/resume, existing-config reading, and bounded shutdown.
+- Added selectable Windows Media Foundation capture with friendly-name device enumeration, CPU BGRA delivery, monotonic timestamps, real-time latest-frame acquisition, bounded release, and synthetic fallback after an open failure; physical hardware validation remains gated.
+- Added a self-contained Windows x64 native-preview build command so the preview output does not require a separately installed .NET runtime.
+- Kept physical camera/event operation on the verified Python application until Media Foundation capture and full workflow parity pass the documented gates.
+
 ## Camera source startup
 
 - Kept Camera as the normal-launch and new-configuration default, and made the `--synthetic` test flag transient so it cannot overwrite the saved source selection.
