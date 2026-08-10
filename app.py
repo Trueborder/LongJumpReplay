@@ -9,7 +9,7 @@ import threading
 import time
 import traceback
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 from PIL import Image, ImageTk
 
@@ -21,6 +21,7 @@ from src.models import AttemptState
 from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_path
 from src.ring_buffer import TimeRingBuffer
 from src.runtime_diagnostics import configure_runtime_logging, log_event
+from src.theme import ThemeManager, show_themed_info
 
 
 def parse_args() -> argparse.Namespace:
@@ -110,7 +111,8 @@ def run_self_test(config_path: Path, report_path: str | Path | None = None) -> i
 def _show_fatal(message: str) -> None:
     try:
         root = tk.Tk(); root.withdraw()
-        messagebox.showerror("Long Jump Replay", message)
+        ThemeManager(root).apply("dark")
+        show_themed_info(root, "Long Jump Replay", message)
         root.destroy()
     except Exception:
         try:
@@ -124,40 +126,19 @@ def _runtime_asset_path(relative: str) -> Path:
 
 
 def _animate_splash_window(root: tk.Tk, splash: tk.Toplevel, width: int, height: int, opening: bool, duration_ms: int | None = None) -> None:
-    """Reveal or close the splash by smoothly resizing its centered window."""
+    """Keep the compatibility hook, but show and hide the splash instantly."""
     screen_w, screen_h = splash.winfo_screenwidth(), splash.winfo_screenheight()
-    started = time.perf_counter()
-    duration = max(1, duration_ms if duration_ms is not None else (420 if opening else 300)) / 1000.0
-    if opening:
-        # Start from a clearly compact, centered panel.  Setting this geometry
-        # before deiconifying guarantees the first frame is painted on Windows;
-        # alpha fades can otherwise be skipped by the window manager.
-        initial_width = max(1, round(width * 0.48))
-        initial_height = max(1, round(height * 0.38))
-        initial_x = max(0, (screen_w - initial_width) // 2)
-        initial_y = max(0, (screen_h - initial_height) // 2)
-        splash.geometry(f"{initial_width}x{initial_height}+{initial_x}+{initial_y}")
-        splash.update_idletasks()
-        splash.deiconify()
-        splash.update()
-    while True:
-        fraction = min(1.0, (time.perf_counter() - started) / duration)
-        eased = 1.0 - (1.0 - fraction) ** 3 if opening else fraction ** 3
-        scale = eased if opening else 1.0 - eased
-        current_width = max(1, round(width * ((0.48 if opening else 0.0) + (0.52 if opening else 1.0) * scale)))
-        current_height = max(1, round(height * ((0.38 if opening else 0.0) + (0.62 if opening else 1.0) * scale)))
-        x = max(0, (screen_w - current_width) // 2)
-        y = max(0, (screen_h - current_height) // 2)
-        try:
-            splash.geometry(f"{current_width}x{current_height}+{x}+{y}")
-            splash.update()
-        except tk.TclError:
-            return
-        if fraction >= 1.0:
-            if not opening:
-                splash.withdraw()
-            return
-        time.sleep(0.016)
+    x = max(0, (screen_w - width) // 2)
+    y = max(0, (screen_h - height) // 2)
+    try:
+        splash.geometry(f"{width}x{height}+{x}+{y}")
+        if opening:
+            splash.deiconify()
+            splash.update_idletasks()
+        else:
+            splash.withdraw()
+    except tk.TclError:
+        return
 
 
 def _startup_splash(root: tk.Tk, language: str = "en") -> tuple[tk.Toplevel, tk.Label, ttk.Progressbar, tk.Label]:

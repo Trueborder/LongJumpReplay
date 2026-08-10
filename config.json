@@ -54,7 +54,7 @@
     },
     "active_group": "Boys",
     "current_competitor_by_group": {
-      "Boys": 3,
+      "Boys": 8,
       "Girls": 1
     },
     "auto_advance_after_decision": false,
@@ -89,7 +89,7 @@
   "display": {
     "refresh_hz": 20,
     "fullscreen": false,
-    "theme": "dark",
+    "theme": "system",
     "layout": "replay_pip",
     "show_attempts_panel": true,
     "show_timeline": true,
@@ -98,7 +98,7 @@
     "show_decision_controls": true,
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
-    "attempts_panel_width": 820,
+    "attempts_panel_width": 514,
     "timeline_height": 176,
     "guide_enabled": true,
     "guide_x_ratio": 0.6553308823529411,
@@ -110,7 +110,7 @@
     "board_roi_y": 0.265459939205008,
     "board_roi_width": 0.23767361111111163,
     "board_roi_height": 0.43703703703703634,
-    "board_roi_visible": false,
+    "board_roi_visible": true,
     "comparison_enabled": true,
     "comparison_offset_frames": 1,
     "remember_geometry": true,

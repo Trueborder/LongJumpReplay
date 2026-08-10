@@ -169,3 +169,16 @@
 - Options: clear everything, clear only the live buffer, or clear unresolved recordings.
 - Exported MP4 files and evidence images remain untouched.
 - Competition package export creates a ZIP with CSV, JSON configuration, temporary recordings, metadata, and evidence files.
+## UI polish — 2026-08-10
+
+- Grouped Export, Delete, and Clear all temporary recordings into one equal-width muted action row.
+- Removed numeric guide/ROI position fields from Settings; calibration is performed directly on the main video.
+- Reworked Performance profile selection and clarified the evidence-quality boundary.
+- Themed application-owned dialogs and confirmations for dark mode.
+- Moved Hotkey Defaults above the table and removed Change/Clear toolbar buttons.
+- Removed startup splash resize animations.
+- Made recordings actions state-aware and reset the Competition Board to athlete 1 / attempt 1 after clearing all temporary recordings.
+- Fixed Settings text layout: the glossary now uses responsive two-column term cards, and all explanatory text wraps to the space available in the current window instead of being cut off.
+- Fixed Settings Value-column list controls overflowing on narrow pages; selectors now stay within the available column while retaining their full dropdown options.
+- Made Export/Delete follow the exact capture selected in the Competition Board; selecting an empty cell fades and disables both actions instead of retaining the previous replay target.
+- Made Settings and Competition Wizard dropdowns use normal rectangular native list styling, and reduced Settings Value-column field widths so controls stay on-screen.

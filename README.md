@@ -1,5 +1,44 @@
 # Long Jump Replay 2.3
 
+## Quick operator guide
+
+Long Jump Replay is a live-review station for long-jump take-off decisions. It keeps capture running continuously, stores a rolling live buffer, and lets an operator freeze an attempt without interrupting the camera.
+
+### The judging loop
+
+1. Watch the live preview and press **Space** or **Freeze**.
+2. Review the pinned attempt with **Left/Right**, the timeline, or ShuttleXpress.
+3. Optionally choose **Valid**, **Foul**, **Review**, or leave it **Not decided**.
+4. Press **Space** again to return to Live. The next athlete can continue by default even when no verdict was entered.
+
+The **Export**, **Delete**, and **Clear all temporary recordings** actions sit together below the recordings list. They affect temporary/cache data only; exported MP4 files and evidence images are preserved.
+
+### Settings that belong on the main video
+
+Settings is organised by task and explains terms such as **Buffer** (recent camera frames kept in RAM), **ROI** (the image area analysed for take-off motion), **FPS** (frames per second), **Codec** (the video storage format), and **HID** (direct USB-controller communication).
+
+Use **View → Board calibration** for visual calibration: drag the line centre to move it, drag the yellow handle to rotate it, and Shift-drag the ROI. Position and size fields are not duplicated in Settings because the video is the reliable place to calibrate them. Line visibility, ROI visibility, and line width remain available in Settings.
+
+### Performance profiles
+
+Choose a profile on Settings → Performance:
+
+- **Quiet** reduces preview work for older or quieter machines.
+- **Balanced** is the recommended starting point.
+- **High** keeps the interface more fluid on powerful machines.
+- **Evidence focus** gives board/analysis work more headroom.
+- **Custom** leaves the individual controls under operator control.
+
+Selecting a profile fills the controls below it; **Apply** saves the selected values. These profiles change presentation and analysis workload, not camera FPS or evidence quality. **Older PC mode** is separate and explicit: it retains every second source frame, shortens the live buffer, and is intended only when the operator accepts that trade-off.
+
+### Dark mode and popups
+
+All application-owned dialogs, confirmations, menus, and combobox popups follow the selected light/dark theme. If a dialog is opened during a theme change, close and reopen it to refresh its title and content labels.
+
+### Hotkeys
+
+Settings → Hotkeys puts **Defaults** at the top. Double-click a row to change one shortcut; right-click a row to restore that row. Space always controls Freeze/Live, even when another button has focus.
+
 ## Reliability instrumentation and native migration preview
 
 The production application remains the verified Python 3.12/Tkinter/OpenCV build. It now writes a bounded structured runtime log to `LongJumpReplay-runtime.jsonl` beside the active configuration and shows UI tick average, p95, maximum, stall count, and uptime in Help > Diagnostics. Camera start/open/reconnect/stop, Freeze, decision, Live, system pause, shutdown, worker exceptions, and fatal startup failures are recorded without adding data to attempt metadata or evidence.

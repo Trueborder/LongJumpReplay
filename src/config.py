@@ -187,6 +187,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
         "pause_hidden_panels": True,
         "reduce_when_minimized": True,
         "adaptive_enabled": True,
+        "menu_throttle_enabled": True,
         "assist_width": 128,
     },
     "balanced": {
@@ -198,6 +199,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
         "pause_hidden_panels": True,
         "reduce_when_minimized": True,
         "adaptive_enabled": False,
+        "menu_throttle_enabled": True,
         "assist_width": 240,
     },
     "high": {
@@ -209,6 +211,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
         "pause_hidden_panels": True,
         "reduce_when_minimized": True,
         "adaptive_enabled": False,
+        "menu_throttle_enabled": True,
         "assist_width": 360,
     },
     "evidence": {
@@ -220,6 +223,7 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
         "pause_hidden_panels": True,
         "reduce_when_minimized": True,
         "adaptive_enabled": False,
+        "menu_throttle_enabled": True,
         "assist_width": 480,
     },
 }
@@ -443,7 +447,7 @@ def apply_performance_preset(config: AppConfig, preset: str) -> None:
     values = PERFORMANCE_PRESETS[preset]
     p = config.performance
     p.preset = preset
-    for key in ("preview_refresh_hz", "timeline_refresh_hz", "status_refresh_hz", "attempts_refresh_hz", "preview_scale", "pause_hidden_panels", "reduce_when_minimized", "adaptive_enabled"):
+    for key in ("preview_refresh_hz", "timeline_refresh_hz", "status_refresh_hz", "attempts_refresh_hz", "preview_scale", "pause_hidden_panels", "reduce_when_minimized", "adaptive_enabled", "menu_throttle_enabled"):
         setattr(p, key, values[key])
     config.display.refresh_hz = p.preview_refresh_hz
     # Performance presets reduce presentation/analysis workload. They do not

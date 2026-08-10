@@ -17,7 +17,7 @@ from queue import Empty, Queue
 from threading import Thread
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 import cv2
 import numpy as np
@@ -40,7 +40,7 @@ from .runtime_diagnostics import RuntimeTelemetry, log_event
 from .settings_dialog import SettingsDialog
 from .shuttle_hid import ShuttleHIDPoller, list_shuttle_devices
 from .takeoff_assist import detect_takeoff_candidate
-from .theme import ThemeManager
+from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed_info
 from .timeline import ProfessionalTimeline
 from .video_canvas import VideoCanvas
 
@@ -117,6 +117,9 @@ class MainWindow:
         self._camera_help_dialog: tk.Toplevel | None = None
         self._busy_depth = 0
         self._busy_message = ""
+        # Export/Delete follow the last explicit capture selection, not merely
+        # whichever attempt the replay controller still has open.
+        self._selected_action_attempt_id: int | None = None
         self._telemetry = RuntimeTelemetry()
         self._logger = logging.getLogger("long_jump_replay")
 
@@ -261,7 +264,7 @@ class MainWindow:
         if self.config.competition.camera_diagnostic_enabled:
             self.help_menu.add_command(label="Camera diagnostic", command=self.open_camera_diagnostic)
         self.help_menu.add_separator()
-        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: messagebox.showinfo(self._t("menu.about"), "Long Jump Replay 2.3\nLive video review for long-jump take-off decisions."))
+        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 2.3\nLive video review for long-jump take-off decisions."))
         self._style_all_menus()
 
     def _style_all_menus(self) -> None:
@@ -482,12 +485,16 @@ class MainWindow:
         footer = ttk.Frame(frame, style="Panel.TFrame")
         footer.pack(fill="x", pady=(6, 0))
         row = ttk.Frame(footer, style="Panel.TFrame"); row.pack(fill="x")
-        self.export_button = ttk.Button(row, text=self._t("attempts.export"), command=self.export_current_attempt, style="Control.TButton")
-        self.export_button.pack(side="left", fill="x", expand=True)
-        self.delete_button = ttk.Button(row, text=self._t("attempts.delete"), command=self.delete_current_attempt, style="Control.TButton")
-        self.delete_button.pack(side="left", fill="x", expand=True, padx=(5, 0))
-        self.clear_button = ttk.Button(footer, text=self._t("attempts.clear"), command=self.clear_all_recordings, style="Danger.TButton")
-        self.clear_button.pack(fill="x", pady=(5, 0))
+        for column in range(3):
+            row.columnconfigure(column, weight=1, uniform="attempt-actions")
+        self.export_button = ttk.Button(row, text=self._t("attempts.export"), command=self.export_current_attempt, style="MutedAction.TButton")
+        self.export_button.grid(row=0, column=0, sticky="ew")
+        self.delete_button = ttk.Button(row, text=self._t("attempts.delete"), command=self.delete_current_attempt, style="MutedAction.TButton")
+        self.delete_button.grid(row=0, column=1, sticky="ew", padx=5)
+        self.clear_button = ttk.Button(row, text=self._t("attempts.clear"), command=self.clear_all_recordings, style="MutedAction.TButton")
+        self.clear_button.grid(row=0, column=2, sticky="ew")
+        for button in (self.export_button, self.delete_button, self.clear_button):
+            button.state(["disabled"])
         return frame
 
     # ------------------------------------------------------------ hotkeys/tick
@@ -896,6 +903,27 @@ class MainWindow:
         for button in (self.not_decided_button, self.valid_button, self.foul_button, self.review_button):
             button.state(state)
 
+        # Recordings actions follow the explicit selection in either the
+        # Recordings list or the Competition Board. Export and Delete are
+        # intentionally quiet until that target is a real attempt; Clear
+        # becomes a red action only when temporary attempts exist.
+        selected_attempt = (
+            self._selected_action_attempt_id is not None
+            and self.attempts.get_attempt(self._selected_action_attempt_id) is not None
+        )
+        action_state = ["!disabled"] if selected_attempt else ["disabled"]
+        for button in (self.export_button, self.delete_button):
+            button.state(action_state)
+        attempt_style = "Control.TButton" if selected_attempt else "MutedAction.TButton"
+        for button in (self.export_button, self.delete_button):
+            if button.cget("style") != attempt_style:
+                button.configure(style=attempt_style)
+        has_temporary_recordings = bool(self.attempts.attempts())
+        self.clear_button.state(["!disabled"] if has_temporary_recordings else ["disabled"])
+        clear_style = "Danger.TButton" if has_temporary_recordings else "MutedAction.TButton"
+        if self.clear_button.cget("style") != clear_style:
+            self.clear_button.configure(style=clear_style)
+
     def toggle_system_pause(self) -> None:
         if self._system_pause_transition:
             return
@@ -1055,19 +1083,26 @@ class MainWindow:
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
 
     def _select_cell_from_board(self, athlete: int, attempt_no: int) -> None:
+        # An empty cell is a new target, not the previously opened recording.
+        self._selected_action_attempt_id = None
         self._board_next_assignment = None
         group = self.competition.current_group()
         assignment = self.competition.select_attempt_cell(group, athlete, attempt_no)
         if assignment is None:
             try: self.competition.set_current(group, athlete)
-            except ValueError: return
+            except ValueError:
+                self._update_judging_controls()
+                return
         self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._last_board_signature = None; self._refresh_competitor_selector(); self._save_config_safely()
+        self._update_judging_controls()
 
     def _open_attempt_from_board(self, attempt_id: int) -> None:
         self._cancel_scheduled_review()
         if self.playback.select_attempt(attempt_id):
+            self._selected_action_attempt_id = attempt_id
             self._last_replay_key = None; self.timeline.detail_center_ns = None; self._refresh_attempts()
+            self._update_judging_controls()
 
     def _mark_attempt_from_board(self, attempt_id: int, decision: AttemptDecision) -> None:
         if not self.attempts.set_decision(attempt_id, decision):
@@ -1098,8 +1133,8 @@ class MainWindow:
         self._refresh_attempts(); self._refresh_current_try()
 
     def _delete_attempt_from_board(self, attempt_id: int) -> None:
-        if self.config.general.confirm_destructive_actions and not messagebox.askyesno(
-            self._t("dialog.delete.title"), self._t("dialog.delete.text", attempt=attempt_id), parent=self.root,
+        if self.config.general.confirm_destructive_actions and not ask_themed_yes_no(
+            self.root, self._t("dialog.delete.title"), self._t("dialog.delete.text", attempt=attempt_id),
         ):
             return
         if self.playback.attempt_id == attempt_id:
@@ -1258,6 +1293,7 @@ class MainWindow:
             if attempt_id is None:
                 log_event(self._logger, "freeze_failed", reason="live_buffer_empty")
                 self._show_message("The live buffer does not contain a frame yet.", 4); return
+            self._selected_action_attempt_id = attempt_id
             log_event(
                 self._logger, "freeze_succeeded", attempt_id=attempt_id,
                 competitor_number=assignment.competitor_number if assignment else 0,
@@ -1300,6 +1336,7 @@ class MainWindow:
         if complete_rotation and not self._complete_current_attempt_for_rotation():
             return False
         self.playback.go_live(); self._last_replay_key = None; self.timeline.detail_center_ns = None
+        self._selected_action_attempt_id = None
         self._board_next_assignment = None; self.competition_board.clear_focus(); self._last_board_signature = None
         if returning_from_replay:
             self.athlete_timer.reset(); self._update_athlete_timer_display()
@@ -1322,6 +1359,7 @@ class MainWindow:
     def select_relative_attempt(self, delta: int) -> None:
         self._cancel_scheduled_review()
         if self.playback.select_relative_attempt(delta):
+            self._selected_action_attempt_id = self.playback.attempt_id
             self._last_replay_key = None; self.timeline.detail_center_ns = None; self._refresh_attempts()
             attempt = self.attempts.get_attempt(self.playback.attempt_id or -1)
             if attempt:
@@ -1412,7 +1450,7 @@ class MainWindow:
         return False
 
     def _open_finalist_selector(self, group: str) -> None:
-        dialog = tk.Toplevel(self.root); dialog.title("Select finalists"); dialog.geometry("430x560"); dialog.transient(self.root); dialog.grab_set()
+        dialog = tk.Toplevel(self.root); configure_popup(dialog, self.root); dialog.title("Select finalists"); dialog.geometry("430x560"); dialog.transient(self.root); dialog.grab_set()
         ttk.Label(dialog, text=f"Select up to {self.config.competition.finalists_count} {group} finalists", style="Title.TLabel").pack(anchor="w", padx=14, pady=(14, 6))
         ttk.Label(dialog, text="This replay tool does not measure distance, so qualification order is selected manually.", style="Muted.TLabel", wraplength=390, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
         host = ttk.Frame(dialog, style="Panel.TFrame"); host.pack(fill="both", expand=True, padx=14)
@@ -1439,9 +1477,9 @@ class MainWindow:
         def apply_selection() -> None:
             selected = [n for n, var in vars_.items() if var.get()]
             if not selected:
-                messagebox.showerror("Select finalists", "Select at least one athlete.", parent=dialog); return
+                show_themed_info(dialog, "Select finalists", "Select at least one athlete."); return
             if len(selected) > self.config.competition.finalists_count:
-                messagebox.showerror("Select finalists", f"Select no more than {self.config.competition.finalists_count} athletes.", parent=dialog); return
+                show_themed_info(dialog, "Select finalists", f"Select no more than {self.config.competition.finalists_count} athletes."); return
             self.competition.set_finalists(group, selected); dialog.destroy()
         ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right")
         ttk.Button(footer, text="Use selected athletes", style="Accent.TButton", command=apply_selection).pack(side="right", padx=(0, 7))
@@ -1459,7 +1497,7 @@ class MainWindow:
             prefix = f"attempt_{self.playback.attempt_id:02d}" if self.playback.attempt_id else "live"
             path = save_bgr_png(self._displayed_bgr, self._exports_directory(), prefix=prefix)
             self._show_message(f"Frame saved: {path.name}", 6)
-        except Exception as exc: messagebox.showerror("Save frame", str(exc))
+        except Exception as exc: show_themed_info(self.root, "Save frame", str(exc))
 
     def _save_evidence(self, attempt: AttemptSession, decision: AttemptDecision) -> None:
         frame = self._displayed_bgr
@@ -1505,26 +1543,29 @@ class MainWindow:
         cv2.putText(frame, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), (25, 70), cv2.FONT_HERSHEY_SIMPLEX, .52, (190, 200, 215), 1, cv2.LINE_AA)
 
     def export_current_attempt(self) -> None:
-        if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
+        attempt_id = self._selected_action_attempt_id
+        if attempt_id is None or self.attempts.get_attempt(attempt_id) is None:
             self._show_message("Select or freeze an attempt before exporting.", 5); return
-        if self.attempts.request_export(self.playback.attempt_id, self._exports_directory()):
+        if self.attempts.request_export(attempt_id, self._exports_directory()):
             self._begin_busy(self._t("status.exporting"))
-            self._show_message(f"Export requested for attempt #{self.playback.attempt_id:02d}.", 4)
+            self._show_message(f"Export requested for attempt #{attempt_id:02d}.", 4)
         else: self._show_message("The attempt is not ready for export.", 5)
 
     def delete_current_attempt(self) -> None:
-        attempt_id = self.playback.attempt_id
+        attempt_id = self._selected_action_attempt_id
         if attempt_id is None: return
-        if not messagebox.askyesno("Delete attempt", f"Delete temporary attempt #{attempt_id:02d}?\nExported and evidence files are not removed."): return
+        if not ask_themed_yes_no(self.root, "Delete attempt", f"Delete temporary attempt #{attempt_id:02d}?\nExported and evidence files are not removed."): return
         self._cancel_scheduled_review()
         self._enter_live(complete_rotation=False)
         if not self.attempts.delete(attempt_id, force=True): self._show_message("This attempt cannot be deleted while it is being encoded or exported.", 5)
+        self._selected_action_attempt_id = None
         self._refresh_attempts()
 
     def _ask_clear_recordings_mode(self) -> str | None:
         if not self.config.general.confirm_destructive_actions:
             return "all"
         dialog = tk.Toplevel(self.root)
+        configure_popup(dialog, self.root)
         dialog.title(self._t("dialog.clear.title"))
         dialog.geometry("520x330")
         dialog.resizable(False, False)
@@ -1573,6 +1614,16 @@ class MainWindow:
         if mode == "all":
             count = self.attempts.clear_all()
             self.buffer.clear()
+            # Clearing a session starts the board rotation from its first
+            # editable cell, so an old clicked target cannot survive the wipe.
+            groups = self.competition.enabled_groups()
+            if groups:
+                group = self.competition.current_group()
+                if group not in groups:
+                    group = groups[0]
+                self.competition.set_current(group, 1)
+                self._board_next_assignment = None
+                self.competition_board.clear_focus()
         elif mode == "live":
             self.buffer.clear()
         elif mode == "unresolved":
@@ -1586,6 +1637,9 @@ class MainWindow:
         self._last_board_signature = None
         self._refresh_attempts()
         self._refresh_current_try()
+        if mode == "all" and self.competition.enabled_groups():
+            self._refresh_competition_board(self.attempts.attempts(), self.competition.assignment_for_current(self.attempts.attempts()))
+            self.competition_board.focus_cell((1, 1))
         if mode == "live":
             message = "Live buffer cleared. Capture continues." if self.config.general.language == "en" else "Živý buffer vymazán. Záznam pokračuje."
         elif mode == "unresolved":
@@ -1607,10 +1661,14 @@ class MainWindow:
         if not selected: return
         try: attempt_id = int(selected[0])
         except ValueError: return
-        if self.playback.attempt_id == attempt_id and self.playback.mode is PlaybackMode.ATTEMPT: return
+        self._selected_action_attempt_id = attempt_id
+        if self.playback.attempt_id == attempt_id and self.playback.mode is PlaybackMode.ATTEMPT:
+            self._update_judging_controls()
+            return
         self._cancel_scheduled_review()
         if self.playback.select_attempt(attempt_id):
             self._last_replay_key = None; self.timeline.detail_center_ns = None
+        self._update_judging_controls()
 
     # -------------------------------------------------------- Take-off Assist
     def _start_takeoff_analysis(self, attempt_id: int) -> None:
@@ -1732,6 +1790,7 @@ class MainWindow:
         if show_attempts and not self._attempts_pane_added:
             self.content_pane.add(self.attempts_panel, weight=1); self._attempts_pane_added = True
             self.root.after_idle(self._set_attempts_sash)
+            self.root.after(180, self._set_attempts_sash)
         elif not show_attempts and self._attempts_pane_added:
             self.content_pane.forget(self.attempts_panel); self._attempts_pane_added = False
         show_timeline = bool(self.var_show_timeline.get())
@@ -1758,7 +1817,9 @@ class MainWindow:
 
     def _set_attempts_sash(self) -> None:
         try:
-            total = self.content_pane.winfo_width(); self.content_pane.sashpos(0, max(400, total - self.config.display.attempts_panel_width))
+            # Keep enough judging workspace for the review canvas even when
+            # the recordings footer contains its full action labels.
+            total = self.content_pane.winfo_width(); self.content_pane.sashpos(0, max(450, total - self.config.display.attempts_panel_width))
         except tk.TclError: pass
 
     def _set_timeline_sash(self) -> None:
@@ -1814,9 +1875,10 @@ class MainWindow:
                 command = [sys.executable, str(Path(sys.argv[0]).resolve()), *sys.argv[1:]]
             subprocess.Popen(command, cwd=str(Path.cwd()))
         except OSError as exc:
-            messagebox.showerror(
+            show_themed_info(
+                self.root,
                 "Restart failed" if self.config.general.language == "en" else "Restart se nezdařil",
-                str(exc), parent=self.root,
+                str(exc),
             )
             return
         self.close()
@@ -1834,7 +1896,7 @@ class MainWindow:
             ("Judge and record", "Choose Valid, Foul, Review, or Not decided. The board keeps the athlete and attempt visible.", "Rozhodni a ulož", "Vyber Platný, Přešlap, Kontrola nebo Nerozhodnuto. Tabulka zachová závodníka a pokus."),
             ("Make it yours", "Settings contains hotkeys, camera, board calibration, and the tutorial can be opened again anytime.", "Nastav si aplikaci", "Nastavení obsahuje zkratky, kameru, kalibraci prkna a výukový program lze kdykoli spustit znovu."),
         ]
-        win = tk.Toplevel(self.root); self._onboarding_window = win
+        win = tk.Toplevel(self.root); configure_popup(win, self.root); self._onboarding_window = win
         win.title("Getting started" if lang == "en" else "Začínáme"); win.geometry("560x340"); win.resizable(False, False); win.transient(self.root); win.grab_set()
         body = ttk.Frame(win, style="App.TFrame", padding=26); body.pack(fill="both", expand=True)
         title = ttk.Label(body, style="SettingsHeroTitle.TLabel", font=("Segoe UI Semibold", 19)); title.pack(anchor="w")
@@ -1957,12 +2019,14 @@ class MainWindow:
         save_config(self._config_for_persistence(new_config), self.config_path)
         if camera_changed:
             language_is_en = new_config.general.language == "en"
-            restart = messagebox.askyesno(
+            restart = ask_themed_yes_no(
+                self.root,
                 "Restart required" if language_is_en else "Je nutný restart",
                 "Camera or live-buffer changes need a restart. Restart Long Jump Replay now?"
                 if language_is_en
                 else "Změny kamery nebo živého bufferu vyžadují restart. Restartovat Long Jump Replay nyní?",
-                parent=self.root,
+                yes="Restart" if language_is_en else "Restartovat",
+                no="Later" if language_is_en else "Později",
             )
             if restart:
                 self.restart_now()
@@ -2006,12 +2070,14 @@ class MainWindow:
         recovered = self.attempts.attempts()
         if not recovered or not self.config.competition.recovery_prompt_enabled:
             return
-        keep = messagebox.askyesno(
+        keep = ask_themed_yes_no(
+            self.root,
             "Restore previous session" if self.config.general.language == "en" else "Obnovit předchozí relaci",
             (f"Found {len(recovered)} temporary recording(s) from an earlier session. Keep and restore them?"
              if self.config.general.language == "en"
              else f"Bylo nalezeno {len(recovered)} dočasných záznamů z předchozí relace. Zachovat je a obnovit?"),
-            parent=self.root,
+            yes="Keep" if self.config.general.language == "en" else "Ponechat",
+            no="Clear" if self.config.general.language == "en" else "Vymazat",
         )
         if not keep:
             self._clear_recordings_mode("all", ask=False)
@@ -2084,6 +2150,7 @@ class MainWindow:
             self._camera_help_dialog.lift()
             return
         dialog = tk.Toplevel(self.root)
+        configure_popup(dialog, self.root)
         self._camera_help_dialog = dialog
         dialog.title(self._t("camera.help_title"))
         dialog.geometry("650x500")
@@ -2125,6 +2192,7 @@ class MainWindow:
 
     def open_camera_diagnostic(self) -> None:
         dialog = tk.Toplevel(self.root)
+        configure_popup(dialog, self.root)
         dialog.title("Camera diagnostic" if self.config.general.language == "en" else "Diagnostika kamery")
         dialog.geometry("600x430")
         dialog.minsize(520, 360)
@@ -2180,7 +2248,8 @@ class MainWindow:
         else: self._show_message(str(path), 8)
 
     def show_controls(self) -> None:
-        messagebox.showinfo(
+        show_themed_info(
+            self.root,
             "Controls",
             "Space: Freeze / return live\nHome: Return live\nLeft / Right: one frame\n"
             "Ctrl+Page Up / Ctrl+Page Down: previous / next attempt\nV: Valid\nF: Foul\nU: Review\n"
@@ -2193,7 +2262,8 @@ class MainWindow:
         c, b = self.capture.stats(), self.buffer.stats(); devices = list_shuttle_devices(self.config.shuttle)
         runtime = self._telemetry.snapshot(c, b)
         shuttle = "\n".join(f"{d.product} · VID {d.vendor_id:04X} PID {d.product_id:04X}" for d in devices) or "No direct-HID Shuttle detected"
-        messagebox.showinfo(
+        show_themed_info(
+            self.root,
             "Diagnostics",
             f"Source: {c.source_description}\nCapture FPS: {c.capture_fps:.2f}\nBuffered FPS: {c.encode_fps:.2f}\n"
             f"JPEG time: {c.average_encode_ms:.2f} ms\nQueue drops: {c.queue_drops}\n"

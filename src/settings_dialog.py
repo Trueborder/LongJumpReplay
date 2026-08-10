@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from collections.abc import Callable
 
 from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset
 from .camera_devices import enumerate_camera_devices
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
+from .theme import ask_themed_yes_no, ask_themed_yes_no_cancel, configure_popup, show_themed_info, style_popup_menu
 
 
 ACTION_LABELS = {
@@ -94,6 +95,7 @@ class SettingsDialog(tk.Toplevel):
         on_show_onboarding: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
+        configure_popup(self, parent)
         self.working = deepcopy(config)
         self.on_apply = on_apply
         self.on_camera_diagnostic = on_camera_diagnostic
@@ -323,7 +325,15 @@ class SettingsDialog(tk.Toplevel):
         hero.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 10))
         ttk.Label(hero, text=self._txt(title_en, title_cs), style="SettingsHeroTitle.TLabel").pack(anchor="w")
         if desc_en or desc_cs:
-            ttk.Label(hero, text=self._txt(desc_en, desc_cs), style="SettingsHeroDesc.TLabel", wraplength=780, justify="left").pack(anchor="w", pady=(5, 0))
+            hero_description = ttk.Label(
+                hero,
+                text=self._txt(desc_en, desc_cs),
+                style="SettingsHeroDesc.TLabel",
+                wraplength=640,
+                justify="left",
+            )
+            hero_description.pack(fill="x", anchor="w", pady=(5, 0))
+            self._bind_responsive_wrap(hero_description, minimum=260, maximum=760)
         columns = ttk.Frame(frame, style="SettingsGroup.TFrame", padding=(14, 5))
         columns.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 2))
         self._configure_row_columns(columns)
@@ -339,7 +349,7 @@ class SettingsDialog(tk.Toplevel):
     def _configure_row_columns(container: ttk.Frame) -> None:
         container.columnconfigure(0, minsize=220, weight=0)
         container.columnconfigure(1, minsize=300, weight=1)
-        container.columnconfigure(2, minsize=210, weight=0)
+        container.columnconfigure(2, minsize=160, weight=0)
 
     def _impact_text(self, impact: str) -> str:
         return self.tr(f"settings.impact.{impact}")
@@ -369,19 +379,40 @@ class SettingsDialog(tk.Toplevel):
         if kind == "check":
             widget: tk.Widget = ttk.Checkbutton(card, variable=var)
         elif kind == "combo":
-            widget = ttk.Combobox(card, textvariable=var, values=values, state="readonly", width=width)
+            # Keep long option lists from making the Value column wider than the page.
+            combo_width = max(12, min(16, int(width))) if width is not None else 14
+            widget = ttk.Combobox(card, textvariable=var, values=values, state="readonly", width=combo_width)
         elif kind == "spin":
-            widget = ttk.Spinbox(card, textvariable=var, from_=0, to=10000, increment=1, width=width)
+            value_width = width if width is not None else 10
+            widget = ttk.Spinbox(card, textvariable=var, from_=0, to=10000, increment=1, width=value_width)
         else:
-            widget = ttk.Entry(card, textvariable=var, width=width)
+            value_width = width if width is not None else 14
+            widget = ttk.Entry(card, textvariable=var, width=value_width)
         if not (desc_en or desc_cs):
-            desc_en = f"Sets {label_en.lower()}. Changes take effect after Apply."
-            desc_cs = f"Nastavuje volbu „{label_cs}“. Změna se projeví po stisku Použít."
-        description = ttk.Label(card, text=self._txt(desc_en, desc_cs), style="SettingsRowDesc.TLabel", wraplength=260, justify="left")
-        description.grid(row=0, column=1, sticky="nw", padx=(18, 18))
+            desc_en = f"Adjusts {label_en.lower()}."
+            desc_cs = f"Upravuje volbu „{label_cs}“."
+        description = ttk.Label(
+            card,
+            text=self._txt(desc_en, desc_cs),
+            style="SettingsRowDesc.TLabel",
+            wraplength=260,
+            justify="left",
+        )
+        description.grid(row=0, column=1, sticky="new", padx=(18, 18))
+        self._bind_responsive_wrap(description, minimum=180, maximum=520)
         widget.grid(row=0, column=2, sticky="w" if kind == "check" else "ew")
         self._setting_rows.append((card, widget, description))
         return widget
+
+    @staticmethod
+    def _bind_responsive_wrap(label: ttk.Label, minimum: int = 180, maximum: int = 760) -> None:
+        """Keep explanatory text inside the space assigned by the current page width."""
+        def resize(event: tk.Event) -> None:
+            width = max(minimum, min(maximum, int(getattr(event, "width", 0))))
+            if int(label.cget("wraplength") or 0) != width:
+                label.configure(wraplength=width)
+
+        label.bind("<Configure>", resize, add="+")
 
     def _update_description_visibility(self) -> None:
         visible = bool(self._vars.get("show_tooltips") and self._vars["show_tooltips"].get())
@@ -396,7 +427,8 @@ class SettingsDialog(tk.Toplevel):
     def _section(self, frame: ttk.Frame, row: int, title_en: str, title_cs: str) -> ttk.LabelFrame:
         box = ttk.LabelFrame(frame, text=self._txt(title_en, title_cs), padding=10, style="SettingsSection.TLabelframe")
         box.grid(row=row, column=0, columnspan=4, sticky="ew", pady=(10, 4))
-        box.columnconfigure(1, weight=1)
+        for column in range(5):
+            box.columnconfigure(column, weight=1)
         return box
 
     def _build_general(self, f: ttk.Frame) -> None:
@@ -416,10 +448,71 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Remember window and panel sizes", "Pamatovat velikost okna a panelů", self._vars["remember_geometry"], "check")
 
         glossary = self._section(f, r + 1, "Plain-language glossary", "Slovníček jednoduchými slovy")
-        ttk.Label(glossary, text=self._txt(
-            "Buffer: short rolling memory of recent camera frames. ROI: the selected area where take-off motion is analysed. FPS: frames per second. Codec: the format used to store video. HID: direct communication with a USB controller. JPEG quality: how much the live preview is compressed.",
-            "Buffer: krátká paměť posledních snímků z kamery. ROI: vybraná oblast, kde se analyzuje pohyb při odrazu. FPS: počet snímků za sekundu. Kodek: formát pro uložení videa. HID: přímá komunikace s USB ovladačem. Kvalita JPEG: míra komprese živého náhledu."
-        ), style="SettingsRowDesc.TLabel", wraplength=760, justify="left").grid(row=0, column=0, sticky="w")
+        glossary.columnconfigure(0, weight=1)
+        glossary.columnconfigure(1, weight=1)
+        glossary_terms = (
+            (
+                "Buffer",
+                "Paměť bufferu",
+                "Short rolling memory of recent camera frames.",
+                "Krátká paměť posledních snímků z kamery.",
+            ),
+            (
+                "ROI",
+                "ROI",
+                "The selected area where take-off motion is analysed.",
+                "Vybraná oblast, kde se analyzuje pohyb při odrazu.",
+            ),
+            (
+                "FPS",
+                "FPS",
+                "Frames per second: how many images are shown or recorded each second.",
+                "Snímky za sekundu: kolik obrázků se zobrazí nebo uloží za sekundu.",
+            ),
+            (
+                "Codec",
+                "Kodek",
+                "The format used to store and compress video.",
+                "Formát používaný pro uložení a kompresi videa.",
+            ),
+            (
+                "HID",
+                "HID",
+                "Direct communication with a USB controller such as ShuttleXpress.",
+                "Přímá komunikace s USB ovladačem, například ShuttleXpress.",
+            ),
+            (
+                "JPEG quality",
+                "Kvalita JPEG",
+                "How strongly the live preview is compressed. Higher values look clearer and use more space.",
+                "Míra komprese živého náhledu. Vyšší hodnota znamená lepší obraz a větší nároky na místo.",
+            ),
+        )
+        for index, (term_en, term_cs, definition_en, definition_cs) in enumerate(glossary_terms):
+            column = index % 2
+            item = ttk.Frame(glossary, style="SettingsRow.TFrame", padding=(10, 8))
+            item.grid(
+                row=index // 2,
+                column=column,
+                sticky="nsew",
+                padx=(0 if column == 0 else 6, 6 if column == 0 else 0),
+                pady=3,
+            )
+            item.columnconfigure(0, weight=1)
+            ttk.Label(
+                item,
+                text=self._txt(term_en, term_cs),
+                style="SettingsRowTitle.TLabel",
+            ).grid(row=0, column=0, sticky="w")
+            definition = ttk.Label(
+                item,
+                text=self._txt(definition_en, definition_cs),
+                style="SettingsRowDesc.TLabel",
+                wraplength=280,
+                justify="left",
+            )
+            definition.grid(row=1, column=0, sticky="ew", pady=(3, 0))
+            self._bind_responsive_wrap(definition, minimum=150, maximum=420)
         if self.on_show_onboarding:
             ttk.Button(f, text=self._txt("Show the tutorial again", "Znovu zobrazit výukový program"), command=self.on_show_onboarding).grid(row=r + 2, column=0, sticky="w", pady=(10, 0))
 
@@ -447,21 +540,41 @@ class SettingsDialog(tk.Toplevel):
             "jpeg_quality": tk.IntVar(value=self.working.buffer.jpeg_quality),
         })
         preset_box = self._section(f, r, "Performance preset", "Výkonový profil"); r += 1
-        ttk.Combobox(preset_box, textvariable=self._vars["performance_preset"], values=("quiet", "balanced", "high", "evidence", "custom"), state="readonly", width=22).grid(row=0, column=0, sticky="w")
-        ttk.Button(preset_box, text=self._txt("Load preset", "Načíst profil"), command=self._load_performance_preset).grid(row=0, column=1, padx=(8, 0), sticky="w")
-        ttk.Button(preset_box, text=self._txt("Older PC mode", "Režim pro slabší PC"), command=self._load_low_resource_mode).grid(row=0, column=2, padx=(8, 0), sticky="w")
+        performance_intro = ttk.Label(
+            preset_box,
+            text=self._txt("Choose a profile to fill the controls below. Apply saves the profile and its values; camera FPS, stored evidence, and export quality stay unchanged.", "Vyber profil, který vyplní níže uvedené volby. Použít uloží profil a jeho hodnoty; FPS kamery, uložený důkaz a kvalita exportu se nemění."),
+            style="SettingsRowDesc.TLabel", wraplength=640, justify="left",
+        )
+        performance_intro.grid(row=0, column=0, columnspan=5, sticky="ew", pady=(0, 9))
+        self._bind_responsive_wrap(performance_intro, minimum=220, maximum=760)
+        preset_names = {
+            "quiet": self._txt("Quiet", "Tichý"),
+            "balanced": self._txt("Balanced", "Vyvážený"),
+            "high": self._txt("High", "Výkonný"),
+            "evidence": self._txt("Evidence focus", "Důkazní detail"),
+            "custom": self._txt("Custom", "Vlastní"),
+        }
+        for column, value in enumerate(preset_names):
+            preset_box.columnconfigure(column, weight=1)
+            ttk.Button(
+                preset_box, text=preset_names[value], style="MutedAction.TButton",
+                command=lambda value=value: self._choose_performance_preset(value),
+            ).grid(row=1, column=column, sticky="ew", padx=(0 if column == 0 else 5, 0))
         self.preset_description = ttk.Label(preset_box, style="Muted.TLabel", wraplength=650, justify="left")
-        self.preset_description.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
-        ttk.Label(
+        self.preset_description.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(9, 0))
+        self._bind_responsive_wrap(self.preset_description, minimum=220, maximum=760)
+        performance_warning = ttk.Label(
             preset_box,
             text=self._txt(
                 "Older PC mode explicitly retains every second camera frame and needs an app restart.",
                 "Režim pro slabší PC výslovně ukládá každý druhý snímek kamery a vyžaduje restart aplikace.",
             ),
             style="Warning.TLabel",
-            wraplength=650,
+            wraplength=560,
             justify="left",
-        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        )
+        performance_warning.grid(row=3, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        self._bind_responsive_wrap(performance_warning, minimum=220, maximum=760)
         self._vars["performance_preset"].trace_add("write", lambda *_: self._update_preset_description())
         self._update_preset_description()
         self._row(f, r, "Live/replay preview refresh", "Obnovování náhledu videa", self._vars["preview_hz"], desc_en="Changes interface smoothness, not camera recording FPS.", desc_cs="Mění plynulost rozhraní, ne snímkovou frekvenci záznamu kamery.", impact="high"); r += 1
@@ -473,7 +586,11 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Reduce work when minimized", "Omezit zátěž při minimalizaci", self._vars["reduce_minimized"], "check", impact="high"); r += 1
         self._row(f, r, "Adaptive performance", "Adaptivní výkon", self._vars["adaptive"], "check", desc_en="Temporarily lowers preview refresh if the GUI or encoder queue falls behind.", desc_cs="Dočasně sníží obnovování náhledu, pokud se rozhraní nebo enkodér zpožďuje.", impact="medium"); r += 1
         self._row(f, r, "Throttle rendering while menus are open", "Omezit vykreslování při otevřeném menu", self._vars["menu_throttle"], "check", desc_en="Improves responsiveness of File/View/Help menus.", desc_cs="Zlepšuje odezvu nabídek Soubor/Zobrazení/Nápověda.", impact="medium"); r += 1
-        self._row(f, r, "Live buffer JPEG quality", "Kvalita JPEG v živém bufferu", self._vars["jpeg_quality"], desc_en="Higher values use more CPU and RAM. Exported evidence PNG remains lossless.", desc_cs="Vyšší hodnoty využijí více CPU a RAM. Důkazní PNG zůstává bezeztrátové.", impact="very_high")
+        self._row(f, r, "Live buffer JPEG quality", "Kvalita JPEG v živém bufferu", self._vars["jpeg_quality"], desc_en="This is only the compressed rolling preview copy. Higher values use more CPU and RAM; evidence PNG remains lossless.", desc_cs="Jde pouze o komprimovanou kopii průběžného náhledu. Vyšší hodnoty využijí více CPU a RAM; důkazní PNG zůstává bezeztrátové.", impact="very_high")
+
+    def _choose_performance_preset(self, preset: str) -> None:
+        self._vars["performance_preset"].set(preset)
+        self._load_performance_preset()
 
     def _update_preset_description(self) -> None:
         if not hasattr(self, "preset_description"):
@@ -484,7 +601,7 @@ class SettingsDialog(tk.Toplevel):
             "balanced": self._txt("Recommended default. Smooth controls without wasting CPU on invisible detail.", "Doporučené výchozí nastavení. Plynulé ovládání bez zbytečné spotřeby CPU."),
             "high": self._txt("Faster preview and seeking for powerful computers. Higher fan noise.", "Rychlejší náhled a posun pro výkonné počítače. Vyšší hluk ventilátoru."),
             "evidence": self._txt("Prioritises a full-resolution preview and higher-detail board analysis. Higher CPU use; buffer quality remains explicit.", "Upřednostňuje náhled v plném rozlišení a podrobnější analýzu prkna. Vyšší využití CPU; kvalita bufferu zůstává samostatnou volbou."),
-            "custom": self._txt("Use the individual values below.", "Použije jednotlivé hodnoty níže."),
+            "custom": self._txt("Manual values are active. Presets change display workload only; they do not alter camera capture or evidence quality.", "Jsou aktivní ruční hodnoty. Profily mění pouze zátěž zobrazení; nemění záznam kamery ani kvalitu důkazu."),
         }
         self.preset_description.configure(text=descriptions.get(preset, ""))
 
@@ -503,6 +620,7 @@ class SettingsDialog(tk.Toplevel):
         self._vars["pause_hidden"].set(p.pause_hidden_panels)
         self._vars["reduce_minimized"].set(p.reduce_when_minimized)
         self._vars["adaptive"].set(p.adaptive_enabled)
+        self._vars["menu_throttle"].set(p.menu_throttle_enabled)
         self._vars["jpeg_quality"].set(temp.buffer.jpeg_quality)
         if "assist_width" in self._vars:
             self._vars["assist_width"].set(temp.takeoff_assist.downscale_width)
@@ -561,27 +679,28 @@ class SettingsDialog(tk.Toplevel):
             ttk.Button(f, text=self._txt("Run camera diagnostic", "Spustit diagnostiku kamery"), command=self.on_camera_diagnostic).grid(row=r + 1, column=0, sticky="w", pady=(12, 0))
 
     def _build_board(self, f: ttk.Frame) -> None:
-        r = self._title(f, "Board calibration", "Kalibrace prkna", "The line can be moved and rotated. The ROI should cover only the take-off board and nearby shoe movement.", "Čáru lze posouvat a otáčet. ROI má pokrývat pouze odrazové prkno a blízký pohyb boty.")
+        r = self._title(f, "Board calibration", "Kalibrace prkna", "Calibrate the line and ROI directly on the main video. Numeric position fields are intentionally not duplicated here.", "Kalibraci čáry a ROI prováděj přímo v hlavním videu. Číselná pole pro polohu zde záměrně neopakujeme.")
         d = self.working.display
         values = {
-            "guide_enabled": tk.BooleanVar(value=d.guide_enabled), "guide_x": tk.DoubleVar(value=d.guide_x_ratio),
-            "guide_y": tk.DoubleVar(value=d.guide_y_ratio), "guide_angle": tk.DoubleVar(value=d.guide_angle_deg), "guide_width": tk.IntVar(value=d.guide_width_px),
+            "guide_enabled": tk.BooleanVar(value=d.guide_enabled), "guide_width": tk.IntVar(value=d.guide_width_px),
             "roi_enabled": tk.BooleanVar(value=d.board_roi_enabled), "roi_visible": tk.BooleanVar(value=d.board_roi_visible),
-            "roi_x": tk.DoubleVar(value=d.board_roi_x), "roi_y": tk.DoubleVar(value=d.board_roi_y),
-            "roi_w": tk.DoubleVar(value=d.board_roi_width), "roi_h": tk.DoubleVar(value=d.board_roi_height),
         }
         self._vars.update(values)
         self._row(f, r, "Show digital take-off line", "Zobrazit digitální čáru", values["guide_enabled"], "check", impact="low"); r += 1
-        self._row(f, r, "Line X position (0–1)", "Pozice čáry X (0–1)", values["guide_x"]); r += 1
-        self._row(f, r, "Line Y position (0–1)", "Pozice čáry Y (0–1)", values["guide_y"]); r += 1
-        self._row(f, r, "Line rotation (degrees)", "Natočení čáry (stupně)", values["guide_angle"]); r += 1
         self._row(f, r, "Line width", "Tloušťka čáry", values["guide_width"], impact="low"); r += 1
         self._row(f, r, "Enable board ROI", "Zapnout oblast prkna", values["roi_enabled"], "check", impact="low"); r += 1
         self._row(f, r, "Show ROI on main video", "Zobrazit ROI v hlavním videu", values["roi_visible"], "check", impact="low"); r += 1
-        self._row(f, r, "ROI X", "ROI X", values["roi_x"]); r += 1
-        self._row(f, r, "ROI Y", "ROI Y", values["roi_y"]); r += 1
-        self._row(f, r, "ROI width", "Šířka ROI", values["roi_w"]); r += 1
-        self._row(f, r, "ROI height", "Výška ROI", values["roi_h"])
+        guide_box = self._section(f, r + 1, "Calibrate on the main video", "Kalibruj v hlavním videu")
+        calibration_help = ttk.Label(
+            guide_box,
+            text=self._txt(
+                "Open View → Board calibration. Drag the red line centre to move it, drag the yellow handle to rotate it, and Shift-drag to draw or resize the ROI. Ctrl + mouse wheel fine-rotates the line. The calibrated values are saved automatically when calibration mode closes.",
+                "Otevři Zobrazení → Kalibrace prkna. Tažením středu červené čáry ji posuň, žlutým úchytem ji otoč a tažením se Shiftem nakresli nebo uprav ROI. Ctrl + kolečko čáru jemně otočí. Hodnoty se automaticky uloží po zavření kalibrace.",
+            ),
+            style="SettingsRowDesc.TLabel", wraplength=640, justify="left",
+        )
+        calibration_help.grid(row=0, column=0, columnspan=5, sticky="ew")
+        self._bind_responsive_wrap(calibration_help, minimum=220, maximum=760)
 
     def _build_competition(self, f: ttk.Frame) -> None:
         r = self._title(f, "Competition", "Soutěž", "Turn competition management off for a clean judge-only replay screen.", "Vypnutím správy soutěže získáš čistou rozhodcovskou obrazovku bez kategorií a pořadníku.")
@@ -793,6 +912,10 @@ class SettingsDialog(tk.Toplevel):
         r = self._title(f, "Hotkeys", "Klávesové zkratky", "Shortcuts are captured before focused buttons, so Space always controls Freeze/Live.", "Zkratky se zachytávají před aktivními tlačítky, takže mezerník vždy ovládá Zmrazit/Živě.")
         self._vars["hotkeys_enabled"] = tk.BooleanVar(value=self.working.hotkeys.enabled)
         self._row(f, r, "Enable application hotkeys", "Zapnout klávesové zkratky", self._vars["hotkeys_enabled"], "check", impact="low"); r += 1
+        bar = ttk.Frame(f, style="Panel.TFrame"); bar.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(2, 7))
+        ttk.Button(bar, text=self._txt("Defaults", "Výchozí"), style="MutedAction.TButton", command=self._reset_hotkeys).pack(side="left")
+        ttk.Label(bar, text=self._txt("Double-click a row to change its shortcut. Right-click restores one row.", "Dvojklikem na řádek zkratku změníš. Pravé tlačítko obnoví jednu zkratku."), style="SettingsRowDesc.TLabel").pack(side="left", padx=(12, 0))
+        r += 1
         tree = ttk.Treeview(f, columns=("action", "key"), show="headings", height=14, selectmode="browse")
         tree.heading("action", text=self._txt("Action", "Akce")); tree.column("action", width=360)
         tree.heading("key", text=self._txt("Key", "Klávesa")); tree.column("key", width=160, anchor="center")
@@ -800,11 +923,8 @@ class SettingsDialog(tk.Toplevel):
         for action in ACTION_LABELS:
             tree.insert("", "end", iid=action, values=(self._action_label(action), self.working.hotkeys.bindings.get(action, "")))
         self.hotkey_tree = tree
+        tree.bind("<Double-1>", lambda _event: self._change_hotkey())
         tree.bind("<Button-3>", self._hotkey_context_menu)
-        bar = ttk.Frame(f, style="Panel.TFrame"); bar.grid(row=r, column=0, columnspan=3, sticky="w", pady=(7, 0))
-        ttk.Button(bar, text=self._txt("Change…", "Změnit…"), command=self._change_hotkey).pack(side="left")
-        ttk.Button(bar, text=self._txt("Clear", "Vymazat"), command=self._clear_hotkey).pack(side="left", padx=5)
-        ttk.Button(bar, text=self._txt("Defaults", "Výchozí"), command=self._reset_hotkeys).pack(side="left")
 
     def _hotkey_context_menu(self, event: tk.Event) -> str:
         if not self.hotkey_tree:
@@ -814,9 +934,8 @@ class SettingsDialog(tk.Toplevel):
             return "break"
         self.hotkey_tree.selection_set(row)
         menu = tk.Menu(self, tearoff=False)
-        menu.add_command(label=self._txt("Change…", "Změnit…"), command=self._change_hotkey)
-        menu.add_command(label=self._txt("Clear", "Vymazat"), command=self._clear_hotkey)
         menu.add_command(label=self._txt("Restore default", "Obnovit výchozí"), command=self._restore_selected_hotkey)
+        style_popup_menu(menu, self)
         menu.tk_popup(event.x_root, event.y_root)
         return "break"
 
@@ -866,14 +985,14 @@ class SettingsDialog(tk.Toplevel):
         if not self.hotkey_tree or not self.hotkey_tree.selection():
             return
         action = self.hotkey_tree.selection()[0]
-        prompt = tk.Toplevel(self); prompt.title(self._txt("Press a shortcut", "Stiskni zkratku")); prompt.geometry("380x140"); prompt.transient(self); prompt.grab_set()
+        prompt = tk.Toplevel(self); configure_popup(prompt, self); prompt.title(self._txt("Press a shortcut", "Stiskni zkratku")); prompt.geometry("380x140"); prompt.transient(self); prompt.grab_set()
         ttk.Label(prompt, text=self._txt(f"Press the new shortcut for\n{self._action_label(action)}", f"Stiskni novou zkratku pro\n{self._action_label(action)}"), justify="center").pack(expand=True)
         def captured(event):
             value = event_to_hotkey(event)
             if not value: return "break"
             for other, binding in self.working.hotkeys.bindings.items():
                 if other != action and binding.lower() == value.lower():
-                    messagebox.showerror(self._txt("Shortcut conflict", "Konflikt zkratek"), self._txt(f"{value} is already assigned to {self._action_label(other)}.", f"{value} je již přiřazeno akci {self._action_label(other)}."), parent=prompt)
+                    show_themed_info(prompt, self._txt("Shortcut conflict", "Konflikt zkratek"), self._txt(f"{value} is already assigned to {self._action_label(other)}.", f"{value} je již přiřazeno akci {self._action_label(other)}."))
                     return "break"
             self.working.hotkeys.bindings[action] = value
             self.hotkey_tree.set(action, "key", value)
@@ -924,10 +1043,8 @@ class SettingsDialog(tk.Toplevel):
         cam.source_type = str(self._vars["source"].get()); cam.device_index = int(self._vars["device"].get())
         cam.width = int(self._vars["width"].get()); cam.height = int(self._vars["height"].get()); cam.fps = float(self._vars["fps"].get())
         cam.backend = str(self._vars["backend"].get()); cam.fourcc = str(self._vars["fourcc"].get()); cam.reconnect_seconds = float(self._vars["reconnect"].get())
-        d.guide_enabled = bool(self._vars["guide_enabled"].get()); d.guide_x_ratio = float(self._vars["guide_x"].get())
-        d.guide_y_ratio = float(self._vars["guide_y"].get()); d.guide_angle_deg = float(self._vars["guide_angle"].get()); d.guide_width_px = int(self._vars["guide_width"].get())
+        d.guide_enabled = bool(self._vars["guide_enabled"].get()); d.guide_width_px = int(self._vars["guide_width"].get())
         d.board_roi_enabled = bool(self._vars["roi_enabled"].get()); d.board_roi_visible = bool(self._vars["roi_visible"].get())
-        d.board_roi_x = float(self._vars["roi_x"].get()); d.board_roi_y = float(self._vars["roi_y"].get()); d.board_roi_width = float(self._vars["roi_w"].get()); d.board_roi_height = float(self._vars["roi_h"].get())
         c = w.competition
         c.enabled = bool(self._vars["competition_enabled"].get()); c.show_competitor_selector = bool(self._vars["show_selector"].get()); c.show_competition_board = bool(self._vars["show_board"].get())
         c.show_state_banner = bool(self._vars["show_banner"].get()); c.next_athlete_overlay = bool(self._vars["next_overlay"].get()); c.operator_mode_enabled = bool(self._vars["operator_mode"].get())
@@ -968,10 +1085,10 @@ class SettingsDialog(tk.Toplevel):
             if close:
                 self.destroy()
         except Exception as exc:
-            messagebox.showerror(self._txt("Invalid settings", "Neplatné nastavení"), str(exc), parent=self)
+            show_themed_info(self, self._txt("Invalid settings", "Neplatné nastavení"), str(exc))
 
     def _restore_defaults(self) -> None:
-        if not messagebox.askyesno(self._txt("Restore defaults", "Obnovit výchozí"), self._txt("Apply all default settings now?", "Použít nyní všechna výchozí nastavení?"), parent=self):
+        if not ask_themed_yes_no(self, self._txt("Restore defaults", "Obnovit výchozí"), self._txt("Apply all default settings now?", "Použít nyní všechna výchozí nastavení?"), yes=self._txt("Restore", "Obnovit"), no=self._txt("Cancel", "Zrušit")):
             return
         defaults = AppConfig()
         defaults.general.language = self.working.general.language
@@ -980,7 +1097,7 @@ class SettingsDialog(tk.Toplevel):
 
     def _cancel(self) -> None:
         if self._dirty:
-            answer = messagebox.askyesnocancel(self._txt("Unsaved changes", "Neuložené změny"), self._txt("Apply changes before closing?", "Použít změny před zavřením?"), parent=self)
+            answer = ask_themed_yes_no_cancel(self, self._txt("Unsaved changes", "Neuložené změny"), self._txt("Apply changes before closing?", "Použít změny před zavřením?"), yes=self._txt("Apply", "Použít"), no=self._txt("Discard", "Zahodit"), cancel=self._txt("Cancel", "Zrušit"))
             if answer is None:
                 return
             if answer:

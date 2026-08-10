@@ -619,7 +619,7 @@ Highest-value future work, in rough order:
 
 ## 19. Recent UI workflow changes
 
-- Settings and Competition Board scrolling now handle Windows and Linux wheel/button events consistently, refresh scroll regions after content changes, and use themed scrollbar states. Settings Hotkeys rows expose a right-click menu for Change/Clear/Restore default with duplicate protection. A first-run guided tutorial is persisted in `general.onboarding_completed` and can be reopened from General settings. Applying camera/live-buffer changes asks whether to restart immediately; the relaunch preserves the script or frozen executable arguments. Board guide width is passed to all video canvases and evidence overlays instead of using a fixed preview width.
+- Settings and Competition Board scrolling now handle Windows and Linux wheel/button events consistently, refresh scroll regions after content changes, and use themed scrollbar states. Settings Hotkeys puts Defaults above the table; double-click changes a row and the right-click menu restores one default with duplicate protection. A first-run guided tutorial is persisted in `general.onboarding_completed` and can be reopened from General settings. Applying camera/live-buffer changes asks whether to restart immediately; the relaunch preserves the script or frozen executable arguments. Board guide width is passed to all video canvases and evidence overlays instead of using a fixed preview width.
 
 - Judge controls are grouped into frame review and judging categories. Frame, verdict, and Board setup buttons use equal widths and square native ttk rendering; Board setup stays on the right edge.
 - Verdict controls are greyed whenever there is no active frozen attempt to judge (including Live and system-paused states).
@@ -629,10 +629,11 @@ Highest-value future work, in rough order:
 - The splash uses the original `assets/long_jump_splash.png` hero image unchanged, with a high-contrast LONG JUMP / REPLAY header, startup badge, progress bar, and small `© 2026 · Developed by Tomáš Pisár` credit. PyInstaller build entry points include the image asset.
 - `py app.py --splash-preview` opens that splash by itself for visual review and exits when the user presses Escape; it does not start camera, shuttle, buffer, or attempt workers.
 - Normal startup runs a randomized 0.5–2.0 second preparation sequence from 0% to 80%, updates a themed action-status strip beneath the bar, initializes the application at 80%, then advances to 100% and removes the splash as the main window becomes ready.
-- Splash presentation uses a bounded centered geometry reveal on startup and a matching geometry contraction on close. This avoids relying on platform alpha/transparency support, which can make a Tk splash appear and disappear instantly on Windows.
+- Splash presentation uses a centered fixed geometry and appears/disappears immediately; there is no startup resize animation.
 - The main control dock has one larger Freeze/Live toggle. Frame review and judging buttons are enabled only for a frozen attempt and use the same disabled/faded treatment; Not decided uses a neutral pending style rather than black. Board Setup is a matching labeled group, and the system pause button/mode badge share a fixed width.
 - The athlete countdown duration is managed in a dedicated Athlete timer settings category with a Low performance-impact badge.
 - On the Competition Board, Up/Down may move between athlete rows; Left/Right are reserved for replay frame stepping after Freeze and never change the selected attempt column.
+- Export, Delete, and Clear all temporary recordings share one equal-width muted action row. Board calibration position/size fields are intentionally absent from Settings and are changed by dragging directly on the main video. All application-owned dialogs use the current ThemeManager palette.
 
 ## 20. Build entry points
 
@@ -652,3 +653,16 @@ A change is done only when:
 - documentation/config migration is updated;
 - `PROJECT.KNOWLEDGE.md` records the change;
 - claims clearly distinguish simulated tests from real Windows/hardware tests.
+
+## 22. UI consistency update (2026-08-10)
+
+- The recordings footer keeps Export, Delete, and Clear all temporary recordings in one equal-width, muted action row beside the recordings list.
+- Settings no longer edits guide/ROI positions or dimensions numerically. Those values remain owned by the visual Board calibration interaction in the main video; Settings keeps visibility and line-width controls plus plain-language guidance.
+- Performance profiles now have an explicit selection flow and explain that normal profiles change presentation/analysis workload without changing camera capture or evidence quality. Older PC mode remains the explicit frame-dropping trade-off.
+- Application-owned message and confirmation dialogs use shared themed ttk content, including dark-mode confirmations and diagnostics. Startup splash presentation is instantaneous on entry and exit.
+- Hotkey Settings places Defaults above the table; row editing is by double-click and per-row reset is available from the themed context menu.
+- Recordings-tab actions are state-aware: Export/Delete are muted and disabled without a selected capture; Clear all temporary recordings is red only when temporary attempts exist. Clearing all resets the competition board focus and current target to athlete 1, attempt 1.
+- Export/Delete now follow the explicit capture selected in either Recordings or Competition Board. Clicking an empty board cell clears that action target immediately, so an older replay cannot be exported or deleted accidentally.
+- Settings explanatory content is responsive: the plain-language glossary uses two columns of term cards, while hero, row, performance, and calibration descriptions wrap to their actual available width. Settings section columns now expand evenly so help text and controls remain inside the scrolled page at its minimum size.
+- Settings Value-column selectors use a bounded request width and a flexible grid column, so long camera, layout, and ShuttleXpress option lists do not push controls beyond the page edge.
+- Settings Value fields now use a compact fixed lane with smaller default Entry/Spinbox/Combobox requests. Settings and Competition Wizard dropdowns retain the themed colours but use normal rectangular native list and field rendering.

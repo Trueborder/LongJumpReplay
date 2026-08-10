@@ -18,7 +18,8 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     style = ttk.Style(dialog)
     assert "Modern" in str(style.layout("TCheckbutton"))
     assert "ModernDark.neutral.Button.background" not in str(style.layout("TButton"))
-    assert "ModernDark.Combo.field" in str(style.layout("TCombobox"))
+    assert "ModernDark.Combo.field" not in str(style.layout("TCombobox"))
+    assert "Combobox.downarrow" in str(style.layout("TCombobox"))
     assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 22
     assert int(style.lookup("TCombobox", "arrowsize")) == 15
     assert tuple(style.lookup("TCombobox", "padding")) == (9, 0)

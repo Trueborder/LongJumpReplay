@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox
 from types import SimpleNamespace
 
 from src.config import AppConfig, save_config
@@ -143,7 +142,7 @@ def test_deleting_undecided_attempt_in_strict_mode_leaves_consistent_live_state(
     config, path = _config(tmp_path)
     config.competition.require_decision_before_continue = True
     save_config(config, path)
-    monkeypatch.setattr(messagebox, "askyesno", lambda *args, **kwargs: True)
+    monkeypatch.setattr("src.main_window.ask_themed_yes_no", lambda *args, **kwargs: True)
     root = tk.Tk(); app = MainWindow(root, config, path); result = {}
     root.after(450, app.toggle_freeze)
     root.after(850, app.delete_current_attempt)

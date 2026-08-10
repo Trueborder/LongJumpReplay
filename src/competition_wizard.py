@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from collections.abc import Callable
 
 from .config import AppConfig, apply_performance_preset
 from .i18n import Translator
+from .theme import configure_popup, show_themed_info
 
 
 class CompetitionWizard(tk.Toplevel):
@@ -14,6 +15,7 @@ class CompetitionWizard(tk.Toplevel):
 
     def __init__(self, parent: tk.Misc, config: AppConfig, on_finish: Callable[[AppConfig, bool], None]) -> None:
         super().__init__(parent)
+        configure_popup(self, parent)
         self.working = deepcopy(config)
         self.on_finish = on_finish
         self.tr = Translator(config.general.language)
@@ -64,7 +66,7 @@ class CompetitionWizard(tk.Toplevel):
     def _row(self, frame, row: int, en: str, cs: str, var: tk.Variable, kind="entry", values=(), desc_en="", desc_cs=""):
         ttk.Label(frame, text=self._txt(en, cs), style="Text.TLabel").grid(row=row, column=0, sticky="w", pady=7, padx=(0, 14))
         if kind == "check": widget = ttk.Checkbutton(frame, variable=var)
-        elif kind == "combo": widget = ttk.Combobox(frame, textvariable=var, values=values, state="readonly")
+        elif kind == "combo": widget = ttk.Combobox(frame, textvariable=var, values=values, state="readonly", width=14)
         else: widget = ttk.Entry(frame, textvariable=var)
         widget.grid(row=row, column=1, sticky="ew", pady=7)
         if desc_en:
@@ -167,7 +169,7 @@ class CompetitionWizard(tk.Toplevel):
             self.on_finish(deepcopy(self.working), bool(self.vars["clear"].get()))
             self.destroy()
         except Exception as exc:
-            messagebox.showerror(self._txt("Invalid competition setup", "Neplatné nastavení soutěže"), str(exc), parent=self)
+            show_themed_info(self, self._txt("Invalid competition setup", "Neplatné nastavení soutěže"), str(exc))
 
     def _update_review(self) -> None:
         enabled = bool(self.vars["enabled"].get())

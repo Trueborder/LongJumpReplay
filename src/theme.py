@@ -23,6 +23,105 @@ LIGHT = {
 }
 
 
+def _theme_palette_for(widget: tk.Misc) -> dict[str, str]:
+    """Return the active palette for a widget and its themed parent chain."""
+    current: tk.Misc | None = widget
+    while current is not None:
+        palette = getattr(current, "_ljr_palette", None)
+        if isinstance(palette, dict):
+            return palette
+        try:
+            current = current.master
+        except AttributeError:
+            current = None
+    return DARK
+
+
+def configure_popup(window: tk.Toplevel, parent: tk.Misc) -> dict[str, str]:
+    """Give every application-owned popup the same surface as the main app."""
+    palette = _theme_palette_for(parent)
+    window.configure(bg=palette["bg"])
+    try:
+        window.option_add("*Dialog*background", palette["bg"])
+    except tk.TclError:
+        pass
+    return palette
+
+
+def style_popup_menu(menu: tk.Menu, parent: tk.Misc) -> None:
+    palette = _theme_palette_for(parent)
+    try:
+        menu.configure(
+            background=palette["surface"], foreground=palette["text"],
+            activebackground=palette["selection"], activeforeground=palette["text"],
+            disabledforeground=palette["muted"], selectcolor=palette["accent"],
+            font=("Segoe UI", 10), borderwidth=1, relief="solid", activeborderwidth=0,
+        )
+    except tk.TclError:
+        pass
+
+
+def themed_message(
+    parent: tk.Misc,
+    title: str,
+    message: str,
+    *,
+    buttons: tuple[tuple[str, str, str], ...] = (("OK", "ok", "Accent.TButton"),),
+    width: int = 480,
+) -> str:
+    """Show a blocking, ttk-themed message/confirmation dialog."""
+    palette = _theme_palette_for(parent)
+    dialog = tk.Toplevel(parent)
+    configure_popup(dialog, parent)
+    dialog.title(title)
+    dialog.resizable(False, False)
+    dialog.transient(parent)
+    result = tk.StringVar(dialog, value="")
+    body = ttk.Frame(dialog, style="Dialog.TFrame", padding=(22, 18, 22, 12))
+    body.pack(fill="both", expand=True)
+    ttk.Label(body, text=title, style="DialogTitle.TLabel").pack(anchor="w")
+    ttk.Label(body, text=message, style="DialogBody.TLabel", wraplength=width - 44, justify="left").pack(anchor="w", pady=(8, 18))
+    footer = ttk.Frame(body, style="Dialog.TFrame")
+    footer.pack(fill="x")
+    for label, value, style in buttons:
+        ttk.Button(footer, text=label, style=style, command=lambda value=value: result.set(value)).pack(side="right", padx=(7, 0))
+    dialog.protocol("WM_DELETE_WINDOW", lambda: result.set("cancel"))
+    dialog.update_idletasks()
+    height = max(150, body.winfo_reqheight())
+    screen_w, screen_h = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
+    dialog.geometry(f"{width}x{height}+{max(0, (screen_w - width) // 2)}+{max(0, (screen_h - height) // 2)}")
+    dialog.grab_set()
+    dialog.wait_variable(result)
+    value = result.get() or "cancel"
+    try:
+        dialog.grab_release()
+        dialog.destroy()
+    except tk.TclError:
+        pass
+    return value
+
+
+def show_themed_info(parent: tk.Misc, title: str, message: str) -> None:
+    themed_message(parent, title, message)
+
+
+def ask_themed_yes_no(parent: tk.Misc, title: str, message: str, *, yes: str = "Yes", no: str = "No") -> bool:
+    return themed_message(
+        parent, title, message,
+        buttons=((no, "no", "Control.TButton"), (yes, "yes", "Accent.TButton")),
+    ) == "yes"
+
+
+def ask_themed_yes_no_cancel(
+    parent: tk.Misc, title: str, message: str, *, yes: str = "Yes", no: str = "No", cancel: str = "Cancel",
+) -> bool | None:
+    value = themed_message(
+        parent, title, message,
+        buttons=((cancel, "cancel", "Control.TButton"), (no, "no", "Control.TButton"), (yes, "yes", "Accent.TButton")),
+    )
+    return True if value == "yes" else False if value == "no" else None
+
+
 def system_prefers_dark() -> bool:
     if sys.platform == "win32":
         try:
@@ -124,37 +223,14 @@ class ThemeManager:
     def _install_rounded_controls(self, style: ttk.Style, p: dict[str, str]) -> None:
         # Buttons intentionally use the native square ttk layout.  The old
         # custom image element made every button pill-shaped and also made
-        # disabled judge controls difficult to distinguish.  Keep the custom
-        # combobox field below, since list fields are still allowed to have a
-        # softer treatment.
+        # disabled judge controls difficult to distinguish.  Comboboxes use
+        # the platform's normal rectangular field and pop-down list as well.
 
         # Keep a compact neutral asset available for GUI smoke tests and for
         # platforms that opt into the image-backed button element later.
         neutral_prefix = f"Modern{self.name.title()}.neutral"
         if f"{neutral_prefix}.normal" not in self._image_assets:
             self._rounded_image(f"{neutral_prefix}.normal", p["surface2"], p["border"])
-
-        combo_prefix = f"Modern{self.name.title()}.Combo"
-        combo_element = f"{combo_prefix}.field"
-        if combo_element not in style.element_names():
-            combo_normal = self._rounded_image(f"{combo_prefix}.normal", p["surface2"], p["border"])
-            combo_focus = self._rounded_image(f"{combo_prefix}.focus", p["surface2"], p["accent"])
-            combo_disabled = self._rounded_image(f"{combo_prefix}.disabled", p["surface"], p["border"])
-            style.element_create(
-                combo_element, "image", combo_normal,
-                ("disabled", combo_disabled), ("focus", combo_focus), ("active", combo_focus),
-                border=(10, 5, 10, 5), sticky="nswe",
-            )
-        style.layout("TCombobox", [(combo_element, {"sticky": "nswe", "children": [
-            ("Combobox.downarrow", {"side": "right", "sticky": "ns"}),
-            ("Combobox.padding", {"expand": "1", "sticky": "nswe", "children": [
-                ("Combobox.textarea", {"sticky": "nswe"}),
-            ]}),
-        ]})])
-
-        if not self._popup_binding_installed:
-            self.root.bind_class("TCombobox", "<ButtonPress-1>", self._round_combobox_popup, add="+")
-            self._popup_binding_installed = True
 
     @staticmethod
     def _round_native_window(window_id: int) -> None:
@@ -201,6 +277,7 @@ class ThemeManager:
         self.name = name
         self.palette = DARK if name == "dark" else LIGHT
         p = self.palette
+        self.root._ljr_palette = p
         self.root.configure(background=p["bg"])
         style = ttk.Style(self.root)
         try: style.theme_use("clam")
@@ -237,6 +314,8 @@ class ThemeManager:
         style.map("PrimaryJudge.TButton", background=[("disabled", p["surface2"]), ("active", p["accent_hover"]), ("pressed", p["accent_hover"])], foreground=[("disabled", p["muted"])])
         style.configure("LiveJudge.TButton", padding=(14, 4), font=("Segoe UI Semibold", 10), background=p["live"], foreground="#ffffff")
         style.configure("Danger.TButton", padding=(9, 0), background=p["danger"], foreground="#ffffff")
+        style.configure("MutedAction.TButton", padding=(9, 2), background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
+        style.map("MutedAction.TButton", background=[("active", p["selection"]), ("pressed", p["selection"]), ("disabled", p["surface"])], foreground=[("active", p["text"]), ("pressed", p["text"]), ("disabled", p["muted"])])
         style.configure("SystemPause.TButton", padding=(10, 3), background=p["warning"], foreground="#111111", font=("Segoe UI Semibold", 9))
         style.map("SystemPause.TButton", background=[("disabled", p["surface2"]), ("active", p["accent_hover"]), ("pressed", p["accent_hover"])], foreground=[("disabled", p["muted"])])
         style.configure("SystemResume.TButton", padding=(10, 3), background=p["live"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
@@ -295,8 +374,11 @@ class ThemeManager:
         style.configure("SettingsSection.TLabelframe.Label", background=p["surface"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
         style.configure("SettingsNav.TButton", padding=(14, 3), anchor="w", background=p["surface2"], foreground=p["muted"], borderwidth=0)
         style.map("SettingsNav.TButton", background=[("active", p["selection"]), ("pressed", p["selection"]), ("selected", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"]), ("selected", p["text"])])
+        style.configure("Dialog.TFrame", background=p["surface"])
+        style.configure("DialogTitle.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 13))
+        style.configure("DialogBody.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 10))
         self._install_rounded_controls(style, p)
-        # ttk combobox pop-downs use a classic Tk Listbox on Windows.
+        # ttk combobox pop-downs use a classic rectangular Tk Listbox on Windows.
         self.root.option_add("*TCombobox*Listbox.background", p["surface2"])
         self.root.option_add("*TCombobox*Listbox.foreground", p["text"])
         self.root.option_add("*TCombobox*Listbox.selectBackground", p["selection"])
