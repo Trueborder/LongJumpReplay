@@ -10,11 +10,11 @@ import shutil
 import subprocess
 import sys
 import zipfile
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
-from threading import Thread
+from threading import Event, Lock, Thread
 import time
 import tkinter as tk
 from tkinter import ttk
@@ -24,7 +24,7 @@ import numpy as np
 
 from .attempts import AttemptManager
 from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
-from .capture import CaptureEngine
+from .capture import CaptureEngine, OpenCVCameraSource
 from .competition import CompetitionSession, RosterAssignment
 from .competition_board import CompetitionBoard
 from .competition_wizard import CompetitionWizard
@@ -113,7 +113,15 @@ class MainWindow:
         self._system_paused = False
         self._system_pause_transition = False
         self._camera_starting = False
+        self._camera_start_started_at = 0.0
         self._camera_start_deadline = 0.0
+        self._camera_input_timed_out = False
+        self._camera_retrying = False
+        self._camera_retry_stop_complete = False
+        self._camera_probe_generation = 0
+        self._camera_probe_stop = Event()
+        self._camera_probe_lock = Lock()
+        self._camera_probe_results: dict[int, bool | None] = {}
         self._camera_help_dialog: tk.Toplevel | None = None
         self._busy_depth = 0
         self._busy_message = ""
@@ -402,13 +410,20 @@ class MainWindow:
         self.board_setup_frame.pack(side="right", padx=(6, 0))
 
         self.center_overlay = tk.Label(self.video_host, text="", justify="center", padx=18, pady=10, font=("Segoe UI Semibold", 14), borderwidth=0)
-        self.camera_help_button = ttk.Button(
-            self.video_host,
-            text=self._t("camera.help_button"),
-            style="Accent.TButton",
-            command=self.show_camera_help,
-        )
-        self.camera_help_button.place_forget()
+        self.camera_waiting_frame = ttk.Frame(self.video_host, style="Toolbar.TFrame", padding=(18, 14))
+        self.camera_waiting_title = ttk.Label(self.camera_waiting_frame, text=self._t("camera.input_waiting"), style="ContextTitle.TLabel")
+        self.camera_waiting_title.pack(anchor="center")
+        self.camera_waiting_detail = ttk.Label(self.camera_waiting_frame, text=self._t("camera.input_checking"), style="Muted.TLabel")
+        self.camera_waiting_detail.pack(anchor="center", pady=(4, 9))
+        self.camera_waiting_progress = ttk.Progressbar(self.camera_waiting_frame, mode="determinate", maximum=100, length=300)
+        self.camera_waiting_progress.pack(fill="x")
+        self.camera_action_frame = ttk.Frame(self.video_host, style="Toolbar.TFrame", padding=(8, 6))
+        self.camera_try_again_button = ttk.Button(self.camera_action_frame, text=self._t("camera.try_again"), style="Accent.TButton", command=self._try_camera_again)
+        self.camera_try_again_button.pack(side="left")
+        self.camera_help_button = ttk.Button(self.camera_action_frame, text=self._t("camera.help_button"), style="Control.TButton", command=self.show_camera_help)
+        self.camera_help_button.pack(side="left", padx=(8, 0))
+        self.camera_waiting_frame.place_forget()
+        self.camera_action_frame.place_forget()
 
         self.status_bar = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(10, 5))
         self.status_bar.grid(row=2, column=0, sticky="ew", pady=(5, 0))
@@ -617,7 +632,7 @@ class MainWindow:
                 self._last_replay_key = ("live", live_index)
                 self._update_auxiliary_views()
 
-        if self._camera_starting:
+        if self._camera_starting and not self._camera_retrying:
             if live_frame is not None:
                 self._finish_camera_start_feedback()
                 if self._system_pause_transition and not self._system_paused:
@@ -625,10 +640,18 @@ class MainWindow:
                     self._set_system_paused_ui()
                     self._show_message(self._t("system.resumed"), 5)
             elif now >= self._camera_start_deadline:
-                self._finish_camera_start_feedback()
+                self._finish_camera_start_feedback(timed_out=True)
                 if self._system_pause_transition and not self._system_paused:
                     self._system_pause_transition = False
                     self._set_system_paused_ui()
+
+        if self._camera_retrying and self._camera_retry_stop_complete:
+            self._camera_retry_stop_complete = False
+            self._camera_start_started_at = now
+            self._camera_start_deadline = now + 10.0
+            self.capture.start()
+            self._start_camera_probe()
+            self._camera_retrying = False
 
         if not suspended and not minimized and self.playback.mode is not PlaybackMode.LIVE:
             key = self._playback_key()
@@ -722,7 +745,7 @@ class MainWindow:
         self._update_judging_controls()
         p = self.palette; stats = self.capture.stats()
         if self._system_paused:
-            self.camera_help_button.place_forget()
+            self.camera_waiting_frame.place_forget(); self.camera_action_frame.place_forget()
             self.mode_var.set(self._t("mode.paused")); self.mode_badge.configure(bg=p["muted"], fg="#ffffff")
             self.live_canvas.set_status(self._t("mode.paused"), p["muted"])
             self.replay_canvas.set_status(self._t("mode.paused"), p["muted"], self._t("system.paused_status"))
@@ -731,13 +754,9 @@ class MainWindow:
             self.playback.mode is PlaybackMode.LIVE
             and self._displayed_bgr is None
             and not self._camera_starting
-            and (bool(stats.last_error) or stats.captured_frames == 0)
+            and (self._camera_input_timed_out or bool(stats.last_error) or stats.captured_frames == 0)
         )
-        if no_video:
-            self.camera_help_button.place(relx=.5, rely=.58, anchor="center")
-            self.camera_help_button.lift()
-        else:
-            self.camera_help_button.place_forget()
+        self._update_camera_input_overlay(no_video)
         self.live_canvas.set_status(f"● LIVE · {stats.capture_fps:5.1f} fps", p["live"])
         if self.playback.mode is PlaybackMode.LIVE:
             self.mode_var.set(self._t("mode.live")); self.mode_badge.configure(bg=p["live"], fg="#ffffff")
@@ -796,18 +815,97 @@ class MainWindow:
             self.status_progress.start(12)
         self.message_var.set(message)
 
+    def _update_camera_input_overlay(self, no_video: bool) -> None:
+        waiting = self._camera_starting and self._displayed_bgr is None
+        timed_out = no_video and (self._camera_input_timed_out or not self._camera_starting)
+        if waiting:
+            elapsed = 0.0 if self._camera_retrying else max(0.0, time.perf_counter() - self._camera_start_started_at)
+            self.camera_waiting_progress.configure(value=min(100.0, elapsed / 10.0 * 100.0))
+            self.camera_waiting_frame.place(relx=.5, rely=.55, anchor="center")
+            self.camera_waiting_frame.lift()
+            self.camera_action_frame.place_forget()
+            return
+        self.camera_waiting_frame.place_forget()
+        if timed_out:
+            self.camera_action_frame.place(relx=.5, rely=.61, anchor="center")
+            self.camera_action_frame.lift()
+        else:
+            self.camera_action_frame.place_forget()
+
+    def _start_camera_probe(self) -> None:
+        self._camera_probe_stop.set()
+        probe_stop = Event()
+        self._camera_probe_stop = probe_stop
+        self._camera_probe_generation += 1
+        generation = self._camera_probe_generation
+        if self.config.camera.source_type != "camera":
+            with self._camera_probe_lock:
+                self._camera_probe_results = {}
+            return
+        base_config = replace(self.config.camera)
+        with self._camera_probe_lock:
+            self._camera_probe_results = {0: None, 1: None}
+
+        def probe() -> None:
+            for index in (0, 1):
+                if probe_stop.is_set() or generation != self._camera_probe_generation:
+                    return
+                available = False
+                source = OpenCVCameraSource(replace(base_config, device_index=index))
+                try:
+                    source.open()
+                    available, frame = source.read()
+                    available = bool(available and frame is not None)
+                except Exception:
+                    available = False
+                finally:
+                    source.close()
+                if probe_stop.is_set() or generation != self._camera_probe_generation:
+                    return
+                with self._camera_probe_lock:
+                    self._camera_probe_results[index] = available
+
+        Thread(target=probe, name="camera-input-probe", daemon=True).start()
+
+    def _try_camera_again(self) -> None:
+        if self._camera_retrying or self._closing:
+            return
+        self._camera_retrying = True
+        self._camera_retry_stop_complete = False
+        self._camera_starting = True
+        self._camera_start_started_at = 0.0
+        self._camera_start_deadline = 0.0
+        self._camera_input_timed_out = False
+        self._begin_busy(self._t("status.starting"))
+        self.capture.latest.clear()
+        self._displayed_bgr = None
+        self._displayed_timestamp_ns = 0
+        self._last_live_index = -1
+
+        def stop_capture() -> None:
+            try:
+                self.capture.stop(timeout=2.5)
+            finally:
+                self._camera_retry_stop_complete = True
+
+        Thread(target=stop_capture, name="camera-retry", daemon=True).start()
+
     def _start_camera_with_feedback(self, message: str) -> None:
         """Start capture while keeping a visible, bounded activity indicator."""
         self._camera_starting = True
-        self._camera_start_deadline = time.perf_counter() + 8.0
+        self._camera_start_started_at = time.perf_counter()
+        self._camera_start_deadline = self._camera_start_started_at + 10.0
+        self._camera_input_timed_out = False
         self._begin_busy(message)
         self.capture.start()
+        self._start_camera_probe()
 
-    def _finish_camera_start_feedback(self) -> None:
+    def _finish_camera_start_feedback(self, timed_out: bool = False) -> None:
         if not self._camera_starting:
             return
         self._camera_starting = False
         self._camera_start_deadline = 0.0
+        self._camera_input_timed_out = timed_out
         self._end_busy()
 
     def _end_busy(self) -> None:
@@ -2188,7 +2286,10 @@ class MainWindow:
             dialog.destroy(); self._camera_help_dialog = None; self.open_camera_diagnostic()
         ttk.Button(footer, text=self._t("camera.help_open_settings"), command=open_settings).pack(side="left")
         ttk.Button(footer, text=self._t("camera.help_run_diagnostic"), style="Accent.TButton", command=run_diagnostic).pack(side="left", padx=(8, 0))
-        ttk.Button(footer, text=self._t("camera.help_close"), command=dialog.destroy).pack(side="right")
+        def close_help() -> None:
+            self._camera_help_dialog = None
+            dialog.destroy()
+        ttk.Button(footer, text=self._t("camera.help_close"), command=close_help).pack(side="right")
 
     def open_camera_diagnostic(self) -> None:
         dialog = tk.Toplevel(self.root)
@@ -2292,6 +2393,8 @@ class MainWindow:
     def close(self) -> None:
         if self._closing: return
         self._closing = True; self._cancel_scheduled_review()
+        self._camera_probe_generation += 1
+        self._camera_probe_stop.set()
         log_event(self._logger, "shutdown_requested", playback_mode=self.playback.mode.value)
         if self._tick_job:
             try: self.root.after_cancel(self._tick_job)

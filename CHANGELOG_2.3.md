@@ -182,3 +182,4 @@
 - Fixed Settings Value-column list controls overflowing on narrow pages; selectors now stay within the available column while retaining their full dropdown options.
 - Made Export/Delete follow the exact capture selected in the Competition Board; selecting an empty cell fades and disables both actions instead of retaining the previous replay target.
 - Made Settings and Competition Wizard dropdowns use normal rectangular native list styling, and reduced Settings Value-column field widths so controls stay on-screen.
+- Added a 10-second startup input check with a progress bar and “Looking for input from all sources” text. Camera indices 0 and 1 are probed in the background; if no input arrives, Try again and Help with camera appear together.
