@@ -99,7 +99,7 @@
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
     "attempts_panel_width": 514,
-    "timeline_height": 170,
+    "timeline_height": 176,
     "guide_enabled": true,
     "guide_x_ratio": 0.6553308823529411,
     "guide_y_ratio": 0.886437908496732,
