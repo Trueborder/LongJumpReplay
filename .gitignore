@@ -10,3 +10,20 @@ config.local.json
 *.key
 *.p12
 *.pfx
+
+# Local developer environments and generated build output
+.venv/
+.venv-*/
+.venv.stale-*/
+.pytest_cache/
+cache/
+build/
+dist/
+dist-single/
+native/**/bin/
+native/**/obj/
+__pycache__/
+*.pyc
+SELF_TEST_*.txt
+release/**/SELF_TEST_*.txt
+LongJumpReplay-runtime*.jsonl

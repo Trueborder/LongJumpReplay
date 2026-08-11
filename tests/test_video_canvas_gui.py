@@ -23,3 +23,18 @@ def test_video_canvas_defers_render_during_window_interaction():
     assert not canvas._dirty_while_suspended
     assert not canvas._render_pending
     root.destroy()
+
+
+def test_video_canvas_reuses_render_items_for_frames():
+    root = tk.Tk()
+    canvas = VideoCanvas(root, DARK)
+    canvas.pack(fill="both", expand=True)
+    root.update()
+    item_ids = canvas.find_all()
+
+    for value in range(5):
+        canvas.set_frame(np.full((90, 160, 3), value, dtype=np.uint8))
+        root.update_idletasks()
+
+    assert canvas.find_all() == item_ids
+    root.destroy()

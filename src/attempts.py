@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -26,6 +27,8 @@ class AttemptManager:
     """
 
     POST_ROLL_STALL_GRACE_SECONDS = 3.0
+    CACHE_SIZE_CACHE_SECONDS = 0.5
+    DECODE_CACHE_FRAMES = 4
 
     def __init__(
         self,
@@ -48,8 +51,11 @@ class AttemptManager:
         self._workers: dict[str, Thread] = {}
         self._pending_exports: dict[int, Path] = {}
         self._video_caps: dict[int, cv2.VideoCapture] = {}
-        self._frame_cache: dict[int, tuple[int, object]] = {}
+        self._frame_cache: dict[int, OrderedDict[int, object]] = {}
+        self._video_next_index: dict[int, int] = {}
         self._cancelled_attempt_ids: set[int] = set()
+        self._cache_size_value: int | None = None
+        self._cache_size_checked_at = 0.0
 
     def start(self) -> None:
         self.cache_directory.mkdir(parents=True, exist_ok=True)
@@ -70,6 +76,7 @@ class AttemptManager:
                 cap.release()
             self._video_caps.clear()
             self._frame_cache.clear()
+            self._video_next_index.clear()
         # Codec and copy workers are allowed to finish, but never outlive the
         # requested shutdown budget. This also prevents test/session builds from
         # accumulating OpenCV workers across repeated window launches.
@@ -317,6 +324,7 @@ class AttemptManager:
             for path in self.cache_directory.glob("attempt_*.*"):
                 try: path.unlink(missing_ok=True)
                 except OSError: pass
+            self._invalidate_cache_size_locked()
         self.event_queue.put(("attempts_cleared", len(attempts)))
         return len(attempts)
 
@@ -342,6 +350,7 @@ class AttemptManager:
                 if cap is not None:
                     cap.release()
                 self._frame_cache.pop(attempt_id, None)
+                self._video_next_index.pop(attempt_id, None)
             self._attempts = [attempt for attempt in self._attempts if attempt.attempt_id not in target_ids]
             for attempt in targets:
                 for path in (attempt.temp_video_path, attempt.temp_metadata_path):
@@ -350,6 +359,7 @@ class AttemptManager:
                             path.unlink(missing_ok=True)
                         except OSError:
                             pass
+            self._invalidate_cache_size_locked()
         self.event_queue.put(("attempts_cleared", len(targets)))
         return len(targets)
 
@@ -381,7 +391,12 @@ class AttemptManager:
     def delete(self, attempt_id: int, force: bool = False) -> bool:
         with self._lock:
             attempt = self._find_locked(attempt_id)
-            if attempt is None or (attempt.selected and not force) or attempt.protected:
+            if (
+                attempt is None
+                or (attempt.selected and not force)
+                or attempt.protected
+                or attempt.state in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING}
+            ):
                 return False
             self._delete_locked(attempt)
         self.event_queue.put(("attempt_deleted", attempt_id))
@@ -401,10 +416,12 @@ class AttemptManager:
             if attempt.packets and index < len(attempt.packets):
                 packet = attempt.packets[index]
                 return MediaFrame(decode_packet(packet), packet.timestamp_ns, index, attempt.frame_count, attempt.fps)
-            cached = self._frame_cache.get(attempt_id)
-            if cached and cached[0] == index:
+            cached = self._frame_cache.setdefault(attempt_id, OrderedDict())
+            if index in cached:
+                frame = cached.pop(index)
+                cached[index] = frame
                 timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
-                return MediaFrame(cached[1], timestamp, index, attempt.frame_count, attempt.fps)
+                return MediaFrame(frame, timestamp, index, attempt.frame_count, attempt.fps)
             path = attempt.temp_video_path
             if not path or not path.exists():
                 return MediaFrame(None, 0, index, attempt.frame_count, attempt.fps)
@@ -412,11 +429,15 @@ class AttemptManager:
             if cap is None or not cap.isOpened():
                 cap = cv2.VideoCapture(str(path))
                 self._video_caps[attempt_id] = cap
-            cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+            if self._video_next_index.get(attempt_id) != index:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, index)
             ok, frame = cap.read()
             if not ok:
                 return MediaFrame(None, 0, index, attempt.frame_count, attempt.fps)
-            self._frame_cache[attempt_id] = (index, frame)
+            cached[index] = frame
+            while len(cached) > self.DECODE_CACHE_FRAMES:
+                cached.popitem(last=False)
+            self._video_next_index[attempt_id] = index + 1
             timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
             return MediaFrame(frame, timestamp, index, attempt.frame_count, attempt.fps)
 
@@ -432,13 +453,19 @@ class AttemptManager:
             return max(0, min(attempt.frame_count - 1, index))
 
     def cache_size_bytes(self) -> int:
-        total = 0
-        for path in self.cache_directory.glob("attempt_*.*"):
-            try:
-                total += path.stat().st_size
-            except OSError:
-                pass
-        return total
+        now = time.monotonic()
+        with self._lock:
+            if self._cache_size_value is not None and now - self._cache_size_checked_at < self.CACHE_SIZE_CACHE_SECONDS:
+                return self._cache_size_value
+            total = 0
+            for path in self.cache_directory.glob("attempt_*.*"):
+                try:
+                    total += path.stat().st_size
+                except OSError:
+                    pass
+            self._cache_size_value = total
+            self._cache_size_checked_at = now
+            return total
 
     def _loop(self) -> None:
         while not self._stop.wait(.05):
@@ -527,24 +554,43 @@ class AttemptManager:
                 self._workers.pop(f"attempt-encode-{attempt_id}", None)
 
     def _copy_export(self, attempt_id: int, source: Path, destination: Path, meta_source: Path | None, meta_destination: Path) -> None:
+        video_temp = destination.with_suffix(destination.suffix + ".tmp")
+        metadata_temp = meta_destination.with_suffix(meta_destination.suffix + ".tmp")
+        installed_video = False
+        installed_metadata = False
+        attempt: AttemptSession | None = None
         try:
-            shutil.copy2(source, destination)
+            shutil.copy2(source, video_temp)
+            video_temp.replace(destination)
+            installed_video = True
             if meta_source and meta_source.exists():
-                shutil.copy2(meta_source, meta_destination)
+                shutil.copy2(meta_source, metadata_temp)
+                metadata_temp.replace(meta_destination)
+                installed_metadata = True
             with self._lock:
                 attempt = self._find_locked(attempt_id)
-                if attempt:
-                    attempt.state = AttemptState.EXPORTED
-                    attempt.export_path = destination
-                    self._write_metadata_locked(attempt)
+                if attempt is None or attempt_id in self._cancelled_attempt_ids:
+                    self._cancelled_attempt_ids.discard(attempt_id)
+                    raise RuntimeError("Attempt was removed while export was running")
+                attempt.state = AttemptState.EXPORTED
+                attempt.export_path = destination
+                self._write_metadata_locked(attempt)
             self.event_queue.put(("attempt_exported", (attempt_id, destination)))
         except Exception as exc:
+            for path, installed in ((video_temp, False), (metadata_temp, False), (destination, installed_video), (meta_destination, installed_metadata)):
+                if installed or path in (video_temp, metadata_temp):
+                    try: path.unlink(missing_ok=True)
+                    except OSError: pass
             with self._lock:
                 attempt = self._find_locked(attempt_id)
-                if attempt:
+                if attempt and attempt_id not in self._cancelled_attempt_ids:
                     attempt.state, attempt.error = AttemptState.ERROR, str(exc)
-            self.event_queue.put(("attempt_error", (attempt_id, str(exc))))
+            if attempt is not None:
+                self.event_queue.put(("attempt_error", (attempt_id, str(exc))))
         finally:
+            for path in (video_temp, metadata_temp):
+                try: path.unlink(missing_ok=True)
+                except OSError: pass
             with self._lock:
                 self._workers.pop(f"attempt-export-{attempt_id}", None)
 
@@ -574,12 +620,18 @@ class AttemptManager:
         cap = self._video_caps.pop(attempt.attempt_id, None)
         if cap: cap.release()
         self._frame_cache.pop(attempt.attempt_id, None)
+        self._video_next_index.pop(attempt.attempt_id, None)
         for path in (attempt.temp_video_path, attempt.temp_metadata_path):
             if path:
                 try: path.unlink(missing_ok=True)
                 except OSError: pass
         if attempt in self._attempts:
             self._attempts.remove(attempt)
+        self._invalidate_cache_size_locked()
+
+    def _invalidate_cache_size_locked(self) -> None:
+        self._cache_size_value = None
+        self._cache_size_checked_at = 0.0
 
     def _find_locked(self, attempt_id: int) -> AttemptSession | None:
         return next((a for a in self._attempts if a.attempt_id == attempt_id), None)
@@ -630,6 +682,7 @@ class AttemptManager:
             temp_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
             temp_path.replace(path)
             attempt.temp_metadata_path = path
+            self._invalidate_cache_size_locked()
         except OSError:
             try: temp_path.unlink(missing_ok=True)
             except OSError: pass

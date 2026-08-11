@@ -2,11 +2,9 @@
 
 ## Start here
 
-1. `CODEX_START_HERE.md`
-2. `docs/development/WINDOWS_CODEX_SETUP.md`
-3. `PROJECT.KNOWLEDGE.md`
-4. `AGENTS.md`
-5. `CODEX_FIRST_PROMPT.md`
+1. `AGENTS.md`
+2. `PROJECT.KNOWLEDGE.md`
+3. `docs/development/WINDOWS_CODEX_SETUP.md`
 
 ## Windows helper scripts
 
@@ -27,8 +25,7 @@
 
 - `README.md`
 - `README_CZ.md`
-- `CHANGELOG_2.3.md`
-- `TEST_REPORT_2.3.md`
+- `CHANGELOG_3.1.md`
 - `UPGRADE_2.3.md`
 
 ## Validation of this handoff

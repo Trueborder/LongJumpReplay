@@ -36,6 +36,17 @@ var tests = new List<(string Name, Func<Task> Run)>
         AssertTrue(replay.DisplayedFrame()?.Sequence == 7, "Live mode must retain the newest frame.");
         return Task.CompletedTask;
     }),
+    ("Frozen replay retention remains bounded", () =>
+    {
+        var replay = new ReplayCoordinator(TimeSpan.FromMinutes(1), 3);
+        for (var i = 0; i < 3; i++) replay.OnFrame(new VideoFrame(i, Stopwatch.GetTimestamp() + i, 1, 1, [0, 0, 0, 255]));
+        AssertTrue(replay.Freeze(), "Freeze should succeed with frames.");
+        for (var i = 3; i < 100; i++) replay.OnFrame(new VideoFrame(i, Stopwatch.GetTimestamp() + i, 1, 1, [0, 0, 0, 255]));
+        var snapshot = replay.Snapshot();
+        AssertTrue(snapshot.BufferedFrames == 3, "Frozen replay must remain bounded while capture continues.");
+        AssertTrue(snapshot.FreezeSequence == 2 && snapshot.DisplayedSequence == 2, "The selected frozen frame must remain available.");
+        return Task.CompletedTask;
+    }),
     ("Synthetic source starts and stops within bound", async () =>
     {
         await using var source = new SyntheticVideoSource(64, 36, 60);

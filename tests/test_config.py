@@ -32,6 +32,28 @@ def test_invalid_theme_rejected():
         raise AssertionError('invalid theme accepted')
 
 
+def test_corrupt_config_is_quarantined_and_replaced_with_defaults(tmp_path):
+    path = tmp_path / 'config.json'
+    path.write_text('{"camera": [', encoding='utf-8')
+
+    loaded = load_config(path)
+
+    assert loaded == AppConfig()
+    assert path.exists()
+    assert path.with_name('config.json.corrupt').read_text(encoding='utf-8') == '{"camera": ['
+    assert load_config(path) == AppConfig()
+
+
+def test_invalid_nested_config_is_recovered(tmp_path):
+    path = tmp_path / 'config.json'
+    path.write_text('{"display": {"theme": "not-a-theme"}}', encoding='utf-8')
+
+    loaded = load_config(path)
+
+    assert loaded.display.theme == AppConfig().display.theme
+    assert path.with_name('config.json.corrupt').exists()
+
+
 def test_athlete_timer_config_round_trip_and_validation(tmp_path):
     path = tmp_path / 'timer-config.json'
     config = AppConfig()

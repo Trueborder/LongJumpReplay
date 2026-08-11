@@ -75,6 +75,24 @@ class VideoCanvas(tk.Canvas):
         self.bind("<Control-Button-1>", self._on_set_guide)
         self.bind("<Double-Button-1>", lambda _e: self.reset_view())
 
+        # Keep the item graph stable while frames arrive.  Recreating every
+        # item for each preview frame makes Tk allocate and discard many
+        # objects at high refresh rates.
+        self._image_item = self.create_image(0, 0, anchor="center", state="hidden")
+        self._empty_item = self.create_text(0, 0, state="hidden")
+        self._guide_line = self.create_line(0, 0, 0, 0, state="hidden")
+        self._guide_center = self.create_oval(0, 0, 0, 0, state="hidden")
+        self._guide_handle = self.create_oval(0, 0, 0, 0, state="hidden")
+        self._guide_box = self.create_rectangle(0, 0, 0, 0, state="hidden")
+        self._guide_label = self.create_text(0, 0, state="hidden")
+        self._roi_box = self.create_rectangle(0, 0, 0, 0, state="hidden")
+        self._roi_handle = self.create_rectangle(0, 0, 0, 0, state="hidden")
+        self._roi_label = self.create_text(0, 0, state="hidden")
+        self._status_box = self.create_rectangle(0, 0, 0, 0)
+        self._status_label = self.create_text(0, 0)
+        self._help_label = self.create_text(0, 0, state="hidden")
+        self._secondary_label = self.create_text(0, 0, state="hidden")
+
     def set_language(self, language: str) -> None:
         previous_waiting = tr(self.language, "overlay.waiting_video")
         self.language = language if language in {"en", "cs"} else "en"
@@ -92,8 +110,11 @@ class VideoCanvas(tk.Canvas):
         self.request_render()
 
     def set_status(self, text: str, color: str | None = None, secondary: str = "") -> None:
+        status_color = color or self.palette["muted"]
+        if (text, status_color, secondary) == (self._status_text, self._status_color, self._secondary_text):
+            return
         self._status_text = text
-        self._status_color = color or self.palette["muted"]
+        self._status_color = status_color
         self._secondary_text = secondary
         self.request_render()
 
@@ -160,9 +181,25 @@ class VideoCanvas(tk.Canvas):
             self._dirty_while_suspended = True
             return
         w, h = max(2, self.winfo_width()), max(2, self.winfo_height())
-        self.delete("all")
+        for item in (
+            self._empty_item,
+            self._guide_line,
+            self._guide_center,
+            self._guide_handle,
+            self._guide_box,
+            self._guide_label,
+            self._roi_box,
+            self._roi_handle,
+            self._roi_label,
+            self._help_label,
+            self._secondary_label,
+        ):
+            self.itemconfigure(item, state="hidden")
         if self._frame is None:
-            self.create_text(w / 2, h / 2, text=tr(self.language, "overlay.no_video"), fill=self.palette["muted"], font=("Segoe UI Semibold", 13))
+            self.coords(self._empty_item, w / 2, h / 2)
+            self.itemconfigure(self._empty_item, state="normal", text=tr(self.language, "overlay.no_video"), fill=self.palette["muted"], font=("Segoe UI Semibold", 13))
+            self.itemconfigure(self._image_item, state="hidden")
+            self._image_bounds = (0.0, 0.0, float(w), float(h))
             self._draw_overlay(w, h)
             return
         fh, fw = self._frame.shape[:2]
@@ -173,7 +210,8 @@ class VideoCanvas(tk.Canvas):
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         self._photo = ImageTk.PhotoImage(Image.fromarray(rgb))
         cx, cy = w / 2 + self.pan_x, h / 2 + self.pan_y
-        self.create_image(cx, cy, image=self._photo, anchor="center")
+        self.coords(self._image_item, cx, cy)
+        self.itemconfigure(self._image_item, state="normal", image=self._photo)
         left, top, right, bottom = cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2
         self._image_bounds = (left, top, right, bottom)
         if self.board_roi_enabled and (self.board_roi_visible or self.calibration_mode):
@@ -188,35 +226,47 @@ class VideoCanvas(tk.Canvas):
         angle = math.radians(self.guide_angle_deg)
         half = math.hypot(dw, dh)
         dx, dy = math.sin(angle) * half, math.cos(angle) * half
-        self.create_line(gx - dx, gy - dy, gx + dx, gy + dy, fill=self.palette["danger"], width=self.guide_width_px)
+        self.coords(self._guide_line, gx - dx, gy - dy, gx + dx, gy + dy)
+        self.itemconfigure(self._guide_line, state="normal", fill=self.palette["danger"], width=self.guide_width_px)
         if not self.compact:
-            self.create_oval(gx - 4, gy - 4, gx + 4, gy + 4, fill=self.palette["danger"], outline="")
+            self.coords(self._guide_center, gx - 4, gy - 4, gx + 4, gy + 4)
+            self.itemconfigure(self._guide_center, state="normal", fill=self.palette["danger"], outline="")
             hx, hy = gx + math.sin(angle) * 54, gy - math.cos(angle) * 54
             if self.calibration_mode:
-                self.create_oval(hx - 6, hy - 6, hx + 6, hy + 6, fill=self.palette["warning"], outline=self.palette["surface"])
+                self.coords(self._guide_handle, hx - 6, hy - 6, hx + 6, hy + 6)
+                self.itemconfigure(self._guide_handle, state="normal", fill=self.palette["warning"], outline=self.palette["surface"])
             board_label = tr(self.language, "overlay.board")
             label = f"{board_label}  {self.guide_angle_deg:+.1f}°" if self.calibration_mode else board_label
-            self.create_rectangle(gx - 42, max(top + 8, 8), gx + 42, max(top + 27, 27), fill=self.palette["surface"], outline=self.palette["danger"])
-            self.create_text(gx, max(top + 17, 17), text=label, fill=self.palette["danger"], font=("Segoe UI Semibold", 7))
+            self.coords(self._guide_box, gx - 42, max(top + 8, 8), gx + 42, max(top + 27, 27))
+            self.itemconfigure(self._guide_box, state="normal", fill=self.palette["surface"], outline=self.palette["danger"])
+            self.coords(self._guide_label, gx, max(top + 17, 17))
+            self.itemconfigure(self._guide_label, state="normal", text=label, fill=self.palette["danger"], font=("Segoe UI Semibold", 7))
 
     def _draw_roi(self, left: float, top: float, dw: float, dh: float) -> None:
         x, y, rw, rh = self.board_roi
         x0, y0 = left + x * dw, top + y * dh
         x1, y1 = x0 + rw * dw, y0 + rh * dh
-        self.create_rectangle(x0, y0, x1, y1, outline=self.palette["warning"], width=2, dash=(6, 4))
+        self.coords(self._roi_box, x0, y0, x1, y1)
+        self.itemconfigure(self._roi_box, state="normal", outline=self.palette["warning"], width=2, dash=(6, 4))
         if self.calibration_mode:
-            self.create_rectangle(x1 - 7, y1 - 7, x1 + 7, y1 + 7, fill=self.palette["warning"], outline=self.palette["surface"])
-            self.create_text(x0 + 6, y0 + 5, anchor="nw", text=tr(self.language, "overlay.takeoff_roi"), fill=self.palette["warning"], font=("Segoe UI Semibold", 8))
+            self.coords(self._roi_handle, x1 - 7, y1 - 7, x1 + 7, y1 + 7)
+            self.itemconfigure(self._roi_handle, state="normal", fill=self.palette["warning"], outline=self.palette["surface"])
+            self.coords(self._roi_label, x0 + 6, y0 + 5)
+            self.itemconfigure(self._roi_label, state="normal", anchor="nw", text=tr(self.language, "overlay.takeoff_roi"), fill=self.palette["warning"], font=("Segoe UI Semibold", 8))
 
     def _draw_overlay(self, w: int, h: int) -> None:
         pad = 8 if self.compact else 10
         font_size = 8 if self.compact else 9
-        self.create_rectangle(pad, pad, min(w - pad, 500), pad + (24 if self.compact else 28), fill=self.palette["surface"], outline=self.palette["border"])
-        self.create_text(pad + 9, pad + (12 if self.compact else 14), anchor="w", text=self._status_text, fill=self._status_color, font=("Segoe UI Semibold", font_size))
+        self.coords(self._status_box, pad, pad, min(w - pad, 500), pad + (24 if self.compact else 28))
+        self.itemconfigure(self._status_box, fill=self.palette["surface"], outline=self.palette["border"])
+        self.coords(self._status_label, pad + 9, pad + (12 if self.compact else 14))
+        self.itemconfigure(self._status_label, anchor="w", text=self._status_text, fill=self._status_color, font=("Segoe UI Semibold", font_size))
         if self.calibration_mode and not self.compact:
-            self.create_text(12, h - 12, anchor="sw", text=tr(self.language, "overlay.calibration_help"), fill=self.palette["warning"], font=("Segoe UI", 8))
+            self.coords(self._help_label, 12, h - 12)
+            self.itemconfigure(self._help_label, state="normal", anchor="sw", text=tr(self.language, "overlay.calibration_help"), fill=self.palette["warning"], font=("Segoe UI", 8))
         elif self._secondary_text and not self.compact:
-            self.create_text(w - 10, h - 9, anchor="se", text=self._secondary_text, fill=self.palette["muted"], font=("Segoe UI", 8))
+            self.coords(self._secondary_label, w - 10, h - 9)
+            self.itemconfigure(self._secondary_label, state="normal", anchor="se", text=self._secondary_text, fill=self.palette["muted"], font=("Segoe UI", 8))
 
     def _canvas_to_ratio(self, x: float, y: float) -> tuple[float, float]:
         left, top, right, bottom = self._image_bounds

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,9 @@ DEFAULT_HOTKEYS = {
     "start_competition_wizard": "Control-n",
     "timer_toggle": "",
 }
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -481,22 +485,27 @@ def _deep_update(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
 
 
 def config_from_dict(data: dict[str, Any]) -> AppConfig:
+    if not isinstance(data, dict):
+        raise ValueError("The root of config.json must be a JSON object")
     merged = _deep_update(asdict(AppConfig()), data)
-    config = AppConfig(
-        general=GeneralConfig(**merged["general"]),
-        camera=CameraConfig(**merged["camera"]),
-        buffer=BufferConfig(**merged["buffer"]),
-        attempts=AttemptsConfig(**merged["attempts"]),
-        athlete_timer=AthleteTimerConfig(**merged["athlete_timer"]),
-        competition=CompetitionConfig(**merged["competition"]),
-        display=DisplayConfig(**merged["display"]),
-        performance=PerformanceConfig(**merged["performance"]),
-        timeline=TimelineConfig(**merged["timeline"]),
-        takeoff_assist=TakeoffAssistConfig(**merged["takeoff_assist"]),
-        export=ExportConfig(**merged["export"]),
-        hotkeys=HotkeyConfig(**merged["hotkeys"]),
-        shuttle=ShuttleConfig(**merged["shuttle"]),
-    )
+    try:
+        config = AppConfig(
+            general=GeneralConfig(**merged["general"]),
+            camera=CameraConfig(**merged["camera"]),
+            buffer=BufferConfig(**merged["buffer"]),
+            attempts=AttemptsConfig(**merged["attempts"]),
+            athlete_timer=AthleteTimerConfig(**merged["athlete_timer"]),
+            competition=CompetitionConfig(**merged["competition"]),
+            display=DisplayConfig(**merged["display"]),
+            performance=PerformanceConfig(**merged["performance"]),
+            timeline=TimelineConfig(**merged["timeline"]),
+            takeoff_assist=TakeoffAssistConfig(**merged["takeoff_assist"]),
+            export=ExportConfig(**merged["export"]),
+            hotkeys=HotkeyConfig(**merged["hotkeys"]),
+            shuttle=ShuttleConfig(**merged["shuttle"]),
+        )
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"Invalid configuration structure: {exc}") from exc
     # Migrate pre-2.3 configs which only had display.refresh_hz.
     if "performance" not in data:
         config.performance.preview_refresh_hz = config.display.refresh_hz
@@ -511,11 +520,36 @@ def load_config(path: str | Path) -> AppConfig:
         config = AppConfig()
         save_config(config, path)
         return config
-    with path.open("r", encoding="utf-8") as file:
-        data = json.load(file)
-    if not isinstance(data, dict):
-        raise ValueError("The root of config.json must be a JSON object")
-    return config_from_dict(data)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        return config_from_dict(data)
+    except (json.JSONDecodeError, TypeError, ValueError, KeyError, OverflowError) as exc:
+        backup = _quarantine_invalid_config(path)
+        _LOGGER.warning(
+            "Invalid configuration recovered: path=%s backup=%s error=%s",
+            path,
+            backup or "unavailable",
+            exc,
+        )
+        config = AppConfig()
+        save_config(config, path)
+        return config
+
+
+def _quarantine_invalid_config(path: Path) -> Path | None:
+    """Move a malformed config aside without overwriting an earlier backup."""
+    for index in range(100):
+        suffix = ".corrupt" if index == 0 else f".corrupt.{index}"
+        backup = path.with_name(path.name + suffix)
+        if backup.exists():
+            continue
+        try:
+            path.replace(backup)
+        except OSError:
+            return None
+        return backup
+    return None
 
 
 def save_config(config: AppConfig, path: str | Path) -> None:

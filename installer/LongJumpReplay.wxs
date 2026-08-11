@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Long Jump Replay" Manufacturer="Long Jump Replay" Version="2.3.0" UpgradeCode="8D2B5F8D-3C6A-4A8E-8D2B-0C3A3B16E2F4" Scope="perMachine">
+  <Package Name="Long Jump Replay" Manufacturer="Long Jump Replay" Version="3.1.0" UpgradeCode="8D2B5F8D-3C6A-4A8E-8D2B-0C3A3B16E2F4" Scope="perMachine">
     <SummaryInformation Description="Live replay and take-off review station for long jump events." />
     <MajorUpgrade DowngradeErrorMessage="A newer version of Long Jump Replay is already installed." />
     <MediaTemplate EmbedCab="yes" />
@@ -12,7 +12,7 @@
     </Feature>
     <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="*"><File Id="LongJumpReplayExe" Source="$(var.BinDir)\LongJumpReplay.exe" KeyPath="yes" /></Component>
-      <Component Id="Readme" Guid="*"><File Id="ReadmeFile" Source="$(var.ProjectDir)\README_SHARE.txt" /></Component>
+      <Component Id="Readme" Guid="*"><File Id="ReadmeFile" Source="$(var.ProjectDir)\README.md" /></Component>
       <Component Id="ThirdPartyNotices" Guid="*"><File Id="ThirdPartyNoticesFile" Source="$(var.ProjectDir)\THIRD_PARTY_NOTICES.txt" /></Component>
     </ComponentGroup>
     <ComponentGroup Id="Shortcuts" Directory="APPLICATIONPROGRAMSFOLDER">

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 EN = {
-    "app.title": "Long Jump Replay 2.3",
+    "app.title": "Long Jump Replay 3.1",
     "app.header": "LONG JUMP REPLAY",
     "app.subtitle": "FOUL REVIEW STATION",
     "menu.file": "File",
@@ -225,7 +225,7 @@ EN = {
 }
 
 CS = {
-    "app.title": "Long Jump Replay 2.3",
+    "app.title": "Long Jump Replay 3.1",
     "app.header": "LONG JUMP REPLAY",
     "app.subtitle": "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ",
     "menu.file": "Soubor",

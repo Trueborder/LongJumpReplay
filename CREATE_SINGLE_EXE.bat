@@ -37,19 +37,19 @@ if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
 echo Building one-file Windows executable...
-%PYTHON% -m PyInstaller --noconfirm --clean --onefile --windowed --name LongJumpReplay --icon assets\long_jump_replay.ico --version-file windows_version_info.txt --add-data "config.json;." --add-data "assets\long_jump_replay.ico;assets" --add-data "assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
+%PYTHON% -m PyInstaller --noconfirm --clean --onefile --windowed --name LongJumpReplay --icon "%CD%\assets\long_jump_replay.ico" --version-file "%CD%\windows_version_info.txt" --add-data "%CD%\config.json;." --add-data "%CD%\assets\long_jump_replay.ico;assets" --add-data "%CD%\assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
 
 if not exist release mkdir release
-copy /y "dist\LongJumpReplay.exe" "release\LongJumpReplay-2.3.exe" >nul || goto :fail
+copy /y "dist\LongJumpReplay.exe" "release\LongJumpReplay-3.1.exe" >nul || goto :fail
 
 echo Running frozen self-test...
-"release\LongJumpReplay-2.3.exe" --self-test --self-test-report "release\SELF_TEST_SINGLE_EXE.txt"
+"release\LongJumpReplay-3.1.exe" --self-test --self-test-report "release\SELF_TEST_SINGLE_EXE.txt"
 if errorlevel 1 goto :fail
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-2.3.exe' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-2.3.exe.sha256' -Value ($h + '  LongJumpReplay-2.3.exe')" || goto :fail
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-3.1.exe' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-3.1.exe.sha256' -Value ($h + '  LongJumpReplay-3.1.exe')" || goto :fail
 
 echo.
-echo BUILD COMPLETE: release\LongJumpReplay-2.3.exe
+echo BUILD COMPLETE: release\LongJumpReplay-3.1.exe
 echo Self-test:     release\SELF_TEST_SINGLE_EXE.txt
 pause
 exit /b 0

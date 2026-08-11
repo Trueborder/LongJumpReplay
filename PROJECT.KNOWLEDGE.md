@@ -1,5 +1,21 @@
 # Long Jump Replay — Project Knowledge
 
+## Audit changes (2026-08-11)
+
+- The static sales site now uses a runway-control visual system and accurately describes the Capture/Freeze/Replay/Decide workflow. English/Czech copy is valid UTF-8, public download language says Windows installer rather than MSI, and `BUILD_SITE.ps1` reads transformed HTML/CSS with explicit UTF-8 encoding so deployable output cannot reintroduce mojibake.
+- `src/config.py` preserves malformed settings as `.corrupt` backups and starts from validated defaults; `config_from_dict` still raises for direct callers that need strict validation.
+- `AttemptManager.delete()` protects collecting/encoding/exporting attempts from destructive races. Export copies use temporary destinations before replacement, and cache-size directory scans are throttled and invalidated after cache mutations.
+- Encoded replay reads use a bounded per-attempt LRU plus a sequential decoder position. This preserves frame stepping while reducing repeated random seeks during playback/comparison.
+- `VideoCanvas` keeps a fixed Tk canvas item set and updates it in place. The timeline remains governed by its existing pooled-item contract.
+- Evidence capture resolves the selected attempt frame and writes PNG/JSON artifacts atomically; it must not use `_displayed_bgr` as the source of truth.
+- The native `ReplayCoordinator` keeps frozen review bounded by removing the oldest post-freeze frames when the selected frame reaches the retention boundary. Native execution still requires a machine with the .NET SDK.
+
+## Developer workspace cleanup (2026-08-11)
+
+- Removed obsolete Codex onboarding prompts, the redundant customer README source, stale self-test/runtime logs, and the unused file inventory.
+- Build outputs, local virtual environments, native `bin`/`obj` folders, caches, and test reports are ignored by Git and are not part of the source tree. The active local `.venv` remains available to the developer but is no longer tracked.
+- Packaging now uses `README.md` as the customer readme source and still emits `README.txt` in portable/installer outputs.
+
 ## Customer release cleanup (2026-08-10)
 
 - The normal customer interface no longer exposes Diagnostics, operator/setup mode, synthetic test-source selection, advanced troubleshooting settings, or the internal cache-folder shortcut.
@@ -12,7 +28,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 2.3
+- **Current source version:** 3.1
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk
@@ -524,8 +540,9 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 
 ### MSI sales distribution
 
-- The public sales website distributes the self-contained `LongJumpReplay-Setup-2.3.exe`, not the loose EXE or portable ZIP.
-- The public sales website now distributes `LongJumpReplay-Setup-2.3.exe`, a self-contained administrator-elevated installer. The MSI remains an optional authoring path, not the public download.
+- `BUILD_CUSTOMER_RELEASE.bat` is the primary complete customer-release entry point. It runs tests and source/frozen self-tests before replacing the exact `release` directory, then creates the 3.1 setup EXE and checksums, customer documentation, and a deployable `release\website` containing the same installer. The capture-refill GUI timing test runs in its own fresh pytest process while every other test runs together; no test is skipped. Because the setup EXE requests administrator rights before processing arguments, unattended verification inspects its PyInstaller archive for the tested `payload\LongJumpReplay.exe` instead of launching the setup and triggering UAC. The loose application payload, private signing key, and owner-only license generator must remain outside that folder. Pass `--no-pause` for automation.
+- The public sales website distributes the self-contained `LongJumpReplay-Setup-3.1.exe`, not the loose EXE or portable ZIP.
+- The public sales website now distributes `LongJumpReplay-Setup-3.1.exe`, a self-contained administrator-elevated installer. The MSI remains an optional authoring path, not the public download.
 - The MSI is a per-machine WiX package installed under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
 - Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
@@ -533,7 +550,7 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 - `RUN_LICENSE_GENERATOR.bat` launches the Tkinter admin GUI. It generates, copies, or saves signed keys and normalizes pasted machine codes. `BUILD_LICENSE_GENERATOR.bat` can create an admin-only GUI EXE, which reads the private key from the project-side `tools\.license_private_key.json` file; it must never be sent to customers.
 - `docs\LICENSE_ADMIN.md` documents the customer activation and key-delivery workflow. The private key must remain backed up and outside customer installers, ZIPs, and support attachments.
 - The first-run license dialog is independent of the withdrawn Tk root, centered, raised, focused, and temporarily topmost so frozen Windows launches cannot wait invisibly for activation.
-- The static sales site is under `website`; edit `website\site.config.js` to change the contact email, price, domain, or MSI URL, then run `website\BUILD_SITE.ps1` to create the deployable `website\dist` folder.
+- The static sales site is under `website`; edit `website\site.config.js` to change the contact email, price, domain, or installer URL, then run `website\BUILD_SITE.ps1` to create the deployable `website\dist` folder. The build must preserve UTF-8 for Czech copy and symbols, rewrite source-only asset paths, and keep the 390 px mobile layout free of horizontal overflow.
 
 ### Source setup
 
@@ -548,12 +565,19 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 ### Portable release
 
 - `BUILD_PORTABLE.bat`
-- output: `release\LongJumpReplay-2.3-Windows-x64.zip`
+- output: `release\LongJumpReplay-3.1-Windows-x64.zip`
 
 ### Single EXE
 
 - `BUILD_SINGLE_EXE.bat`
 - supported, but not the recommended distribution format.
+
+### Native self-extracting installer
+
+- `BUILD_INSTALLER.bat` is the one-click installer entry point. It rebuilds the portable payload, reads the current version from `src/__init__.py`, embeds a versioned ZIP and `installer/installer.ps1` with Windows IExpress, and writes `release/LongJumpReplay-Setup-<major.minor>.exe` plus its SHA-256 sidecar.
+- `installer/installer.ps1` is the deployment code inside the self-extracting EXE. It elevates through UAC, validates the ZIP manifest and archive paths, stages the application, replaces the Program Files installation with rollback protection, and creates the all-users desktop shortcut.
+- `BUILD_CUSTOMER_RELEASE.bat` calls the native installer builder before staging documentation and the deployable website. The old Python/PyInstaller setup wrapper is no longer part of the installer path.
+- IExpress is a built-in Windows component required on the build machine; the installer itself has no Python runtime dependency.
 
 ### GitHub Actions
 
@@ -667,7 +691,8 @@ Highest-value future work, in rough order:
 
 ## 20. Build entry points
 
-- `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-2.3.exe`, and writes its SHA-256 sidecar.
+- `BUILD_CUSTOMER_RELEASE.bat` is the one-click customer release command and the only entry point intended to assemble the complete public `release` folder. Existing content in that exact folder is replaced only after source checks and installer assembly succeed.
+- `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-3.1.exe`, and writes its SHA-256 sidecar.
 
 ## 21. Definition of done for changes
 

@@ -291,7 +291,7 @@ class MainWindow:
         self.help_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.help_menu.add_command(label=self._t("menu.controls"), command=self.show_controls)
         self.help_menu.add_separator()
-        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 2.3\nLive video review for long-jump take-off decisions."))
+        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 3.1\nLive video review for long-jump take-off decisions."))
         self._style_all_menus()
 
     def _style_all_menus(self) -> None:
@@ -1658,33 +1658,62 @@ class MainWindow:
         except Exception as exc: show_themed_info(self.root, "Save frame", str(exc))
 
     def _save_evidence(self, attempt: AttemptSession, decision: AttemptDecision) -> None:
-        frame = self._displayed_bgr
-        if frame is None: return
+        frame_index = max(0, min(max(0, attempt.frame_count - 1), self.playback.attempt_frame_index))
+        media = self.attempts.get_frame(attempt.attempt_id, frame_index)
+        if media.frame_bgr is None:
+            raise RuntimeError("The selected attempt frame is not available")
+        # Resolve the frame from the selected attempt instead of trusting the
+        # last GUI preview reference, which may belong to a different attempt
+        # after a rapid selection change.
+        frame = media.frame_bgr.copy()
         directory = self._evidence_directory(); directory.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]
         roster = f"{attempt.competitor_group.lower()}-{attempt.competitor_number}_try-{attempt.competitor_attempt_number}" if attempt.competitor_number else f"attempt-{attempt.attempt_id}"
         base = directory / f"{roster}_{decision.value.lower()}_{stamp}"
         raw_path = None; annotated_path = None
-        if self.config.export.evidence_save_raw:
-            raw_path = base.with_name(base.name + "_raw.png")
-            if not cv2.imwrite(str(raw_path), frame): raise RuntimeError("Could not write raw evidence PNG")
-        if self.config.export.evidence_include_overlay:
-            annotated = frame.copy(); self._draw_evidence_overlay(annotated, attempt, decision)
-            annotated_path = base.with_name(base.name + "_annotated.png")
-            if not cv2.imwrite(str(annotated_path), annotated): raise RuntimeError("Could not write annotated evidence PNG")
-        metadata = {
-            "attempt_id": attempt.attempt_id, "group": attempt.competitor_group, "competitor": attempt.competitor_number,
-            "try": attempt.competitor_attempt_number, "decision": decision.value, "created_local": datetime.now().astimezone().isoformat(),
-            "frame_index": self.playback.attempt_frame_index, "frame_timestamp_ns": self._displayed_timestamp_ns,
-            "capture_fps": self.capture.stats().capture_fps, "quality_warning": attempt.quality_warning,
-            "guide": {"x": self.config.display.guide_x_ratio, "y": self.config.display.guide_y_ratio, "angle_deg": self.config.display.guide_angle_deg},
-            "board_roi": [self.config.display.board_roi_x, self.config.display.board_roi_y, self.config.display.board_roi_width, self.config.display.board_roi_height],
-            "raw_file": raw_path.name if raw_path else None, "annotated_file": annotated_path.name if annotated_path else None,
-        }
-        base.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        written: list[Path] = []
+        try:
+            if self.config.export.evidence_save_raw:
+                raw_path = base.with_name(base.name + "_raw.png")
+                self._write_evidence_png(frame, raw_path)
+                written.append(raw_path)
+            if self.config.export.evidence_include_overlay:
+                annotated = frame.copy(); self._draw_evidence_overlay(annotated, attempt, decision, frame_index)
+                annotated_path = base.with_name(base.name + "_annotated.png")
+                self._write_evidence_png(annotated, annotated_path)
+                written.append(annotated_path)
+            metadata = {
+                "attempt_id": attempt.attempt_id, "group": attempt.competitor_group, "competitor": attempt.competitor_number,
+                "try": attempt.competitor_attempt_number, "decision": decision.value, "created_local": datetime.now().astimezone().isoformat(),
+                "frame_index": frame_index, "frame_timestamp_ns": media.timestamp_ns,
+                "capture_fps": self.capture.stats().capture_fps, "quality_warning": attempt.quality_warning,
+                "guide": {"x": self.config.display.guide_x_ratio, "y": self.config.display.guide_y_ratio, "angle_deg": self.config.display.guide_angle_deg},
+                "board_roi": [self.config.display.board_roi_x, self.config.display.board_roi_y, self.config.display.board_roi_width, self.config.display.board_roi_height],
+                "raw_file": raw_path.name if raw_path else None, "annotated_file": annotated_path.name if annotated_path else None,
+            }
+            metadata_path = base.with_suffix(".json")
+            metadata_temp = metadata_path.with_name(metadata_path.name + ".tmp")
+            metadata_temp.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+            metadata_temp.replace(metadata_path)
+            written.append(metadata_path)
+        except Exception:
+            for path in written:
+                try: path.unlink(missing_ok=True)
+                except OSError: pass
+            raise
         self.attempts.set_evidence_paths(attempt.attempt_id, raw_path, annotated_path)
 
-    def _draw_evidence_overlay(self, frame: np.ndarray, attempt: AttemptSession, decision: AttemptDecision) -> None:
+    def _write_evidence_png(self, frame: np.ndarray, path: Path) -> None:
+        temporary = path.with_name(path.name + ".tmp.png")
+        try:
+            if not cv2.imwrite(str(temporary), frame):
+                raise RuntimeError("Could not write evidence PNG")
+            temporary.replace(path)
+        finally:
+            try: temporary.unlink(missing_ok=True)
+            except OSError: pass
+
+    def _draw_evidence_overlay(self, frame: np.ndarray, attempt: AttemptSession, decision: AttemptDecision, frame_index: int | None = None) -> None:
         h, w = frame.shape[:2]; d = self.config.display
         gx, gy = int(d.guide_x_ratio * w), int(d.guide_y_ratio * h)
         angle = math.radians(d.guide_angle_deg); length = int(math.hypot(w, h))
@@ -1696,7 +1725,8 @@ class MainWindow:
         cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 190, 230), 2, cv2.LINE_AA)
         overlay = frame.copy(); cv2.rectangle(overlay, (12, 12), (min(w - 12, 720), 82), (12, 16, 22), -1)
         cv2.addWeighted(overlay, .72, frame, .28, 0, frame)
-        label = f"{self._attempt_roster_display(attempt)}  |  {self._decision_display(decision).upper()}  |  {self._t("overlay.frame")} {self.playback.attempt_frame_index + 1}/{max(1, attempt.frame_count)}"
+        displayed_index = self.playback.attempt_frame_index if frame_index is None else frame_index
+        label = f"{self._attempt_roster_display(attempt)}  |  {self._decision_display(decision).upper()}  |  {self._t("overlay.frame")} {displayed_index + 1}/{max(1, attempt.frame_count)}"
         cv2.putText(frame, label, (25, 44), cv2.FONT_HERSHEY_SIMPLEX, .72, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(frame, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), (25, 70), cv2.FONT_HERSHEY_SIMPLEX, .52, (190, 200, 215), 1, cv2.LINE_AA)
 
@@ -2437,8 +2467,10 @@ class MainWindow:
     def _show_message(self, text: str, seconds: float = 5.0) -> None:
         self.message_var.set(text); self._message_until = time.perf_counter() + max(0, seconds)
     def _save_config_safely(self) -> None:
-        try: save_config(self._config_for_persistence(self.config), self.config_path)
-        except OSError: pass
+        try:
+            save_config(self._config_for_persistence(self.config), self.config_path)
+        except OSError as exc:
+            self._logger.warning("config_save_failed path=%s error=%s", self.config_path, exc)
 
     def _config_for_persistence(self, config: AppConfig) -> AppConfig:
         if self._persistent_camera_source_type is None:

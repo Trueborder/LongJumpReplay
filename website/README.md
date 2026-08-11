@@ -8,4 +8,4 @@ This is a dependency-free static sales site for LongJumpReplay.
 4. Upload the generated `dist` directory to any static host.
 
 The public download is the Windows setup EXE only. The installer is expected at
-`dist\downloads\LongJumpReplay-Setup-2.3.exe` after a successful installer build.
+`dist\downloads\LongJumpReplay-Setup-3.1.exe` after a successful installer build.

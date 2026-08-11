@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-echo === Long Jump Replay 2.3 single EXE build ===
+echo === Long Jump Replay 3.1 single EXE build ===
 where py >nul 2>nul
 if errorlevel 1 (
   echo Python Launcher was not found. Install Python 3.12 x64 first.
@@ -36,16 +36,16 @@ python app.py --self-test --self-test-report SELF_TEST_SOURCE.txt || goto :fail
 
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
-python -m PyInstaller --noconfirm --clean --specpath build\generated --onefile --noupx --windowed --name LongJumpReplay --icon assets\long_jump_replay.ico --version-file windows_version_info.txt --add-data "config.json;." --add-data "assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
+python -m PyInstaller --noconfirm --clean --specpath build\generated --onefile --noupx --windowed --name LongJumpReplay --icon "%CD%\assets\long_jump_replay.ico" --version-file "%CD%\windows_version_info.txt" --add-data "%CD%\config.json;." --add-data "%CD%\assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
 
 if not exist release mkdir release
-copy /y dist\LongJumpReplay.exe release\LongJumpReplay-2.3.exe >nul
-release\LongJumpReplay-2.3.exe --self-test --self-test-report release\SELF_TEST_SINGLE_EXE.txt
+copy /y dist\LongJumpReplay.exe release\LongJumpReplay-3.1.exe >nul
+release\LongJumpReplay-3.1.exe --self-test --self-test-report release\SELF_TEST_SINGLE_EXE.txt
 if errorlevel 1 goto :fail
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-2.3.exe' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-2.3.exe.sha256' -Value ($h + '  LongJumpReplay-2.3.exe')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-3.1.exe' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-3.1.exe.sha256' -Value ($h + '  LongJumpReplay-3.1.exe')"
 
 echo.
-echo BUILD COMPLETE: release\LongJumpReplay-2.3.exe
+echo BUILD COMPLETE: release\LongJumpReplay-3.1.exe
 echo Self-test:     release\SELF_TEST_SINGLE_EXE.txt
 pause
 exit /b 0

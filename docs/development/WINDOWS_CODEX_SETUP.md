@@ -12,7 +12,7 @@ Do not develop inside Downloads or inside the ZIP. Extract first, then use the t
 
 ## 1. Extract the handoff ZIP
 
-1. Download `LongJumpReplay_2.3_Codex_Handoff.zip`.
+1. Download `LongJumpReplay_3.1_Codex_Handoff.zip`.
 2. Right-click it and choose **Extract All**.
 3. Open the extracted folder.
 4. Right-click `TRANSFER_TO_DOCUMENTS.ps1` and choose **Run with PowerShell**.
@@ -120,7 +120,7 @@ Or manually:
 codex
 ```
 
-Paste the prompt from `CODEX_FIRST_PROMPT.md` for the first session.
+Read `AGENTS.md` and `PROJECT.KNOWLEDGE.md` before the first session, then describe the focused change, reproduction steps, constraints, and tests.
 
 ## 6. Recommended Git workflow
 
@@ -151,7 +151,7 @@ Create a separate branch for each meaningful feature or bug fix. Do not let a lo
 Expected output:
 
 ```text
-release\LongJumpReplay-2.3-Windows-x64.zip
+release\LongJumpReplay-3.1-Windows-x64.zip
 ```
 
 The portable folder build is recommended. Test it from a clean extracted folder before sharing.

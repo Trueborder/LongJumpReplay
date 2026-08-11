@@ -1,4 +1,4 @@
-# Long Jump Replay 2.3 – český návod
+# Long Jump Replay 3.1 – český návod
 
 Program slouží pro živý náhled a zpětnou kontrolu odrazu při skoku dalekém. Kamera běží dál i během kontroly pokusu. Zmrazený pokus se uloží jako samostatný dočasný záznam, takže po přepsání živého bufferu nezmizí.
 
@@ -54,7 +54,15 @@ Každá náročná volba má označení **Nízký / Střední / Vysoký / Velmi 
 
 ## Sdílení jako Windows aplikace
 
-Spusť:
+Kompletní zákaznickou verzi vytvoří jediný příkaz:
+
+```text
+BUILD_CUSTOMER_RELEASE.bat
+```
+
+Po úspěšných testech skript nahradí celý obsah složky `release` a vloží do ní instalátor 3.1 s kontrolním součtem, nasaditelný web se stejným instalátorem, zákaznickou dokumentaci a souhrnný soubor `SHA256SUMS.txt`. Soukromý licenční klíč ani nástroj pro správu licencí se do zákaznické verze nekopírují.
+
+Pouze pro přenosnou záložní variantu spusť:
 
 ```text
 BUILD_PORTABLE.bat
@@ -63,7 +71,7 @@ BUILD_PORTABLE.bat
 Výsledek:
 
 ```text
-release\LongJumpReplay-2.3-Windows-x64.zip
+release\LongJumpReplay-3.1-Windows-x64.zip
 ```
 
 Příjemce ZIP jen rozbalí a spustí `LongJumpReplay.exe`. Python nepotřebuje.
@@ -72,4 +80,4 @@ Když je vybraná soutěžní tabule, obyčejné šipky vždy přecházejí mezi
 
 V Nastavení má každá volba vlastní popis. Přepínač Zobrazovat popisy nastavení okamžitě skryje nebo obnoví celý sloupec popisů. Tlačítka a rozbalovací seznamy používají kompaktní zaoblený vzhled a zaškrtávací políčka mají jasně viditelný kruhový indikátor.
 
-Podrobný anglický návod je v `README.md` a výsledky testů v `TEST_REPORT_2.3.md`.
+Podrobný anglický návod je v `README.md` a výsledky testů v `TEST_REPORT_3.1.md`.

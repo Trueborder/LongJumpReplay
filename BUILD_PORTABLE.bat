@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-echo === Long Jump Replay 2.3 portable Windows build ===
+echo === Long Jump Replay 3.1 portable Windows build ===
 where py >nul 2>nul
 if errorlevel 1 (
   echo Python Launcher was not found. Install Python 3.12 x64 from python.org.
@@ -41,25 +41,25 @@ python -m PyInstaller --noconfirm --clean LongJumpReplay.spec || goto :fail
 dist\LongJumpReplay\LongJumpReplay.exe --self-test --self-test-report dist\LongJumpReplay\SELF_TEST_FROZEN.txt
 if errorlevel 1 goto :fail
 
-copy /y README_SHARE.txt dist\LongJumpReplay\README.txt >nul
+copy /y README.md dist\LongJumpReplay\README.txt >nul
 
 if exist release rmdir /s /q release
 mkdir release
 xcopy /e /i /y dist\LongJumpReplay release\LongJumpReplay >nul
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'release\LongJumpReplay\*' -DestinationPath 'release\LongJumpReplay-2.3-Windows-x64.zip' -Force"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'release\LongJumpReplay\*' -DestinationPath 'release\LongJumpReplay-3.1-Windows-x64.zip' -Force"
 if errorlevel 1 goto :fail
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-2.3-Windows-x64.zip' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-2.3-Windows-x64.zip.sha256' -Value ($h + '  LongJumpReplay-2.3-Windows-x64.zip')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-3.1-Windows-x64.zip' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-3.1-Windows-x64.zip.sha256' -Value ($h + '  LongJumpReplay-3.1-Windows-x64.zip')"
 
 echo.
 echo BUILD COMPLETE
-echo Share: release\LongJumpReplay-2.3-Windows-x64.zip
-echo Hash:  release\LongJumpReplay-2.3-Windows-x64.zip.sha256
+echo Share: release\LongJumpReplay-3.1-Windows-x64.zip
+echo Hash:  release\LongJumpReplay-3.1-Windows-x64.zip.sha256
 echo The recipient only extracts the ZIP and runs LongJumpReplay.exe.
-pause
+if not defined LJR_NO_PAUSE pause
 exit /b 0
 
 :fail
 echo.
 echo BUILD FAILED. Read the error above.
-pause
+if not defined LJR_NO_PAUSE pause
 exit /b 1

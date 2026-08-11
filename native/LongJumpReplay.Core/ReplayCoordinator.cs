@@ -45,8 +45,19 @@ public sealed class ReplayCoordinator
             while (_frames.Count > _maxFrames || (_frames.First is not null && _frames.First.Value.TimestampTicks < cutoff))
             {
                 var removed = _frames.First!;
-                if (ReferenceEquals(removed, _displayed) && Mode == PlaybackMode.Replay) break;
-                _frames.RemoveFirst();
+                if (ReferenceEquals(removed, _displayed) && Mode == PlaybackMode.Replay)
+                {
+                    // Keep the selected review frame alive, but discard the
+                    // oldest frame after it when the frozen frame reaches the
+                    // front.  Breaking here would let a frozen replay grow
+                    // without bound while capture continued.
+                    if (removed.Next is null) break;
+                    _frames.Remove(removed.Next);
+                }
+                else
+                {
+                    _frames.RemoveFirst();
+                }
             }
         }
     }

@@ -2,6 +2,8 @@ import time
 from pathlib import Path
 from queue import Queue
 
+import numpy as np
+
 from src.attempts import AttemptManager
 from src.config import AttemptsConfig, ExportConfig
 from src.models import AttemptState
@@ -64,6 +66,83 @@ def test_selected_attempt_does_not_expire(tmp_path, jpeg_frame):
     manager.clear_selection()
     assert manager.selected_attempt() is None
     manager.stop()
+
+
+def test_in_progress_attempt_cannot_be_deleted(tmp_path, jpeg_frame):
+    jpeg, _ = jpeg_frame
+    ring = TimeRingBuffer(2, 128)
+    ring.append(time.monotonic_ns(), jpeg, 160, 90)
+    manager = AttemptManager(ring, AttemptsConfig(pre_seconds=.1, post_seconds=.1), ExportConfig(), tmp_path / 'cache', Queue())
+    created = manager.create_attempt()
+    assert created is not None
+
+    for state in (AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING):
+        with manager._lock:
+            manager._find_locked(created.attempt_id).state = state
+        assert not manager.delete(created.attempt_id, force=True)
+        assert manager.get_attempt(created.attempt_id) is not None
+
+
+def test_encoded_frame_reader_reuses_sequential_decode_and_recent_frames(monkeypatch, tmp_path):
+    class FakeCapture:
+        instances = []
+
+        def __init__(self, _path):
+            self.position = 0
+            self.set_calls = []
+            self.read_calls = 0
+            FakeCapture.instances.append(self)
+
+        def isOpened(self):
+            return True
+
+        def set(self, _property, value):
+            self.position = int(value)
+            self.set_calls.append(self.position)
+            return True
+
+        def read(self):
+            frame = np.full((4, 6, 3), self.position, dtype=np.uint8)
+            self.position += 1
+            self.read_calls += 1
+            return True, frame
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr('src.attempts.cv2.VideoCapture', FakeCapture)
+    ring = TimeRingBuffer(2, 128)
+    cache = tmp_path / 'cache'
+    cache.mkdir()
+    video = cache / 'attempt_0001.mp4'
+    video.write_bytes(b'fake')
+    manager = AttemptManager(ring, AttemptsConfig(), ExportConfig(), cache, Queue())
+    from src.models import AttemptSession, AttemptState
+    attempt = AttemptSession(
+        attempt_id=1,
+        created_monotonic_ns=0,
+        created_wall_time=time.time(),
+        freeze_timestamp_ns=1,
+        pre_seconds=0,
+        post_seconds=0,
+        expires_at_wall_time=time.time() + 60,
+        state=AttemptState.READY,
+        temp_video_path=video,
+        frame_count=8,
+        fps=60,
+    )
+    manager._attempts.append(attempt)
+
+    first = manager.get_frame(1, 0)
+    second = manager.get_frame(1, 1)
+    cached_first = manager.get_frame(1, 0)
+    cached_second = manager.get_frame(1, 1)
+
+    capture = FakeCapture.instances[0]
+    assert capture.set_calls == [0]
+    assert capture.read_calls == 2
+    assert first.frame_bgr is cached_first.frame_bgr
+    assert second.frame_bgr is cached_second.frame_bgr
 
 
 def test_ready_attempt_is_recovered_from_temporary_cache(tmp_path, jpeg_frame):

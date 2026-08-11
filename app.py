@@ -172,7 +172,7 @@ def _startup_splash(root: tk.Tk, language: str = "en") -> tuple[tk.Toplevel, tk.
     canvas.create_rectangle(0, 0, 430, height, fill="#08111d", outline="")
     canvas.create_rectangle(0, height - 3, width, height, fill="#4f8cff", outline="")
     canvas.create_rectangle(40, 52, 112, 56, fill="#4f8cff", outline="")
-    tk.Label(canvas, text="LJR  /  2.3", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=72)
+    tk.Label(canvas, text="LJR  /  3.1", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=72)
     canvas.create_text(38, 98, text="LONG JUMP", anchor="nw", fill="#f4f7fb", font=("Segoe UI Semibold", 29))
     canvas.create_text(38, 148, text="REPLAY", anchor="nw", fill="#4f8cff", font=("Segoe UI Semibold", 29))
     subtitle = "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ" if language == "cs" else "FOUL REVIEW STATION"

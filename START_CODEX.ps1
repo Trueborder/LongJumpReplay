@@ -12,5 +12,5 @@ if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Starting Codex in: $PSScriptRoot" -ForegroundColor Cyan
-Write-Host "For the first session, paste the prompt from CODEX_FIRST_PROMPT.md." -ForegroundColor Yellow
+Write-Host "Read AGENTS.md and PROJECT.KNOWLEDGE.md before making changes." -ForegroundColor Yellow
 & codex

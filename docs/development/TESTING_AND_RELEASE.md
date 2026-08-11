@@ -79,6 +79,14 @@ Before event use, validate on the exact setup:
 
 Do not distribute until the frozen self-test passes and the ZIP has been extracted and launched from a clean directory.
 
+Build the native self-extracting installer with:
+
+```powershell
+.\BUILD_INSTALLER.bat
+```
+
+This rebuilds the portable payload, embeds it with `installer\installer.ps1` using the Windows IExpress component, and creates `release\LongJumpReplay-Setup-<major.minor>.exe` with a SHA-256 sidecar. The installer validates the embedded `VERSION.txt`, so an installer cannot install a payload whose version does not match the version read from `src\__init__.py`.
+
 ## Version updates
 
 Search for the old version string before release:
