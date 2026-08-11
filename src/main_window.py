@@ -2517,9 +2517,9 @@ class MainWindow:
             except Exception: pass
             try: alive.extend(self.shuttle.stop(timeout=.8))
             except Exception: pass
-            try: alive.extend(self.attempts.stop(timeout=1.0))
-            except Exception: pass
             try: alive.extend(self.capture.stop(timeout=2.0))
+            except Exception: pass
+            try: alive.extend(self.attempts.stop(timeout=1.0))
             except Exception: pass
             self.event_queue.put(("shutdown_done", alive))
         Thread(target=worker, name="shutdown-manager", daemon=True).start(); self.root.after(40, self._poll_shutdown)

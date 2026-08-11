@@ -31,7 +31,7 @@ call "%VENV_DIR%\Scripts\activate.bat" || goto :fail
 python -c "import sys; assert sys.version_info[:2] == (3, 12)" || goto :fail
 python -m pip install --upgrade pip || goto :fail
 python -m pip install -r requirements-build.txt || goto :fail
-python -m pytest || goto :fail
+call "%CD%\RUN_TESTS.bat" || goto :fail
 python app.py --self-test --self-test-report SELF_TEST_SOURCE.txt || goto :fail
 
 rmdir /s /q build 2>nul

@@ -66,12 +66,17 @@ def test_clear_all_recordings_keeps_capture_running(tmp_path, monkeypatch):
         app.clear_all_recordings()
         result["attempts"] = len(app.attempts.attempts())
         result["buffer_after"] = len(app.buffer)
+
+    refill_deadline = time.monotonic() + 4.0
     def inspect():
         result["capture"] = app.capture.is_running
         result["buffer_refilled"] = len(app.buffer)
+        if result["buffer_refilled"] == 0 and time.monotonic() < refill_deadline:
+            root.after(100, inspect)
+            return
         app.close()
     root.after(850, clear); root.after(1250, inspect)
-    root.after(6000, lambda: root.destroy() if root.winfo_exists() else None); root.mainloop()
+    root.after(9000, lambda: root.destroy() if root.winfo_exists() else None); root.mainloop()
     assert result["attempts"] == 0
     assert result["capture"] is True
     assert result["buffer_refilled"] > result["buffer_after"]

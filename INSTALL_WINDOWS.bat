@@ -15,7 +15,7 @@ if not exist .venv (
 call .venv\Scripts\activate.bat || goto :fail
 python -m pip install --upgrade pip || goto :fail
 python -m pip install -r requirements-build.txt || goto :fail
-python -m pytest || goto :fail
+call "%CD%\RUN_TESTS.bat" || goto :fail
 python app.py --self-test || goto :fail
 echo.
 echo Installation and tests completed successfully.

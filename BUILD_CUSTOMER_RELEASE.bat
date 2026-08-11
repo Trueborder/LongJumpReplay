@@ -2,8 +2,8 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-for /f "usebackq delims=" %%V in (`powershell.exe -NoProfile -File "%CD%\installer\get-version.ps1"`) do set "VERSION_FULL=%%V"
-for /f "usebackq delims=" %%V in (`powershell.exe -NoProfile -File "%CD%\installer\get-version.ps1" -Label`) do set "VERSION_LABEL=%%V"
+for /f "usebackq delims=" %%V in (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\installer\get-version.ps1"`) do set "VERSION_FULL=%%V"
+for /f "usebackq delims=" %%V in (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\installer\get-version.ps1" -Label`) do set "VERSION_LABEL=%%V"
 
 if not defined VERSION_FULL goto :fail_version
 if not defined VERSION_LABEL goto :fail_version

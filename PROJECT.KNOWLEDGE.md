@@ -2,6 +2,14 @@
 
 ## Audit changes (2026-08-11)
 
+- Licensing tests now create an isolated temporary test signing key and patch the matching public modulus for their round-trip checks. Build and CI test runs therefore no longer require the ignored production `tools\.license_private_key.json`; the real key remains required only for the owner-only license administration tools.
+- Pytest uses a unique per-process temporary root unless the caller supplies `--basetemp`, preventing `pytest-current` cleanup from colliding with folders created by an elevated or different Windows account.
+- Pytest also validates Tcl/Tk library paths against the active Python installation before GUI modules load, preventing intermittent `tcl_findLibrary` startup failures in Windows customer-release runs.
+- GUI test Tk creation retries only transient Tcl/Tk library-initialization errors five times with a short bound; a genuinely incomplete Python installation still fails explicitly.
+- The clear-recordings GUI regression test waits a bounded period for the synthetic capture buffer to refill instead of treating one fixed scheduler timestamp as a failure.
+- GUI shutdown stops capture before the attempt manager, preventing new frames from feeding attempt workers while teardown is already in progress.
+- `RUN_TESTS.bat` runs non-GUI tests together and each `tests\*_gui.py` file in a fresh pytest process. All Windows build/test batch entry points use it so Tk interpreters and capture workers cannot leak across GUI test-file boundaries.
+- `BUILD_CUSTOMER_RELEASE.bat` invokes its version reader with `-ExecutionPolicy Bypass`, matching the other release PowerShell calls so restrictive machine execution policy does not stop version detection before the build starts.
 - The static sales site now uses a runway-control visual system and accurately describes the Capture/Freeze/Replay/Decide workflow. English/Czech copy is valid UTF-8, public download language says Windows installer rather than MSI, and `BUILD_SITE.ps1` reads transformed HTML/CSS with explicit UTF-8 encoding so deployable output cannot reintroduce mojibake.
 - `src/config.py` preserves malformed settings as `.corrupt` backups and starts from validated defaults; `config_from_dict` still raises for direct callers that need strict validation.
 - `AttemptManager.delete()` protects collecting/encoding/exporting attempts from destructive races. Export copies use temporary destinations before replacement, and cache-size directory scans are throttled and invalidated after cache mutations.
@@ -693,6 +701,8 @@ Highest-value future work, in rough order:
 
 - `BUILD_CUSTOMER_RELEASE.bat` is the one-click customer release command and the only entry point intended to assemble the complete public `release` folder. Existing content in that exact folder is replaced only after source checks and installer assembly succeed.
 - `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-3.1.exe`, and writes its SHA-256 sidecar.
+- `ProductFinal` is a generated, portable customer payload copied from the verified PyInstaller build. It includes `LongJumpReplay.exe`, the complete `_internal` runtime tree, `README.txt`, and the frozen self-test report. It is ignored by Git because it is a build artifact.
+- The payload can be copied beneath `C:\Program Files\LongJumpReplay`, but the application still uses `%LOCALAPPDATA%\LongJumpReplay` for writable per-user configuration, license data, cache, exports/evidence, runtime logs, and crash logs. Program Files is therefore not the only storage location; do not remove the AppData directory after installation.
 
 ## 21. Definition of done for changes
 

@@ -7,7 +7,7 @@
   },
   "camera": {
     "source_type": "camera",
-    "device_index": 0,
+    "device_index": 1,
     "file_path": "",
     "width": 1280,
     "height": 720,

@@ -16,10 +16,12 @@ config.local.json
 .venv-*/
 .venv.stale-*/
 .pytest_cache/
+.pytest-temp/
 cache/
 build/
 dist/
 dist-single/
+ProductFinal/
 native/**/bin/
 native/**/obj/
 __pycache__/
