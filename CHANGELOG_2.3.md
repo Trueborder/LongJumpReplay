@@ -4,6 +4,7 @@
 
 - Build scripts now detect and preserve stale virtual environments before creating a fresh Python 3.12 environment.
 - Single-file PyInstaller builds disable UPX compression to reduce Windows bootloader and antivirus extraction failures.
+- Corrected the portable PyInstaller spec to produce the one-folder executable expected by the portable build and frozen self-test.
 - The portable one-folder build remains the recommended production distribution.
 
 ## Customer release cleanup
