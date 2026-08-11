@@ -454,7 +454,7 @@ The portable folder build is preferred over one-file:
 - fewer antivirus false positives;
 - more predictable codec/DLL behavior.
 
-The Windows build scripts detect a stale `.venv` whose interpreter points to a different machine, preserve it as `.venv.stale-build-*`, and create a fresh Python 3.12 environment. Single-file builds disable UPX compression to reduce bootloader/antivirus extraction failures. The portable folder remains the supported customer path when Windows cannot unpack a one-file executable.
+The Windows build scripts detect a stale `.venv` whose interpreter points to a different machine, leave it untouched, and create a fresh `.venv-build-*` Python 3.12 environment. Single-file builds disable UPX compression to reduce bootloader/antivirus extraction failures. The portable folder remains the supported customer path when Windows cannot unpack a one-file executable.
 
 ## 13. Tests and verification
 
