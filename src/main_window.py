@@ -45,6 +45,29 @@ from .timeline import ProfessionalTimeline
 from .video_canvas import VideoCanvas
 
 
+def camera_waiting_messages(
+    translator: Translator,
+    source_type: str,
+    device_index: int,
+    selected_camera: bool,
+) -> tuple[str, str]:
+    """Return the camera wait text for initial or selected-device startup."""
+    if selected_camera and source_type == "camera":
+        return (
+            translator("camera.input_waiting_selected", index=device_index),
+            translator("camera.input_checking_selected", index=device_index),
+        )
+    return translator("camera.input_waiting"), translator("camera.input_checking")
+
+
+def first_available_camera(
+    probe_results: dict[int, bool | None],
+    candidates: tuple[int, ...] = (0, 1),
+) -> int | None:
+    """Return the first camera confirmed by the startup probe."""
+    return next((index for index in candidates if probe_results.get(index) is True), None)
+
+
 class MainWindow:
     def __init__(
         self,
@@ -52,11 +75,13 @@ class MainWindow:
         config: AppConfig,
         config_path: Path,
         persistent_camera_source_type: str | None = None,
+        startup_camera_index: int | None = None,
     ) -> None:
         self.root = root
         self.config = config
         self.config_path = config_path
         self._persistent_camera_source_type = persistent_camera_source_type
+        self._selected_camera_startup_feedback = startup_camera_index is not None
         self.translator = Translator(config.general.language)
         self.root.title(self.translator("app.title"))
         self.root.minsize(1100, 700)
@@ -105,7 +130,9 @@ class MainWindow:
         self._warning_active = False
         self._last_video_update = 0.0
         self._menu_active_until = 0.0
-        self._operator_mode = bool(config.competition.operator_mode_enabled)
+        # Operator/setup mode is a development-only compatibility flag and is
+        # never enabled by the customer application.
+        self._operator_mode = False
         self._recovery_checked = False
         self._last_board_signature: object = None
         self._board_next_assignment: RosterAssignment | None = None
@@ -229,7 +256,6 @@ class MainWindow:
         self.file_menu.add_command(label=self._t("menu.clear") + "\tCtrl+Delete", command=self.clear_all_recordings)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.exports"), command=self.open_exports_folder)
-        self.file_menu.add_command(label=self._t("menu.cache"), command=self.open_cache_folder)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.settings"), command=self.open_settings)
         self.file_menu.add_separator()
@@ -262,15 +288,8 @@ class MainWindow:
         self.view_menu.add_command(label=self._t("menu.fullscreen") + "\tF11", command=self.toggle_fullscreen)
         self.view_menu.add_command(label=self._t("menu.reset") + "\tR", command=self.reset_video_views)
         self.view_menu.add_command(label=self._t("menu.guide") + "\tG", command=self.toggle_guide)
-        if self.config.competition.operator_mode_enabled:
-            self.view_menu.add_separator()
-            self.view_menu.add_command(label=self._t("operator.setup") if self._operator_mode else self._t("operator.operator"), command=self.toggle_operator_mode)
-
         self.help_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.help_menu.add_command(label=self._t("menu.controls"), command=self.show_controls)
-        self.help_menu.add_command(label=self._t("menu.diagnostics"), command=self.show_diagnostics)
-        if self.config.competition.camera_diagnostic_enabled:
-            self.help_menu.add_command(label="Camera diagnostic", command=self.open_camera_diagnostic)
         self.help_menu.add_separator()
         self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 2.3\nLive video review for long-jump take-off decisions."))
         self._style_all_menus()
@@ -312,7 +331,7 @@ class MainWindow:
         self.timer_value_label = tk.Label(self.timer_frame, textvariable=self.timer_value_var, borderwidth=0, cursor="hand2", font=("Consolas", 12, "bold"))
         self.timer_value_label.pack(side="left", padx=(0, 6), pady=3)
         for widget in (self.timer_frame, self.timer_prefix_label, self.timer_value_label):
-            widget.bind("<Button-1>", lambda _event: self.toggle_athlete_timer())
+            widget.bind("<Button-1>", self._on_timer_click)
         self.system_pause_button = ttk.Button(header, text=self._t("button.pause_system"), width=14, style="SystemPause.TButton", command=self.toggle_system_pause)
         self.system_pause_button.pack(side="right", padx=(12, 0), pady=(1, 0))
         self.mode_badge = tk.Label(header, textvariable=self.mode_var, width=14, anchor="center", padx=10, pady=4, borderwidth=0, font=("Segoe UI Semibold", 9))
@@ -750,6 +769,7 @@ class MainWindow:
             self.live_canvas.set_status(self._t("mode.paused"), p["muted"])
             self.replay_canvas.set_status(self._t("mode.paused"), p["muted"], self._t("system.paused_status"))
             return
+        self._maybe_select_available_camera()
         no_video = (
             self.playback.mode is PlaybackMode.LIVE
             and self._displayed_bgr is None
@@ -832,6 +852,16 @@ class MainWindow:
         else:
             self.camera_action_frame.place_forget()
 
+    def _set_camera_waiting_feedback(self) -> None:
+        title, detail = camera_waiting_messages(
+            self.translator,
+            self.config.camera.source_type,
+            self.config.camera.device_index,
+            self._selected_camera_startup_feedback,
+        )
+        self.camera_waiting_title.configure(text=title)
+        self.camera_waiting_detail.configure(text=detail)
+
     def _start_camera_probe(self) -> None:
         self._camera_probe_stop.set()
         probe_stop = Event()
@@ -867,6 +897,32 @@ class MainWindow:
 
         Thread(target=probe, name="camera-input-probe", daemon=True).start()
 
+    def _maybe_select_available_camera(self) -> None:
+        """Use the first working camera found during the initial all-sources check."""
+        if (
+            self._selected_camera_startup_feedback
+            or self._camera_retrying
+            or not self._camera_starting
+            or self.config.camera.source_type != "camera"
+        ):
+            return
+        live_frame, _, _ = self.capture.latest.get()
+        if live_frame is not None:
+            return
+        with self._camera_probe_lock:
+            probe_results = dict(self._camera_probe_results)
+        selected_index = first_available_camera(probe_results)
+        if selected_index is None or selected_index == self.config.camera.device_index:
+            return
+
+        self.config.camera.device_index = selected_index
+        self.capture.camera_config.device_index = selected_index
+        self._selected_camera_startup_feedback = True
+        self._set_camera_waiting_feedback()
+        self._save_config_safely()
+        log_event(self._logger, "camera_auto_selected", device_index=selected_index)
+        self._try_camera_again()
+
     def _try_camera_again(self) -> None:
         if self._camera_retrying or self._closing:
             return
@@ -892,6 +948,7 @@ class MainWindow:
 
     def _start_camera_with_feedback(self, message: str) -> None:
         """Start capture while keeping a visible, bounded activity indicator."""
+        self._set_camera_waiting_feedback()
         self._camera_starting = True
         self._camera_start_started_at = time.perf_counter()
         self._camera_start_deadline = self._camera_start_started_at + 10.0
@@ -970,6 +1027,9 @@ class MainWindow:
         else:
             self.athlete_timer.start()
         self._update_athlete_timer_display()
+
+    def _on_timer_click(self, _event: tk.Event | None = None) -> None:
+        self.toggle_athlete_timer()
 
     def _set_system_paused_ui(self) -> None:
         paused_or_stopping = self._system_paused or self._system_pause_transition
@@ -1963,7 +2023,7 @@ class MainWindow:
     def open_settings(self) -> None:
         SettingsDialog(self.root, self.config, self.apply_settings, self.open_camera_diagnostic, self.show_onboarding)
 
-    def restart_now(self) -> None:
+    def restart_now(self, startup_camera_index: int | None = None) -> None:
         """Launch the same command line again, then use the normal bounded shutdown."""
         self._save_config_safely()
         try:
@@ -1971,6 +2031,8 @@ class MainWindow:
                 command = [sys.executable, *sys.argv[1:]]
             else:
                 command = [sys.executable, str(Path(sys.argv[0]).resolve()), *sys.argv[1:]]
+            if startup_camera_index is not None:
+                command.extend(("--startup-camera-index", str(startup_camera_index)))
             subprocess.Popen(command, cwd=str(Path.cwd()))
         except OSError as exc:
             show_themed_info(
@@ -2127,7 +2189,7 @@ class MainWindow:
                 no="Later" if language_is_en else "Později",
             )
             if restart:
-                self.restart_now()
+                self.restart_now(new_config.camera.device_index if new_config.camera.source_type == "camera" else None)
 
     # ------------------------------------------------------ competition setup
     def start_competition_wizard(self) -> None:
@@ -2271,7 +2333,7 @@ class MainWindow:
         advice.pack(fill="both", expand=True)
         for number, key in enumerate((
             "camera.help_source", "camera.help_index", "camera.help_close_other",
-            "camera.help_permissions", "camera.help_mode", "camera.help_diagnostic",
+            "camera.help_permissions", "camera.help_mode",
         ), 1):
             row = ttk.Frame(advice, style="Panel.TFrame")
             row.pack(fill="x", pady=3)
@@ -2282,10 +2344,7 @@ class MainWindow:
         footer.pack(fill="x", pady=(14, 0))
         def open_settings() -> None:
             dialog.destroy(); self._camera_help_dialog = None; self.open_settings()
-        def run_diagnostic() -> None:
-            dialog.destroy(); self._camera_help_dialog = None; self.open_camera_diagnostic()
         ttk.Button(footer, text=self._t("camera.help_open_settings"), command=open_settings).pack(side="left")
-        ttk.Button(footer, text=self._t("camera.help_run_diagnostic"), style="Accent.TButton", command=run_diagnostic).pack(side="left", padx=(8, 0))
         def close_help() -> None:
             self._camera_help_dialog = None
             dialog.destroy()
@@ -2342,7 +2401,6 @@ class MainWindow:
     def _evidence_directory(self) -> Path:
         path = self._exports_directory() / self.config.export.evidence_directory; path.mkdir(parents=True, exist_ok=True); return path
     def open_exports_folder(self) -> None: self._open_directory(self._exports_directory())
-    def open_cache_folder(self) -> None: self._open_directory(resolve_user_path(self.config_path, self.config.attempts.cache_directory))
     def _open_directory(self, path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
         if os.name == "nt": os.startfile(path)  # type: ignore[attr-defined]

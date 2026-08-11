@@ -1,0 +1,6 @@
+[1/5] Synthetic 120 fps capture started
+[2/5] capture=120.1 fps, encoded=59.8 fps, buffer=96 frames, drops=0
+[3/5] Attempt #1 pinned at frame 61
+[4/5] temp MP4=attempt_0001.mp4, 92 frames @ 60.7 fps
+[5/5] export=attempt_01_2026-08-10_19-29-02.mp4; remaining workers=none
+SELF-TEST: OK

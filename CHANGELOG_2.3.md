@@ -1,5 +1,19 @@
 # Long Jump Replay 2.3 — Changelog
 
+## Windows packaging repair
+
+- Build scripts now detect and preserve stale virtual environments before creating a fresh Python 3.12 environment.
+- Single-file PyInstaller builds disable UPX compression to reduce Windows bootloader and antivirus extraction failures.
+- The portable one-folder build remains the recommended production distribution.
+
+## Customer release cleanup
+
+- Removed developer-only Diagnostics, operator/setup mode, synthetic test source, advanced troubleshooting settings, and cache-folder shortcuts from the normal customer interface.
+- Kept synthetic capture, self-tests, recovery compatibility, and diagnostic implementation available for development and support without exposing them in the customer workflow.
+- Removed the developer credit from the startup splash and stopped copying synthetic/self-test launchers into the customer ZIP.
+- Camera startup feedback now keeps the initial all-sources message, then identifies the selected camera after a settings-triggered restart.
+- During the initial all-sources check, the first working camera is now selected for the main live video; an unavailable camera 0 can automatically fall back to camera 1.
+
 ## Usability and operator guidance
 
 - Fixed cross-platform scrolling in Settings and the Competition Board, including themed scrollbar hover/pressed states.

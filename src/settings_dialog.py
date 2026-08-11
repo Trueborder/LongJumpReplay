@@ -76,14 +76,12 @@ class SettingsDialog(tk.Toplevel):
         ("assist", "Take-off Assist", "Asistent odrazu"),
         ("hotkeys", "Hotkeys", "Klávesové zkratky"),
         ("shuttle", "ShuttleXpress", "ShuttleXpress"),
-        ("recovery", "Recovery & export", "Obnova a export"),
-        ("advanced", "Advanced", "Pokročilé"),
     ]
     CATEGORY_GROUPS = [
         ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "appearance", "camera")),
         ("judging", "JUDGING WORKFLOW", "ROZHODOVÁNÍ", ("competition", "rounds", "decisions", "timer", "final")),
         ("replay", "REPLAY WORKSPACE", "PRACOVNÍ PLOCHA", ("board", "replay", "views", "assist")),
-        ("system", "CONTROLS & SYSTEM", "OVLÁDÁNÍ A SYSTÉM", ("hotkeys", "shuttle", "performance", "recovery", "advanced")),
+        ("system", "CONTROLS & SYSTEM", "OVLÁDÁNÍ A SYSTÉM", ("hotkeys", "shuttle", "performance")),
     ]
 
     def __init__(
@@ -223,8 +221,6 @@ class SettingsDialog(tk.Toplevel):
         self._build_assist(self._page_inners["assist"])
         self._build_hotkeys(self._page_inners["hotkeys"])
         self._build_shuttle(self._page_inners["shuttle"])
-        self._build_recovery(self._page_inners["recovery"])
-        self._build_advanced(self._page_inners["advanced"])
         for page_key, inner in self._page_inners.items():
             canvas = self._page_canvases.get(page_key)
             if canvas:
@@ -538,6 +534,10 @@ class SettingsDialog(tk.Toplevel):
             "adaptive": tk.BooleanVar(value=p.adaptive_enabled),
             "menu_throttle": tk.BooleanVar(value=p.menu_throttle_enabled),
             "jpeg_quality": tk.IntVar(value=self.working.buffer.jpeg_quality),
+            # Retained as non-visible compatibility state for the explicit
+            # low-resource preset; the customer does not edit these directly.
+            "queue_size": tk.IntVar(value=self.working.buffer.encoder_queue_size),
+            "store_nth": tk.IntVar(value=self.working.buffer.store_every_nth_frame),
         })
         preset_box = self._section(f, r, "Performance preset", "Výkonový profil"); r += 1
         performance_intro = ttk.Label(
@@ -649,7 +649,7 @@ class SettingsDialog(tk.Toplevel):
         r = self._title(f, "Camera", "Kamera", "Camera changes require an application restart.", "Změny kamery vyžadují restart aplikace.")
         c = self.working.camera
         vals = {
-            "source": tk.StringVar(value=c.source_type), "device": tk.IntVar(value=c.device_index),
+            "source": tk.StringVar(value=c.source_type if c.source_type in {"camera", "file"} else "camera"), "device": tk.IntVar(value=c.device_index),
             "width": tk.IntVar(value=c.width), "height": tk.IntVar(value=c.height), "fps": tk.DoubleVar(value=c.fps),
             "backend": tk.StringVar(value=c.backend), "fourcc": tk.StringVar(value=c.fourcc), "reconnect": tk.DoubleVar(value=c.reconnect_seconds),
         }
@@ -662,7 +662,7 @@ class SettingsDialog(tk.Toplevel):
             lambda *_: vals["device"].set(self._camera_choice_to_index.get(str(vals["camera_device_choice"].get()), c.device_index)),
         )
         self._vars.update(vals)
-        self._row(f, r, "Source", "Zdroj", vals["source"], "combo", ("camera", "synthetic", "file"), impact="medium"); r += 1
+        self._row(f, r, "Source", "Zdroj", vals["source"], "combo", ("camera", "file"), impact="medium"); r += 1
         self.camera_device_combo = self._row(
             f, r, "Camera", "Kamera", vals["camera_device_choice"], "combo", tuple(self._camera_choice_to_index),
             desc_en="Available Windows camera names. The leading number is the OpenCV camera index; restart after changing it.",
@@ -671,13 +671,10 @@ class SettingsDialog(tk.Toplevel):
         ); r += 1
         self._row(f, r, "Width", "Šířka", vals["width"], impact="very_high"); r += 1
         self._row(f, r, "Height", "Výška", vals["height"], impact="very_high"); r += 1
-        self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate. Check Diagnostics.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu. Ověř v Diagnostice.", impact="very_high"); r += 1
+        self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate; the current status is shown after startup.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu; aktuální stav se zobrazí po spuštění.", impact="very_high"); r += 1
         self._row(f, r, "Windows backend", "Windows backend", vals["backend"], "combo", ("DSHOW", "MSMF", "ANY"), impact="medium"); r += 1
         self._row(f, r, "Camera FOURCC", "Formát FOURCC", vals["fourcc"], desc_en="MJPG often enables high FPS over USB.", desc_cs="MJPG často umožní vyšší FPS přes USB.", impact="high"); r += 1
         self._row(f, r, "Reconnect delay (seconds)", "Prodleva opětovného připojení", vals["reconnect"], impact="low")
-        if self.on_camera_diagnostic:
-            ttk.Button(f, text=self._txt("Run camera diagnostic", "Spustit diagnostiku kamery"), command=self.on_camera_diagnostic).grid(row=r + 1, column=0, sticky="w", pady=(12, 0))
-
     def _build_board(self, f: ttk.Frame) -> None:
         r = self._title(f, "Board calibration", "Kalibrace prkna", "Calibrate the line and ROI directly on the main video. Numeric position fields are intentionally not duplicated here.", "Kalibraci čáry a ROI prováděj přímo v hlavním videu. Číselná pole pro polohu zde záměrně neopakujeme.")
         d = self.working.display
@@ -708,7 +705,7 @@ class SettingsDialog(tk.Toplevel):
         vals = {
             "competition_enabled": tk.BooleanVar(value=c.enabled), "show_selector": tk.BooleanVar(value=c.show_competitor_selector),
             "show_board": tk.BooleanVar(value=c.show_competition_board), "show_banner": tk.BooleanVar(value=c.show_state_banner),
-            "next_overlay": tk.BooleanVar(value=c.next_athlete_overlay), "operator_mode": tk.BooleanVar(value=c.operator_mode_enabled),
+            "next_overlay": tk.BooleanVar(value=c.next_athlete_overlay),
             "wizard_visible": tk.BooleanVar(value=c.wizard_button_visible), "keyboard_comp": tk.BooleanVar(value=c.keyboard_competition_controls),
         }
         self._vars.update(vals)
@@ -722,7 +719,6 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Show competition board", "Zobrazit tabulku soutěže", vals["show_board"], "check", impact="medium"); r += 1
         self._row(f, r, "Show competition state banner", "Zobrazit stavový banner soutěže", vals["show_banner"], "check", desc_en="Off by default.", desc_cs="Ve výchozím stavu vypnuto.", impact="low"); r += 1
         self._row(f, r, "Show next-athlete overlay", "Zobrazit překryv dalšího závodníka", vals["next_overlay"], "check", impact="low"); r += 1
-        self._row(f, r, "Enable operator/setup modes", "Zapnout režim operátora/nastavení", vals["operator_mode"], "check", impact="low"); r += 1
         self._row(f, r, "Show Competition Wizard button", "Zobrazit tlačítko průvodce soutěží", vals["wizard_visible"], "check"); r += 1
         self._row(f, r, "Enable keyboard competition controls", "Zapnout klávesové ovládání soutěže", vals["keyboard_comp"], "check")
 
@@ -1047,7 +1043,7 @@ class SettingsDialog(tk.Toplevel):
         d.board_roi_enabled = bool(self._vars["roi_enabled"].get()); d.board_roi_visible = bool(self._vars["roi_visible"].get())
         c = w.competition
         c.enabled = bool(self._vars["competition_enabled"].get()); c.show_competitor_selector = bool(self._vars["show_selector"].get()); c.show_competition_board = bool(self._vars["show_board"].get())
-        c.show_state_banner = bool(self._vars["show_banner"].get()); c.next_athlete_overlay = bool(self._vars["next_overlay"].get()); c.operator_mode_enabled = bool(self._vars["operator_mode"].get())
+        c.show_state_banner = bool(self._vars["show_banner"].get()); c.next_athlete_overlay = bool(self._vars["next_overlay"].get()); c.operator_mode_enabled = False
         c.wizard_button_visible = bool(self._vars["wizard_visible"].get()); c.keyboard_competition_controls = bool(self._vars["keyboard_comp"].get())
         c.boys_enabled = bool(self._vars["boys_enabled"].get()); c.girls_enabled = bool(self._vars["girls_enabled"].get())
         c.boys_competitors = int(self._vars["boys_count"].get()); c.girls_competitors = int(self._vars["girls_count"].get()); c.default_attempts_per_competitor = int(self._vars["default_tries"].get())
@@ -1059,7 +1055,6 @@ class SettingsDialog(tk.Toplevel):
         c.final_round_enabled = bool(self._vars["final_enabled"].get()); c.finalists_count = int(self._vars["finalists_count"].get()); c.final_attempts = int(self._vars["final_attempts"].get()); c.final_order = str(self._vars["final_order"].get())
         c.finalist_numbers_by_group["Boys"] = self._parse_numbers(str(self._vars["boys_finalists"].get()))
         c.finalist_numbers_by_group["Girls"] = self._parse_numbers(str(self._vars["girls_finalists"].get()))
-        c.recovery_prompt_enabled = bool(self._vars["recovery_prompt"].get()); c.event_export_enabled = bool(self._vars["event_export"].get()); c.camera_diagnostic_enabled = bool(self._vars["camera_diag"].get()); c.clear_temp_on_new_competition = bool(self._vars["clear_new"].get())
         a, e = w.attempts, w.export
         b.duration_seconds = float(self._vars["buffer_seconds"].get()); b.max_memory_mb = int(self._vars["buffer_memory"].get())
         a.pre_seconds = float(self._vars["pre"].get()); a.post_seconds = float(self._vars["post"].get()); a.retention_minutes = float(self._vars["retention"].get()); a.max_attempts = int(self._vars["max_attempts"].get()); a.max_cache_gb = float(self._vars["cache_gb"].get())
@@ -1072,7 +1067,7 @@ class SettingsDialog(tk.Toplevel):
         ta.analysis_seconds_before_freeze = float(self._vars["assist_before"].get()); ta.analysis_seconds_after_freeze = float(self._vars["assist_after"].get()); ta.minimum_confidence = float(self._vars["assist_confidence"].get()); ta.downscale_width = int(self._vars["assist_width"].get())
         w.hotkeys.enabled = bool(self._vars["hotkeys_enabled"].get()); w.shuttle.enabled = bool(self._vars["shuttle_enabled"].get()); w.shuttle.direct_hid = bool(self._vars["direct_hid"].get())
         w.shuttle.button_map = {action: button for button, var in self.shuttle_vars.items() if (action := var.get()) != "none"}
-        a.temp_codec = str(self._vars["temp_codec"].get()); e.codec = str(self._vars["export_codec"].get()); b.encoder_queue_size = int(self._vars["queue_size"].get()); b.store_every_nth_frame = int(self._vars["store_nth"].get())
+        b.encoder_queue_size = int(self._vars["queue_size"].get()); b.store_every_nth_frame = int(self._vars["store_nth"].get())
         w.validate()
         return w
 

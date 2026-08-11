@@ -18,6 +18,7 @@ from src.capture import CaptureEngine
 from src.config import load_config
 from src.main_window import MainWindow
 from src.models import AttemptState
+from src.licensing import ensure_license
 from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_path
 from src.ring_buffer import TimeRingBuffer
 from src.runtime_diagnostics import configure_runtime_logging, log_event
@@ -32,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--self-test-report", default=None, help="Write self-test output to a text file")
     parser.add_argument("--windowed", action="store_true", help="Ignore fullscreen from config.json")
     parser.add_argument("--splash-preview", action="store_true", help="Show only the startup splash preview")
+    parser.add_argument("--startup-camera-index", type=int, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -186,8 +188,6 @@ def _startup_splash(root: tk.Tk, language: str = "en") -> tuple[tk.Toplevel, tk.
     progress.place(x=42, y=360)
     action = tk.Label(canvas, text="", bg="#0d1a2b", fg="#8faed1", font=("Consolas", 8), anchor="w", padx=10, pady=5, width=39)
     action.place(x=42, y=394)
-    credit = "© 2026  ·  Developed by Tomáš Pisár"
-    tk.Label(canvas, text=credit, bg="#08111d", fg="#6f86a5", font=("Segoe UI", 8)).place(relx=1.0, rely=1.0, x=-24, y=-22, anchor="se")
     splash.update_idletasks()
     _animate_splash_window(root, splash, width, height, opening=True)
     root.update()
@@ -234,6 +234,9 @@ def main() -> int:
         if args.windowed: config.display.fullscreen = False
         root = tk.Tk()
         root.withdraw()
+        if getattr(sys, "frozen", False) and not ensure_license(root, config.general.language):
+            root.destroy()
+            return 2
         splash, splash_status, splash_progress, splash_action = _startup_splash(root, config.general.language)
         try:
             is_cs = config.general.language == "cs"
@@ -260,7 +263,13 @@ def main() -> int:
             splash_progress.configure(value=80.0)
             splash_action.configure(text="Dokončuji spuštění…" if is_cs else "Starting the judge station…")
             splash.update_idletasks()
-            MainWindow(root, config, config_path, persistent_camera_source_type=persistent_camera_source)
+            MainWindow(
+                root,
+                config,
+                config_path,
+                persistent_camera_source_type=persistent_camera_source,
+                startup_camera_index=args.startup_camera_index,
+            )
             splash_status.configure(text="Připraveno" if is_cs else "Ready")
             splash_action.configure(text="Hotovo  ·  otevírám stanoviště" if is_cs else "Ready  ·  opening judge station")
             splash_progress.configure(value=100.0)

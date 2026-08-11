@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "qqS7o6CcKdo=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\xpisa\\Documents\\LongJumpReplay\\native\\LongJumpReplay.Infrastructure\\LongJumpReplay.Infrastructure.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\xpisa\\.nuget\\packages\\microsoft.windows.sdk.net.ref\\10.0.26100.57\\microsoft.windows.sdk.net.ref.10.0.26100.57.nupkg.sha512"
+  ],
+  "logs": []
+}

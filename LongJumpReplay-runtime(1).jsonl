@@ -1,0 +1,2 @@
+{"timestamp":"2026-08-10T17:04:13.539847+00:00","level":"INFO","logger":"long_jump_replay","message":"application_start","thread":"MainThread","event":"application_start","synthetic":false,"self_test":false}
+{"timestamp":"2026-08-10T17:04:28.528389+00:00","level":"INFO","logger":"long_jump_replay","message":"application_start","thread":"MainThread","event":"application_start","synthetic":false,"self_test":false}

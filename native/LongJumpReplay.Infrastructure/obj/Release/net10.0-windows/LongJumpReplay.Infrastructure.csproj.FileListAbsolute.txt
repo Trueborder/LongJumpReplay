@@ -1,0 +1,11 @@
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\bin\Release\net10.0-windows\LongJumpReplay.Infrastructure.deps.json
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\bin\Release\net10.0-windows\LongJumpReplay.Infrastructure.dll
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\bin\Release\net10.0-windows\LongJumpReplay.Infrastructure.pdb
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\LongJumpReplay.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\LongJumpReplay.Infrastructure.AssemblyInfoInputs.cache
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\LongJumpReplay.Infrastructure.AssemblyInfo.cs
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\LongJumpReplay.Infrastructure.csproj.CoreCompileInputs.cache
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\LongJumpReplay.Infrastructure.dll
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\refint\LongJumpReplay.Infrastructure.dll
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\LongJumpReplay.Infrastructure.pdb
+C:\Users\xpisa\Documents\LongJumpReplay\native\LongJumpReplay.Infrastructure\obj\Release\net10.0-windows\ref\LongJumpReplay.Infrastructure.dll

@@ -10,13 +10,25 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist .venv (
-  py -3.12 -m venv .venv
-  if errorlevel 1 py -3 -m venv .venv
+set "VENV_DIR=.venv"
+set "VENV_PY=%VENV_DIR%\Scripts\python.exe"
+if exist "%VENV_PY%" (
+  "%VENV_PY%" -c "import sys; assert sys.version_info[:2] == (3, 12)" >nul 2>nul
+  if errorlevel 1 (
+    echo Existing .venv is stale. Leaving it untouched and creating a fresh environment.
+    set "VENV_DIR=.venv-build-%RANDOM%"
+    set "VENV_PY=%VENV_DIR%\Scripts\python.exe"
+  )
+)
+
+if not exist "%VENV_DIR%" (
+  py -3.12 -m venv "%VENV_DIR%"
+  if errorlevel 1 py -3 -m venv "%VENV_DIR%"
   if errorlevel 1 goto :fail
 )
 
-call .venv\Scripts\activate.bat || goto :fail
+call "%VENV_DIR%\Scripts\activate.bat" || goto :fail
+python -c "import sys; assert sys.version_info[:2] == (3, 12)" || goto :fail
 python -m pip install --upgrade pip || goto :fail
 python -m pip install -r requirements-build.txt || goto :fail
 python -m pytest || goto :fail
@@ -30,8 +42,6 @@ dist\LongJumpReplay\LongJumpReplay.exe --self-test --self-test-report dist\LongJ
 if errorlevel 1 goto :fail
 
 copy /y README_SHARE.txt dist\LongJumpReplay\README.txt >nul
-copy /y START_SYNTHETIC.bat dist\LongJumpReplay\START_SYNTHETIC.bat >nul
-copy /y SELF_TEST_APPLICATION.bat dist\LongJumpReplay\SELF_TEST_APPLICATION.bat >nul
 
 if exist release rmdir /s /q release
 mkdir release

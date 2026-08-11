@@ -17,6 +17,14 @@ jobs:
       - run: python -m pytest
       - run: python app.py --self-test --self-test-report SELF_TEST.txt
       - run: python -m PyInstaller --noconfirm --clean LongJumpReplay.spec
+      - name: Build Windows setup installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item dist/LongJumpReplay/LongJumpReplay.exe release/LongJumpReplay.exe
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name LongJumpReplay-Setup --icon assets/long_jump_replay.ico --add-binary "release/LongJumpReplay.exe;payload" --add-data "README_SHARE.txt;payload" --add-data "THIRD_PARTY_NOTICES.txt;payload" installer/setup.py
+          Copy-Item dist/LongJumpReplay-Setup.exe release/LongJumpReplay-Setup-2.3.exe
+          (Get-FileHash release/LongJumpReplay-Setup-2.3.exe -Algorithm SHA256).Hash | Set-Content release/LongJumpReplay-Setup-2.3.exe.sha256
       - shell: pwsh
         run: |
           & dist/LongJumpReplay/LongJumpReplay.exe --self-test --self-test-report dist/LongJumpReplay/SELF_TEST_FROZEN.txt
@@ -33,3 +41,5 @@ jobs:
             LongJumpReplay-2.3-Windows-x64.zip
             SELF_TEST.txt
             LongJumpReplay-2.3-Windows-x64.zip.sha256
+            release/LongJumpReplay-Setup-2.3.exe
+            release/LongJumpReplay-Setup-2.3.exe.sha256

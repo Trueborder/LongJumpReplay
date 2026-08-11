@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## Customer release cleanup (2026-08-10)
+
+- The normal customer interface no longer exposes Diagnostics, operator/setup mode, synthetic test-source selection, advanced troubleshooting settings, or the internal cache-folder shortcut.
+- Synthetic capture, self-tests, recovery compatibility, and diagnostic implementation remain available to development and support paths; they are not removed from the runtime code.
+- The startup splash no longer shows a developer credit, and the portable customer build no longer copies synthetic or self-test launcher files.
+- The initial camera startup overlay still says it is looking for input from all sources. The startup probe checks camera 0 and camera 1 and switches the main live capture to the first working camera; a settings-triggered restart carries the explicitly selected camera index into startup so the overlay identifies camera 0, camera 1, or the configured device.
+
 > Primary handoff document for human developers and Codex. Read this file before changing code.
 
 ## 1. Project identity
@@ -447,6 +454,8 @@ The portable folder build is preferred over one-file:
 - fewer antivirus false positives;
 - more predictable codec/DLL behavior.
 
+The Windows build scripts detect a stale `.venv` whose interpreter points to a different machine, preserve it as `.venv.stale-build-*`, and create a fresh Python 3.12 environment. Single-file builds disable UPX compression to reduce bootloader/antivirus extraction failures. The portable folder remains the supported customer path when Windows cannot unpack a one-file executable.
+
 ## 13. Tests and verification
 
 ### Standard Windows development commands
@@ -504,6 +513,20 @@ Tkinter GUI tests require a display. On Windows, run them normally in an interac
 At the time this handoff was prepared, the Windows source suite passed **67 tests**, the synthetic pipeline self-test completed attempt MP4/export with no remaining workers, and the short 120 FPS diagnostic soak retained 600/600 frames with zero drops or failures. The .NET 10 Release solution built with zero warnings, all six native lifecycle/retention/config tests passed, and the self-contained published preview remained alive through its bounded startup/camera-enumeration smoke before closing. This does not replace visual GUI inspection, a four-hour soak, physical webcam/120 FPS camera, full native feature parity, and actual ShuttleXpress testing.
 
 ## 14. Build and release
+
+### Collaboration authorization
+
+- The project owner has authorized Codex to make all in-scope LongJumpReplay edits and install required build tools without repeated approval prompts.
+
+### MSI sales distribution
+
+- The public sales website distributes the self-contained `LongJumpReplay-Setup-2.3.exe`, not the loose EXE or portable ZIP.
+- The public sales website now distributes `LongJumpReplay-Setup-2.3.exe`, a self-contained administrator-elevated installer. The MSI remains an optional authoring path, not the public download.
+- The MSI is a per-machine WiX package installed under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
+- Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
+- Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
+- License administration uses `tools\license_admin.py`; the customer supplies the machine code shown on first launch and receives a signed key by email.
+- The static sales site is under `website`; edit `website\site.config.js` to change the contact email, price, domain, or MSI URL, then run `website\BUILD_SITE.ps1` to create the deployable `website\dist` folder.
 
 ### Source setup
 

@@ -36,10 +36,12 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert set(dialog._pages) == {
         "general", "appearance", "performance", "camera", "board", "competition",
         "rounds", "decisions", "timer", "final", "replay", "views", "assist",
-        "hotkeys", "shuttle", "recovery", "advanced",
+        "hotkeys", "shuttle",
     }
     assert dialog._vars["athlete_timer_duration"].get() == 60
     assert str(dialog.camera_device_combo.cget("state")) == "readonly"
+    source_combos = [widget for _card, widget, _desc in dialog._setting_rows if isinstance(widget, ttk.Combobox) and "camera" in tuple(widget.cget("values"))]
+    assert source_combos and "synthetic" not in tuple(source_combos[0].cget("values"))
     assert tuple(dialog.camera_device_combo.cget("values")) == ("0 · Lenovo Built-in", "1 · OBS Virtual Camera")
     dialog._vars["camera_device_choice"].set("1 · OBS Virtual Camera")
     assert dialog._vars["device"].get() == 1

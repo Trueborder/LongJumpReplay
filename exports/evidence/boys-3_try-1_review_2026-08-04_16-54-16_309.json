@@ -1,0 +1,25 @@
+{
+  "attempt_id": 4,
+  "group": "Boys",
+  "competitor": 3,
+  "try": 1,
+  "decision": "Review",
+  "created_local": "2026-08-04T16:54:16.394821+02:00",
+  "frame_index": 900,
+  "frame_timestamp_ns": 120741249015015,
+  "capture_fps": 120.06863923841388,
+  "quality_warning": "",
+  "guide": {
+    "x": 0.5865561694290976,
+    "y": 0.3355155482815057,
+    "angle_deg": 8.426969021480673
+  },
+  "board_roi": [
+    0.5334282918968696,
+    0.3809623901853997,
+    0.23767361111111163,
+    0.43703703703703634
+  ],
+  "raw_file": "boys-3_try-1_review_2026-08-04_16-54-16_309_raw.png",
+  "annotated_file": "boys-3_try-1_review_2026-08-04_16-54-16_309_annotated.png"
+}
