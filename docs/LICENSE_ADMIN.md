@@ -1,0 +1,13 @@
+# LongJumpReplay license administration
+
+Use `RUN_LICENSE_GENERATOR.bat` on the owner/support computer. Enter the
+machine code supplied by the customer, their name, and an internal license ID.
+Press **Generate key**, then use **Copy key** or **Save key…**.
+
+Send only the generated `LJR2...` key to the customer. They paste it into the
+activation dialog in LongJumpReplay. The key is bound to that machine code.
+
+Keep `tools/.license_private_key.json` private and backed up securely. Never
+include the license generator or the private-key file in a customer installer
+or customer ZIP. Losing the private key means previously issued licenses can
+still be verified, but new licenses cannot be issued.

@@ -11,11 +11,11 @@ python app.py --self-test --self-test-report SELF_TEST_SOURCE.txt || goto :fail
 
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
-python -m PyInstaller --noconfirm --clean --onefile --noupx --windowed --name LongJumpReplay --icon assets\long_jump_replay.ico --version-file windows_version_info.txt --add-data "config.json;." --add-data "assets\long_jump_replay.ico;assets" --add-data "assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
+python -m PyInstaller --noconfirm --clean --specpath build\generated --onefile --noupx --windowed --name LongJumpReplay --icon assets\long_jump_replay.ico --version-file windows_version_info.txt --add-data "config.json;." --add-data "assets\long_jump_replay.ico;assets" --add-data "assets\long_jump_splash.png;assets" --hidden-import hid app.py || goto :fail
 
 if not exist release mkdir release
 copy /y dist\LongJumpReplay.exe release\LongJumpReplay.exe >nul || goto :fail
-python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --name LongJumpReplay-Setup --icon assets\long_jump_replay.ico --add-binary "release\LongJumpReplay.exe;payload" --add-data "README_SHARE.txt;payload" --add-data "THIRD_PARTY_NOTICES.txt;payload" installer\setup.py || goto :fail
+python -m PyInstaller --noconfirm --clean --specpath build\generated --onefile --windowed --uac-admin --name LongJumpReplay-Setup --icon assets\long_jump_replay.ico --add-binary "release\LongJumpReplay.exe;payload" --add-data "README_SHARE.txt;payload" --add-data "THIRD_PARTY_NOTICES.txt;payload" installer\setup.py || goto :fail
 copy /y dist\LongJumpReplay-Setup.exe release\LongJumpReplay-Setup-2.3.exe >nul || goto :fail
 release\LongJumpReplay-Setup-2.3.exe --self-test 2>nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash 'release\LongJumpReplay-Setup-2.3.exe' -Algorithm SHA256).Hash; Set-Content -Path 'release\LongJumpReplay-Setup-2.3.exe.sha256' -Value ($h + '  LongJumpReplay-Setup-2.3.exe')" || goto :fail

@@ -114,7 +114,6 @@ def ensure_license(root: tk.Tk, language: str) -> bool:
     dialog = tk.Toplevel(root)
     dialog.title(translator("license.title"))
     dialog.resizable(False, False)
-    dialog.transient(root)
     dialog.grab_set()
     body = ttk.Frame(dialog, padding=22)
     body.pack(fill="both", expand=True)
@@ -152,6 +151,22 @@ def ensure_license(root: tk.Tk, language: str) -> bool:
     ttk.Button(buttons, text=translator("license.activate"), command=activate, style="Accent.TButton").pack(side="right", padx=(0, 8))
     dialog.protocol("WM_DELETE_WINDOW", cancel)
     dialog.bind("<Return>", lambda _event: activate())
+    # The application root is intentionally withdrawn before this dialog is
+    # shown.  On Windows, making the dialog transient to that hidden root can
+    # leave the activation window owned but invisible while the process waits
+    # in wait_window().  Center and explicitly raise an independent dialog so
+    # first-run EXE launches always present the activation UI.
+    dialog.update_idletasks()
+    width, height = dialog.winfo_width(), dialog.winfo_height()
+    screen_width, screen_height = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
+    dialog.geometry(f"{width}x{height}+{max(0, (screen_width - width) // 2)}+{max(0, (screen_height - height) // 2)}")
+    dialog.deiconify()
+    dialog.lift()
+    try:
+        dialog.attributes("-topmost", True)
+    except tk.TclError:
+        pass
+    dialog.focus_force()
     key_entry.focus_set()
     root.wait_window(dialog)
     return accepted

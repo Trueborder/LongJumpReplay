@@ -267,6 +267,12 @@ The recipient only extracts the ZIP and runs `LongJumpReplay.exe`.
 
 A single-file build is available through `BUILD_SINGLE_EXE.bat`, but the portable folder build is recommended for faster startup, easier diagnostics, and fewer antivirus false positives.
 
+## Generate customer license keys
+
+Run `RUN_LICENSE_GENERATOR.bat` on the owner/support computer. Enter the machine code shown by the customer’s first launch, the customer name, and an internal license ID. Use **Generate key**, then **Copy key** or **Save key…** and send only the resulting `LJR2...` key to the customer.
+
+The optional `BUILD_LICENSE_GENERATOR.bat` creates an admin-only GUI EXE under `release\LongJumpReplay-License-Generator`. It reads the private signing key from `tools\.license_private_key.json`; never distribute that file or the generator with customer software. See `docs\LICENSE_ADMIN.md` for the operating procedure.
+
 ## Testing performed in this package
 
 - 43 automated tests;

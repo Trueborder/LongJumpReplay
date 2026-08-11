@@ -5,7 +5,10 @@
 - Build scripts now detect and preserve stale virtual environments before creating a fresh Python 3.12 environment.
 - Single-file PyInstaller builds disable UPX compression to reduce Windows bootloader and antivirus extraction failures.
 - Corrected the portable PyInstaller spec to produce the one-folder executable expected by the portable build and frozen self-test.
+- Isolated generated single-file specs so they cannot overwrite the portable spec.
+- Fixed the frozen EXE first-run license dialog so it is visible and focused instead of leaving a hidden process waiting for activation.
 - The portable one-folder build remains the recommended production distribution.
+- Added the owner/support license-generator GUI with clipboard and file-save actions, plus an admin workflow document. The private signing key remains external to the customer build.
 
 ## Customer release cleanup
 

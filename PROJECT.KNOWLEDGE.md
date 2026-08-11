@@ -458,6 +458,8 @@ The Windows build scripts detect a stale `.venv` whose interpreter points to a d
 
 The portable PyInstaller spec uses `COLLECT`/`exclude_binaries=True` so `BUILD_PORTABLE.bat` produces and tests `dist\LongJumpReplay\LongJumpReplay.exe`; it must not regress to an untested one-file `dist\LongJumpReplay.exe`.
 
+Single-file build commands write generated specs under `build\generated`; they must not overwrite the portable `LongJumpReplay.spec` in the project root.
+
 ## 13. Tests and verification
 
 ### Standard Windows development commands
@@ -528,6 +530,9 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
 - Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
 - License administration uses `tools\license_admin.py`; the customer supplies the machine code shown on first launch and receives a signed key by email.
+- `RUN_LICENSE_GENERATOR.bat` launches the Tkinter admin GUI. It generates, copies, or saves signed keys and normalizes pasted machine codes. `BUILD_LICENSE_GENERATOR.bat` can create an admin-only GUI EXE, which reads the private key from the project-side `tools\.license_private_key.json` file; it must never be sent to customers.
+- `docs\LICENSE_ADMIN.md` documents the customer activation and key-delivery workflow. The private key must remain backed up and outside customer installers, ZIPs, and support attachments.
+- The first-run license dialog is independent of the withdrawn Tk root, centered, raised, focused, and temporarily topmost so frozen Windows launches cannot wait invisibly for activation.
 - The static sales site is under `website`; edit `website\site.config.js` to change the contact email, price, domain, or MSI URL, then run `website\BUILD_SITE.ps1` to create the deployable `website\dist` folder.
 
 ### Source setup
