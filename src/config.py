@@ -148,7 +148,7 @@ class DisplayConfig:
     show_capture_warnings: bool = True
     show_takeoff_assist_badge: bool = True
     attempts_panel_width: int = 360
-    timeline_height: int = 138
+    timeline_height: int = 220
     guide_enabled: bool = True
     guide_x_ratio: float = 0.5
     guide_y_ratio: float = 0.5

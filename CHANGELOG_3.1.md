@@ -35,9 +35,15 @@
 - Corrected broken English symbols, Czech diacritics, the `Kč` price, and misleading MSI wording in both source and deployable copy.
 - Fixed the static build to read rewritten HTML and CSS explicitly as UTF-8, preventing the build step from reintroducing mojibake.
 - Tightened the responsive hero, navigation, facts, screenshots, offer, and download layouts; verified the page at 1440 px desktop and an emulated 390 px mobile viewport without horizontal overflow.
+- Added a branded `TP` browser-tab icon across the static site and expanded the bilingual About page into four numbered sections covering approach, focus, process, and current work.
+- Replaced the LongJumpReplay product gallery and its non-JavaScript fallbacks with the current main-station, recordings, and competition-board screenshots from the project screenshot set.
+- Redesigned `tomaspisar.cz` as a responsive Evidence Desk: a clearer product hierarchy, sports-specific Barlow typography, timing and take-off-line details, calmer flat panels, current-page navigation, SVG controls, improved mobile menu state, and a keyboard-friendly screenshot dialog in both dark and light themes.
 
 ## Usability and operator guidance
 
+- Fixed the large CPU spike after zooming video. Preview rendering now crops to the visible source region before scaling, keeping temporary image work bounded by the viewport even at 10× zoom.
+- Main-window startup now restores every View-menu workspace element. Showing the timeline also restores a usable 220 px pane instead of leaving it collapsed along the bottom edge.
+- Reworked the Competition Wizard into a fast adaptive event setup. It opens directly at format selection, validates group/final dependencies, previews board capacity, reports station readiness, protects existing recordings with an explicit Keep/Clear choice, and keeps camera/performance/storage editing in Settings.
 - Fixed cross-platform scrolling in Settings and the Competition Board, including themed scrollbar hover/pressed states.
 - Added right-click editing for every listed application hotkey, with duplicate-binding protection and restore-default actions.
 - Added a plain-language Settings glossary for Buffer, ROI, FPS, Codec, HID, and JPEG quality.

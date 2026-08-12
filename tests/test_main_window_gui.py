@@ -165,7 +165,12 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
     config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
     config.display.window_geometry = '1100x700'
-    config.display.timeline_height = 140
+    config.display.timeline_height = 100
+    config.display.show_attempts_panel = False
+    config.display.show_timeline = False
+    config.display.show_status_bar = False
+    config.display.show_live_preview = False
+    config.competition.show_competition_board = False
     config.shuttle.enabled = False
     path = tmp_path / 'config.json'
     save_config(config, path)
@@ -179,16 +184,52 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
         sizes['timeline_hint'] = app.timeline_hint_label.winfo_height()
         sizes['status'] = app.status_bar.winfo_height()
         sizes['replay_width'] = app.replay_canvas.winfo_width()
+        sizes['view_flags'] = (
+            app.var_show_attempts.get(), app.var_show_board.get(), app.var_show_timeline.get(),
+            app.var_show_live.get(), app.var_show_status.get(),
+        )
         app.close()
 
     root.after(700, inspect)
     root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
     assert sizes['video'] > 250
-    assert 90 <= sizes['timeline'] <= 260
+    assert 200 <= sizes['timeline'] <= 280
     assert sizes['timeline_hint'] >= 10
     assert sizes['status'] >= 20
     assert sizes['replay_width'] > 400
+    assert sizes['view_flags'] == (True, True, True, True, True)
+
+
+def test_showing_timeline_restores_a_usable_height(tmp_path):
+    config = AppConfig()
+    config.camera.source_type = 'synthetic'
+    config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
+    config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
+    config.display.window_geometry = '1100x700'
+    config.shuttle.enabled = False
+    path = tmp_path / 'config.json'
+    save_config(config, path)
+    root = tk.Tk()
+    app = MainWindow(root, config, path)
+    result = {}
+
+    def hide_then_show():
+        app.var_show_timeline.set(False); app.toggle_timeline()
+        app.config.display.timeline_height = 100
+        app.var_show_timeline.set(True); app.toggle_timeline()
+
+    def inspect():
+        result['height'] = app.timeline_wrap.winfo_height()
+        result['saved_height'] = app.config.display.timeline_height
+        app.close()
+
+    root.after(500, hide_then_show)
+    root.after(950, inspect)
+    root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+    assert result['height'] >= 200
+    assert result['saved_height'] >= MainWindow.TIMELINE_USABLE_HEIGHT
 
 
 def test_window_interaction_suspends_expensive_redraws(tmp_path):

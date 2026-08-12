@@ -1,184 +1,386 @@
 from __future__ import annotations
 
-from copy import deepcopy
+from collections.abc import Callable
 import tkinter as tk
 from tkinter import ttk
-from collections.abc import Callable
 
-from .config import AppConfig, apply_performance_preset
+from .competition_setup import CompetitionSetupModel, CompetitionTemplate, RecordingDisposition, WizardReadiness
+from .config import AppConfig, CompetitionConfig
 from .i18n import Translator
-from .theme import configure_popup, show_themed_info
+from .theme import ask_themed_yes_no, configure_popup, show_themed_info
 
 
 class CompetitionWizard(tk.Toplevel):
-    """Guided per-event setup. Advanced options remain in Settings."""
+    """Guided competition setup."""
 
-    def __init__(self, parent: tk.Misc, config: AppConfig, on_finish: Callable[[AppConfig, bool], None]) -> None:
+    SETUP_STEPS = ("format", "groups", "attempts", "aids", "review")
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        config: AppConfig,
+        on_finish: Callable[[CompetitionConfig, RecordingDisposition], None],
+        *,
+        readiness_provider: Callable[[], WizardReadiness] | None = None,
+        on_open_settings: Callable[[], tk.Toplevel | None] | None = None,
+        on_camera_help: Callable[[], tk.Toplevel | None] | None = None,
+    ) -> None:
         super().__init__(parent)
         configure_popup(self, parent)
-        self.working = deepcopy(config)
+        self.model = CompetitionSetupModel(config.competition)
         self.on_finish = on_finish
-        self.tr = Translator(config.general.language)
+        self.readiness_provider = readiness_provider or (lambda: WizardReadiness(
+            config.general.language, False, 0, 0.0, config.camera.fps, "—", "", 0, 0.0,
+            0, int(config.attempts.max_cache_gb * 1024 ** 3), 0,
+        ))
+        self.on_open_settings = on_open_settings
+        self.on_camera_help = on_camera_help
         self.lang = config.general.language
+        self.tr = Translator(self.lang)
+        self.setup_index = 0
+        self.recording_disposition = tk.StringVar(self, value="")
+        self.vars: dict[str, tk.Variable] = {}
+        self.field_widgets: dict[str, tk.Widget] = {}
+        self.error_var = tk.StringVar(self, value="")
+        self._refresh_after: str | None = None
+        self._build_vars()
+
         self.title(self.tr("wizard.title"))
-        self.geometry("820x640")
-        self.minsize(720, 560)
+        self.geometry("1100x720")
+        self.minsize(1000, 660)
         self.transient(parent)
         self.grab_set()
-        self.index = 0
-        self.pages: list[ttk.Frame] = []
-        self.vars: dict[str, tk.Variable] = {}
-        self._build()
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self._show(0)
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self._build_shell()
+        self._render()
 
-    def _txt(self, en: str, cs: str) -> str:
-        return cs if self.lang == "cs" else en
+    def _build_vars(self) -> None:
+        c = self.model.competition
+        self.vars = {
+            "boys": tk.BooleanVar(self, value=c.boys_enabled),
+            "girls": tk.BooleanVar(self, value=c.girls_enabled),
+            "boys_count": tk.StringVar(self, value=str(c.boys_competitors)),
+            "girls_count": tk.StringVar(self, value=str(c.girls_competitors)),
+            "active_group": tk.StringVar(self, value=c.active_group),
+            "qualification": tk.StringVar(self, value=str(c.default_attempts_per_competitor)),
+            "final": tk.BooleanVar(self, value=c.final_round_enabled),
+            "finalists": tk.StringVar(self, value=str(c.finalists_count)),
+            "final_attempts": tk.StringVar(self, value=str(c.final_attempts)),
+            "final_order": tk.StringVar(self, value=c.final_order),
+            "require": tk.BooleanVar(self, value=c.require_decision_before_continue),
+            "overlay": tk.BooleanVar(self, value=c.next_athlete_overlay),
+            "banner": tk.BooleanVar(self, value=c.show_state_banner),
+        }
 
-    def _build(self) -> None:
-        shell = ttk.Frame(self, style="App.TFrame", padding=14)
-        shell.pack(fill="both", expand=True)
-        self.title_var = tk.StringVar()
-        ttk.Label(shell, textvariable=self.title_var, style="Title.TLabel").pack(anchor="w")
-        self.step_var = tk.StringVar()
-        ttk.Label(shell, textvariable=self.step_var, style="HeaderMuted.TLabel").pack(anchor="w", pady=(2, 10))
-        self.host = ttk.Frame(shell, style="Panel.TFrame", padding=16)
-        self.host.pack(fill="both", expand=True)
-        for builder in (self._mode_page, self._athletes_page, self._attempts_page, self._camera_page, self._storage_page, self._review_page):
-            frame = ttk.Frame(self.host, style="Panel.TFrame")
-            self.pages.append(frame)
-            builder(frame)
-        footer = ttk.Frame(shell, style="Toolbar.TFrame", padding=(8, 7))
-        footer.pack(fill="x", pady=(10, 0))
-        ttk.Button(footer, text=self.tr("wizard.cancel"), command=self.destroy).pack(side="left")
-        self.back_button = ttk.Button(footer, text=self.tr("wizard.back"), command=lambda: self._show(self.index - 1))
-        self.back_button.pack(side="right", padx=(6, 0))
-        self.next_button = ttk.Button(footer, text=self.tr("wizard.next"), style="Accent.TButton", command=self._next)
-        self.next_button.pack(side="right")
+    def _build_shell(self) -> None:
+        self.shell = ttk.Frame(self, style="App.TFrame", padding=18)
+        self.shell.pack(fill="both", expand=True)
+        header = ttk.Frame(self.shell, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 14))
+        self.header_title = ttk.Label(header, style="WizardHeroTitle.TLabel")
+        self.header_title.pack(anchor="w")
+        self.header_desc = ttk.Label(header, style="WizardHeroDesc.TLabel", wraplength=900, justify="left")
+        self.header_desc.pack(anchor="w", pady=(3, 0))
+        self.body = ttk.Frame(self.shell, style="App.TFrame")
+        self.body.pack(fill="both", expand=True)
+        self.footer = ttk.Frame(self.shell, style="Toolbar.TFrame", padding=(10, 8))
+        self.footer.pack(fill="x", pady=(14, 0))
 
-    def _section_title(self, frame, en: str, cs: str, desc_en: str = "", desc_cs: str = "") -> int:
-        ttk.Label(frame, text=self._txt(en, cs), style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
-        if desc_en:
-            ttk.Label(frame, text=self._txt(desc_en, desc_cs), style="Muted.TLabel", wraplength=650, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 14))
-        frame.columnconfigure(1, weight=1)
-        return 2
+    def _clear(self, frame: tk.Misc) -> None:
+        for child in frame.winfo_children():
+            child.destroy()
 
-    def _row(self, frame, row: int, en: str, cs: str, var: tk.Variable, kind="entry", values=(), desc_en="", desc_cs=""):
-        ttk.Label(frame, text=self._txt(en, cs), style="Text.TLabel").grid(row=row, column=0, sticky="w", pady=7, padx=(0, 14))
-        if kind == "check": widget = ttk.Checkbutton(frame, variable=var)
-        elif kind == "combo": widget = ttk.Combobox(frame, textvariable=var, values=values, state="readonly", width=14)
-        else: widget = ttk.Entry(frame, textvariable=var)
-        widget.grid(row=row, column=1, sticky="ew", pady=7)
-        if desc_en:
-            ttk.Label(frame, text=self._txt(desc_en, desc_cs), style="Muted.TLabel", wraplength=620, justify="left").grid(row=row + 1, column=0, columnspan=2, sticky="w", pady=(0, 5))
-        return widget
+    def _render(self) -> None:
+        self._cancel_refresh()
+        self._clear(self.body)
+        self._clear(self.footer)
+        self.error_var.set("")
+        self._render_setup()
 
-    def _mode_page(self, f: ttk.Frame) -> None:
-        r = self._section_title(f, "Competition mode", "Režim soutěže", "Choose a managed event or a clean judge-only replay screen.", "Vyber správu závodu, nebo čistou rozhodcovskou obrazovku.")
-        self.vars["enabled"] = tk.BooleanVar(value=self.working.competition.enabled)
-        self.vars["language"] = tk.StringVar(value=self.working.general.language)
-        self._row(f, r, "Enable competition management", "Zapnout správu soutěže", self.vars["enabled"], "check"); r += 1
-        self._row(f, r, "Application language", "Jazyk aplikace", self.vars["language"], "combo", ("en", "cs"))
+    def _render_setup(self) -> None:
+        self.field_widgets = {}
+        step = self.SETUP_STEPS[self.setup_index]
+        self.header_title.configure(text=self.tr(f"wizard.step.{step}.title"))
+        self.header_desc.configure(text=self.tr(f"wizard.step.{step}.desc"))
+        rail = ttk.Frame(self.body, style="WizardRail.TFrame", padding=8)
+        rail.pack(side="left", fill="y", padx=(0, 14))
+        for index, key in enumerate(self.SETUP_STEPS):
+            style = "WizardRailActive.TLabel" if index == self.setup_index else "WizardRail.TLabel"
+            ttk.Label(rail, text=f"{index + 1:02d}  {self.tr(f'wizard.step.{key}.short')}", style=style).pack(fill="x", pady=2)
+        content = ttk.Frame(self.body, style="Panel.TFrame", padding=22)
+        content.pack(side="left", fill="both", expand=True)
+        getattr(self, f"_page_{step}")(content)
+        ttk.Label(self.footer, textvariable=self.error_var, style="Warning.TLabel").pack(side="left", padx=(8, 0))
+        ttk.Button(self.footer, text=self.tr("wizard.cancel"), command=self._close).pack(side="left")
+        if self.setup_index > 0:
+            ttk.Button(self.footer, text=self.tr("wizard.back"), command=self._setup_back).pack(side="right", padx=(8, 0))
+        label = self.tr("wizard.finish") if step == "review" else self.tr("wizard.next")
+        ttk.Button(self.footer, text=label, style="Accent.TButton", command=self._setup_next).pack(side="right")
+        if step == "review":
+            self._schedule_refresh()
 
-    def _athletes_page(self, f: ttk.Frame) -> None:
-        r = self._section_title(f, "Athletes", "Závodníci", "Boys and Girls are managed separately and rotate one athlete at a time.", "Chlapci a dívky se spravují odděleně a střídají se po jednom závodníkovi.")
-        c = self.working.competition
-        self.vars.update({"boys": tk.BooleanVar(value=c.boys_enabled), "girls": tk.BooleanVar(value=c.girls_enabled), "boys_count": tk.IntVar(value=c.boys_competitors), "girls_count": tk.IntVar(value=c.girls_competitors), "active_group": tk.StringVar(value=c.active_group)})
-        self._row(f, r, "Enable Boys", "Zapnout chlapce", self.vars["boys"], "check"); r += 1
-        self._row(f, r, "Boys athletes", "Počet chlapců", self.vars["boys_count"]); r += 1
-        self._row(f, r, "Enable Girls", "Zapnout dívky", self.vars["girls"], "check"); r += 1
-        self._row(f, r, "Girls athletes", "Počet dívek", self.vars["girls_count"]); r += 1
-        self._row(f, r, "Start with group", "Začít skupinou", self.vars["active_group"], "combo", ("Boys", "Girls"))
+    def _page_format(self, parent: ttk.Frame) -> None:
+        for row, template in enumerate(("simple", "final", "judge_only")):
+            card = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
+            card.pack(fill="x", pady=(0, 10))
+            ttk.Label(card, text=self.tr(f"wizard.template.{template}.title"), style="WizardCardTitle.TLabel").pack(anchor="w")
+            ttk.Label(card, text=self.tr(f"wizard.template.{template}.desc"), style="Muted.TLabel", wraplength=680, justify="left").pack(anchor="w", pady=(5, 10))
+            selected = self.model.template == template
+            ttk.Button(card, text=self.tr("wizard.template.selected") if selected else self.tr("wizard.template.choose"), style="Accent.TButton" if selected else "Control.TButton", command=lambda value=template: self._choose_template(value)).pack(anchor="e")
 
-    def _attempts_page(self, f: ttk.Frame) -> None:
-        r = self._section_title(f, "Attempts and final", "Pokusy a finále", "Every athlete completes attempt 1 before the field moves to attempt 2.", "Všichni dokončí první pokus, než pole přejde ke druhému.")
-        c = self.working.competition
-        self.vars.update({
-            "qualification": tk.IntVar(value=c.default_attempts_per_competitor), "require": tk.BooleanVar(value=c.require_decision_before_continue),
-            "final": tk.BooleanVar(value=c.final_round_enabled), "finalists": tk.IntVar(value=c.finalists_count), "final_attempts": tk.IntVar(value=c.final_attempts),
-            "final_order": tk.StringVar(value=c.final_order), "overlay": tk.BooleanVar(value=c.next_athlete_overlay), "banner": tk.BooleanVar(value=c.show_state_banner),
-        })
-        self._row(f, r, "Qualification attempts", "Základní pokusy", self.vars["qualification"]); r += 1
-        self._row(f, r, "Require decision before next athlete", "Vyžadovat rozhodnutí před dalším závodníkem", self.vars["require"], "check", desc_en="Normally leave this off; attempts continue as Not decided.", desc_cs="Obvykle nech vypnuté; pokusy pokračují jako Nerozhodnuto."); r += 2
-        self._row(f, r, "Enable final round", "Zapnout finále", self.vars["final"], "check"); r += 1
-        self._row(f, r, "Athletes advancing", "Počet postupujících", self.vars["finalists"]); r += 1
-        self._row(f, r, "Additional final attempts", "Další finálové pokusy", self.vars["final_attempts"]); r += 1
-        self._row(f, r, "Final order", "Pořadí ve finále", self.vars["final_order"], "combo", ("same", "reverse", "manual")); r += 1
-        self._row(f, r, "Show next-athlete overlay", "Zobrazit dalšího závodníka", self.vars["overlay"], "check"); r += 1
-        self._row(f, r, "Show competition banner", "Zobrazit banner soutěže", self.vars["banner"], "check")
+    def _choose_template(self, template: CompetitionTemplate) -> None:
+        self._sync_model(quiet=True)
+        self.model.apply_template(template)
+        self._build_vars()
+        self._render()
 
-    def _camera_page(self, f: ttk.Frame) -> None:
-        r = self._section_title(f, "Camera and performance", "Kamera a výkon", "The preset changes preview and analysis workload without silently reducing evidence quality. Camera changes take effect after restart.", "Profil mění zátěž náhledu a analýzy bez skrytého snížení kvality důkazu. Změny kamery se projeví po restartu.")
-        c = self.working.camera
-        self.vars.update({"device": tk.IntVar(value=c.device_index), "width": tk.IntVar(value=c.width), "height": tk.IntVar(value=c.height), "fps": tk.DoubleVar(value=c.fps), "preset": tk.StringVar(value=self.working.performance.preset)})
-        self._row(f, r, "Camera index (0, 1, …)", "Index kamery (0, 1, …)", self.vars["device"]); r += 1
-        self._row(f, r, "Width", "Šířka", self.vars["width"]); r += 1
-        self._row(f, r, "Height", "Výška", self.vars["height"]); r += 1
-        self._row(f, r, "Requested FPS", "Požadované FPS", self.vars["fps"]); r += 1
-        self._row(f, r, "Performance preset", "Výkonový profil", self.vars["preset"], "combo", ("quiet", "balanced", "high", "evidence", "custom"), desc_en="Quiet is best for an upset fan; Balanced is recommended for most laptops.", desc_cs="Quiet je nejlepší pro rozrušený ventilátor; Balanced je doporučený pro většinu notebooků.")
+    def _page_groups(self, parent: ttk.Frame) -> None:
+        if not self.model.competition.enabled:
+            self._judge_only_note(parent)
+            return
+        for key, count_key in (("boys", "boys_count"), ("girls", "girls_count")):
+            card = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
+            card.pack(fill="x", pady=(0, 10))
+            enabled = ttk.Checkbutton(card, text=self.tr(f"wizard.groups.{key}"), variable=self.vars[key], command=self._groups_changed)
+            enabled.grid(row=0, column=0, sticky="w")
+            self.field_widgets.setdefault("groups", enabled)
+            ttk.Label(card, text=self.tr("wizard.groups.count"), style="Muted.TLabel").grid(row=0, column=1, padx=(20, 8))
+            count = ttk.Spinbox(card, from_=1, to=200, textvariable=self.vars[count_key], width=8)
+            count.grid(row=0, column=2)
+            self.field_widgets[count_key] = count
+        row = ttk.Frame(parent, style="Panel.TFrame")
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Label(row, text=self.tr("wizard.groups.start"), style="Text.TLabel").pack(side="left")
+        group_keys = ("Boys", "Girls")
+        group_values = (self.tr("wizard.groups.boys"), self.tr("wizard.groups.girls"))
+        display = tk.StringVar(self, value=group_values[group_keys.index(str(self.vars["active_group"].get()))])
+        combo = ttk.Combobox(row, state="readonly", width=18, textvariable=display, values=group_values)
+        combo.pack(side="left", padx=(12, 0))
+        combo.bind("<<ComboboxSelected>>", lambda _event: self.vars["active_group"].set(group_keys[group_values.index(display.get())]))
 
-    def _storage_page(self, f: ttk.Frame) -> None:
-        r = self._section_title(f, "Replay and storage", "Replay a úložiště", "These values control how much video is preserved around Freeze.", "Tyto hodnoty určují, kolik videa se uchová kolem zmrazení.")
-        a, b = self.working.attempts, self.working.buffer
-        self.vars.update({"buffer": tk.DoubleVar(value=b.duration_seconds), "pre": tk.DoubleVar(value=a.pre_seconds), "post": tk.DoubleVar(value=a.post_seconds), "retention": tk.DoubleVar(value=a.retention_minutes), "cache": tk.DoubleVar(value=a.max_cache_gb), "clear": tk.BooleanVar(value=self.working.competition.clear_temp_on_new_competition)})
-        self._row(f, r, "Live buffer seconds", "Sekundy živého bufferu", self.vars["buffer"]); r += 1
-        self._row(f, r, "Pre-roll seconds", "Sekundy před zmrazením", self.vars["pre"]); r += 1
-        self._row(f, r, "Post-roll seconds", "Sekundy po zmrazení", self.vars["post"]); r += 1
-        self._row(f, r, "Retention minutes", "Doba uchování v minutách", self.vars["retention"]); r += 1
-        self._row(f, r, "Maximum cache GB", "Maximální cache v GB", self.vars["cache"]); r += 1
-        self._row(f, r, "Clear old temporary recordings", "Vymazat staré dočasné záznamy", self.vars["clear"], "check")
+    def _groups_changed(self) -> None:
+        self._sync_model(quiet=True)
+        self.model.normalize_dependencies()
+        self.vars["active_group"].set(self.model.competition.active_group)
 
-    def _review_page(self, f: ttk.Frame) -> None:
-        self._section_title(f, "Review", "Souhrn")
-        self.review_text = tk.Text(f, height=20, wrap="word", borderwidth=0, state="disabled")
-        self.review_text.grid(row=2, column=0, columnspan=2, sticky="nsew")
-        f.rowconfigure(2, weight=1); f.columnconfigure(0, weight=1)
+    def _page_attempts(self, parent: ttk.Frame) -> None:
+        if not self.model.competition.enabled:
+            self._judge_only_note(parent)
+            return
+        self._field(parent, "wizard.attempts.qualification", "qualification", 1, 20)
+        ttk.Checkbutton(parent, text=self.tr("wizard.attempts.final"), variable=self.vars["final"], command=self._render).pack(anchor="w", pady=(12, 10))
+        if bool(self.vars["final"].get()):
+            self._field(parent, "wizard.attempts.finalists", "finalists", 1, 200)
+            self._field(parent, "wizard.attempts.final_attempts", "final_attempts", 1, 20)
+            order = ttk.Frame(parent, style="Panel.TFrame")
+            order.pack(fill="x", pady=8)
+            ttk.Label(order, text=self.tr("wizard.attempts.order"), style="Text.TLabel").pack(side="left")
+            values = tuple(self.tr(f"wizard.order.{key}") for key in ("same", "reverse", "manual"))
+            display = tk.StringVar(self, value=self.tr(f"wizard.order.{self.vars['final_order'].get()}"))
+            combo = ttk.Combobox(order, state="readonly", values=values, textvariable=display, width=24)
+            combo.pack(side="left", padx=(12, 0))
+            combo.bind("<<ComboboxSelected>>", lambda _event: self.vars["final_order"].set(("same", "reverse", "manual")[values.index(display.get())]))
 
-    def _show(self, index: int) -> None:
-        index = max(0, min(len(self.pages) - 1, index))
-        if 0 <= self.index < len(self.pages):
-            self.pages[self.index].pack_forget()
-        self.index = index
-        self.pages[index].pack(fill="both", expand=True)
-        titles = [self._txt("Competition mode", "Režim soutěže"), self._txt("Athletes", "Závodníci"), self._txt("Attempts and final", "Pokusy a finále"), self._txt("Camera and performance", "Kamera a výkon"), self._txt("Replay and storage", "Replay a úložiště"), self._txt("Review", "Souhrn")]
-        self.title_var.set(titles[index])
-        self.step_var.set(self._txt(f"Step {index + 1} of {len(self.pages)}", f"Krok {index + 1} z {len(self.pages)}"))
-        self.back_button.configure(state="disabled" if index == 0 else "normal")
-        self.next_button.configure(text=self.tr("wizard.finish") if index == len(self.pages) - 1 else self.tr("wizard.next"))
-        if index == len(self.pages) - 1:
-            self._update_review()
+    def _field(self, parent: ttk.Frame, label_key: str, variable: str, minimum: int, maximum: int) -> None:
+        row = ttk.Frame(parent, style="WizardCard.TFrame", padding=14)
+        row.pack(fill="x", pady=5)
+        ttk.Label(row, text=self.tr(label_key), style="Text.TLabel").pack(side="left")
+        widget = ttk.Spinbox(row, from_=minimum, to=maximum, textvariable=self.vars[variable], width=8)
+        widget.pack(side="right")
+        self.field_widgets[variable] = widget
 
-    def _next(self) -> None:
-        if self.index < len(self.pages) - 1:
-            self._show(self.index + 1)
+    def _page_aids(self, parent: ttk.Frame) -> None:
+        if not self.model.competition.enabled:
+            self._judge_only_note(parent)
+            return
+        self._aid_card(parent, "require", "wizard.aids.require.title", "wizard.aids.require.desc")
+        self._aid_card(parent, "overlay", "wizard.aids.overlay.title", "wizard.aids.overlay.desc")
+        self._aid_card(parent, "banner", "wizard.aids.banner.title", "wizard.aids.banner.desc")
+        if bool(self.vars["require"].get()):
+            ttk.Label(parent, text=self.tr("wizard.aids.require.warning"), style="Warning.TLabel", wraplength=700, justify="left").pack(anchor="w", pady=(6, 0))
+
+    def _aid_card(self, parent: ttk.Frame, variable: str, title_key: str, desc_key: str) -> None:
+        card = ttk.Frame(parent, style="WizardCard.TFrame", padding=14)
+        card.pack(fill="x", pady=5)
+        ttk.Checkbutton(card, text=self.tr(title_key), variable=self.vars[variable], command=self._render if variable == "require" else None).pack(anchor="w")
+        ttk.Label(card, text=self.tr(desc_key), style="Muted.TLabel", wraplength=700, justify="left").pack(anchor="w", pady=(4, 0))
+
+    def _page_review(self, parent: ttk.Frame) -> None:
+        self._sync_model(quiet=True)
+        c = self.model.competition
+        summary = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
+        summary.pack(fill="x")
+        ttk.Label(summary, text=self.tr("wizard.review.summary"), style="WizardCardTitle.TLabel").pack(anchor="w")
+        lines = [self.tr(f"wizard.template.{self.model.template}.title")]
+        if c.enabled:
+            if c.boys_enabled:
+                lines.append(self.tr("wizard.review.group", group=self.tr("wizard.groups.boys"), count=c.boys_competitors))
+            if c.girls_enabled:
+                lines.append(self.tr("wizard.review.group", group=self.tr("wizard.groups.girls"), count=c.girls_competitors))
+            lines.append(self.tr("wizard.review.attempts", count=c.default_attempts_per_competitor))
+            if c.final_round_enabled:
+                lines.append(self.tr("wizard.review.final", finalists=c.finalists_count, attempts=c.final_attempts, order=self.tr(f"wizard.order.{c.final_order}")))
+            lines.append(self.tr("wizard.review.capacity", count=self.model.expected_attempt_cells()))
+        ttk.Label(summary, text="\n".join(f"• {line}" for line in lines), style="Muted.TLabel", justify="left").pack(anchor="w", pady=(8, 0))
+        ready = self.readiness_provider()
+        readiness = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
+        readiness.pack(fill="x", pady=(12, 0))
+        ttk.Label(readiness, text=self.tr("wizard.readiness.title"), style="WizardCardTitle.TLabel").grid(row=0, column=0, sticky="w")
+        self._readiness_badge(readiness, ready).grid(row=0, column=1, sticky="e")
+        readiness.columnconfigure(0, weight=1)
+        detail = self.tr("wizard.readiness.detail", source=ready.source_description, fps=ready.capture_fps, buffer=ready.buffer_seconds, cache=ready.cache_bytes / 1024 ** 2)
+        ttk.Label(readiness, text=detail, style="Muted.TLabel", wraplength=650, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", pady=(7, 8))
+        issues = ready.issue_keys()
+        if issues:
+            ttk.Label(
+                readiness,
+                text="\n".join(f"• {self.tr(f'wizard.readiness.issue.{issue}')}" for issue in issues),
+                style="Warning.TLabel", wraplength=650, justify="left",
+            ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        actions = ttk.Frame(readiness, style="Panel.TFrame")
+        actions.grid(row=3, column=0, columnspan=2, sticky="w")
+        ttk.Button(actions, text=self.tr("wizard.readiness.refresh"), command=self._render).pack(side="left")
+        if self.on_camera_help:
+            ttk.Button(actions, text=self.tr("wizard.readiness.help"), command=self._open_camera_help).pack(side="left", padx=(7, 0))
+        if self.on_open_settings:
+            ttk.Button(actions, text=self.tr("wizard.readiness.settings"), command=self._open_settings).pack(side="left", padx=(7, 0))
+        if ready.temporary_recording_count:
+            recordings = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
+            recordings.pack(fill="x", pady=(12, 0))
+            ttk.Label(recordings, text=self.tr("wizard.recordings.title", count=ready.temporary_recording_count), style="WizardCardTitle.TLabel").pack(anchor="w")
+            ttk.Label(recordings, text=self.tr("wizard.recordings.desc"), style="Muted.TLabel", wraplength=680, justify="left").pack(anchor="w", pady=(5, 8))
+            ttk.Radiobutton(recordings, text=self.tr("wizard.recordings.keep"), variable=self.recording_disposition, value="keep").pack(anchor="w")
+            ttk.Radiobutton(recordings, text=self.tr("wizard.recordings.clear"), variable=self.recording_disposition, value="clear").pack(anchor="w")
+
+    def _judge_only_note(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text=self.tr("wizard.judge_only.note"), style="Muted.TLabel", wraplength=700, justify="left").pack(anchor="w")
+
+    def _readiness_badge(self, parent: tk.Misc, ready: WizardReadiness) -> ttk.Label:
+        style = {"ready": "WizardReady.TLabel", "warming": "WizardWarm.TLabel", "warning": "WizardDanger.TLabel"}[ready.level]
+        return ttk.Label(parent, text=self.tr(f"wizard.readiness.{ready.level}"), style=style)
+
+    def _setup_back(self) -> None:
+        if self.setup_index == 0:
+            return
+        self._sync_model(quiet=True)
+        self.setup_index -= 1
+        self._render()
+
+    def _setup_next(self) -> None:
+        step = self.SETUP_STEPS[self.setup_index]
+        if not self._sync_model():
+            return
+        errors = self.model.validate_step(step)
+        if errors:
+            field, code = next(iter(errors.items()))
+            self.error_var.set(self.tr(f"wizard.error.{code}"))
+            widget = self.field_widgets.get(field)
+            if widget is not None:
+                widget.focus_set()
+            return
+        if step != "review":
+            self.setup_index += 1
+            self._render()
+            return
+        ready = self.readiness_provider()
+        disposition = self.recording_disposition.get()
+        if ready.temporary_recording_count and disposition not in {"keep", "clear"}:
+            self.error_var.set(self.tr("wizard.error.recording_choice"))
+            return
+        if ready.level == "warning" and not ask_themed_yes_no(
+            self, self.tr("wizard.warning.title"), self.tr("wizard.warning.desc"),
+            yes=self.tr("wizard.warning.start"), no=self.tr("wizard.warning.back"),
+        ):
             return
         try:
-            c = self.working.competition
-            c.enabled = bool(self.vars["enabled"].get()); self.working.general.language = str(self.vars["language"].get())
-            c.boys_enabled = bool(self.vars["boys"].get()); c.girls_enabled = bool(self.vars["girls"].get())
-            c.boys_competitors = int(self.vars["boys_count"].get()); c.girls_competitors = int(self.vars["girls_count"].get()); c.active_group = str(self.vars["active_group"].get())
-            c.default_attempts_per_competitor = int(self.vars["qualification"].get()); c.require_decision_before_continue = bool(self.vars["require"].get())
-            c.final_round_enabled = bool(self.vars["final"].get()); c.finalists_count = int(self.vars["finalists"].get()); c.final_attempts = int(self.vars["final_attempts"].get()); c.final_order = str(self.vars["final_order"].get())
-            c.next_athlete_overlay = bool(self.vars["overlay"].get()); c.show_state_banner = bool(self.vars["banner"].get()); c.clear_temp_on_new_competition = bool(self.vars["clear"].get())
-            cam = self.working.camera; cam.device_index = int(self.vars["device"].get()); cam.width = int(self.vars["width"].get()); cam.height = int(self.vars["height"].get()); cam.fps = float(self.vars["fps"].get())
-            preset = str(self.vars["preset"].get())
-            if preset != "custom": apply_performance_preset(self.working, preset)
-            b, a = self.working.buffer, self.working.attempts
-            b.duration_seconds = float(self.vars["buffer"].get()); a.pre_seconds = float(self.vars["pre"].get()); a.post_seconds = float(self.vars["post"].get()); a.retention_minutes = float(self.vars["retention"].get()); a.max_cache_gb = float(self.vars["cache"].get())
-            self.working.validate()
-            self.on_finish(deepcopy(self.working), bool(self.vars["clear"].get()))
-            self.destroy()
+            self.on_finish(self.model.build_config(), "clear" if disposition == "clear" else "keep")
+            self._close()
         except Exception as exc:
-            show_themed_info(self, self._txt("Invalid competition setup", "Neplatné nastavení soutěže"), str(exc))
+            show_themed_info(self, self.tr("wizard.invalid.title"), str(exc))
 
-    def _update_review(self) -> None:
-        enabled = bool(self.vars["enabled"].get())
-        lines = [self._txt("Competition management: ", "Správa soutěže: ") + (self._txt("Enabled", "Zapnuta") if enabled else self._txt("Judge-only", "Pouze rozhodčí"))]
-        if enabled:
-            if self.vars["boys"].get(): lines.append(self._txt("Boys athletes: ", "Chlapci: ") + str(self.vars["boys_count"].get()))
-            if self.vars["girls"].get(): lines.append(self._txt("Girls athletes: ", "Dívky: ") + str(self.vars["girls_count"].get()))
-            lines.append(self._txt("Qualification attempts: ", "Základní pokusy: ") + str(self.vars["qualification"].get()))
-            lines.append(self._txt("Decision required: ", "Rozhodnutí povinné: ") + ("Yes" if self.vars["require"].get() else "No"))
-            if self.vars["final"].get(): lines.append(self._txt("Final: top ", "Finále: top ") + f"{self.vars['finalists'].get()}, +{self.vars['final_attempts'].get()} attempts")
-        lines += [f"Camera: index {self.vars['device'].get()} · {self.vars['width'].get()}×{self.vars['height'].get()} · {self.vars['fps'].get()} FPS", self._txt("Performance: ", "Výkon: ") + str(self.vars["preset"].get()), self._txt("Replay: ", "Replay: ") + f"{self.vars['pre'].get()} s pre / {self.vars['post'].get()} s post / {self.vars['retention'].get()} min"]
-        self.review_text.configure(state="normal"); self.review_text.delete("1.0", "end"); self.review_text.insert("1.0", "\n\n".join(lines)); self.review_text.configure(state="disabled")
+    def _sync_model(self, *, quiet: bool = False) -> bool:
+        c = self.model.competition
+        try:
+            c.boys_enabled = bool(self.vars["boys"].get())
+            c.girls_enabled = bool(self.vars["girls"].get())
+            c.boys_competitors = int(str(self.vars["boys_count"].get()))
+            c.girls_competitors = int(str(self.vars["girls_count"].get()))
+            c.active_group = str(self.vars["active_group"].get())
+            c.default_attempts_per_competitor = int(str(self.vars["qualification"].get()))
+            c.final_round_enabled = bool(self.vars["final"].get())
+            c.finalists_count = int(str(self.vars["finalists"].get()))
+            c.final_attempts = int(str(self.vars["final_attempts"].get()))
+            c.final_order = str(self.vars["final_order"].get())
+            c.require_decision_before_continue = bool(self.vars["require"].get())
+            c.next_athlete_overlay = bool(self.vars["overlay"].get())
+            c.show_state_banner = bool(self.vars["banner"].get())
+            self.model.normalize_dependencies()
+            self.vars["active_group"].set(c.active_group)
+            return True
+        except (TypeError, ValueError, tk.TclError):
+            if not quiet:
+                self.error_var.set(self.tr("wizard.error.number"))
+            return False
+
+    def _open_camera_help(self) -> None:
+        if self.on_camera_help:
+            self.grab_release()
+            dialog = None
+            try:
+                dialog = self.on_camera_help()
+                if dialog is not None:
+                    self.wait_window(dialog)
+                current_grab = self.grab_current()
+                if current_grab is not None and current_grab is not self:
+                    self.wait_window(current_grab)
+            except tk.TclError:
+                pass
+            finally:
+                if self.winfo_exists():
+                    self.grab_set()
+
+    def _open_settings(self) -> None:
+        if not self.on_open_settings:
+            return
+        self._sync_model(quiet=True)
+        self.grab_release()
+        dialog = self.on_open_settings()
+        if dialog is not None:
+            try:
+                self.wait_window(dialog)
+            except tk.TclError:
+                pass
+        if not self.winfo_exists():
+            return
+        ready = self.readiness_provider()
+        if ready.language != self.lang:
+            self.lang = ready.language
+            self.tr.set_language(self.lang)
+            self.title(self.tr("wizard.title"))
+        self.grab_set()
+        self._render()
+
+    def _schedule_refresh(self) -> None:
+        self._cancel_refresh()
+        self._refresh_after = self.after(1200, self._refresh_visible_readiness)
+
+    def _refresh_visible_readiness(self) -> None:
+        self._refresh_after = None
+        if self.SETUP_STEPS[self.setup_index] == "review":
+            self._render()
+
+    def _cancel_refresh(self) -> None:
+        if self._refresh_after is not None:
+            try:
+                self.after_cancel(self._refresh_after)
+            except tk.TclError:
+                pass
+            self._refresh_after = None
+
+    def _close(self) -> None:
+        self._cancel_refresh()
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+        self.destroy()

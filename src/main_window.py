@@ -27,8 +27,9 @@ from .athlete_timer import AthleteTimerController, AthleteTimerState, format_cou
 from .capture import CaptureEngine, OpenCVCameraSource
 from .competition import CompetitionSession, RosterAssignment
 from .competition_board import CompetitionBoard
+from .competition_setup import RecordingDisposition, WizardReadiness, merge_competition_setup
 from .competition_wizard import CompetitionWizard
-from .config import AppConfig, save_config
+from .config import AppConfig, CompetitionConfig, save_config
 from .i18n import Translator
 from .exporter import save_bgr_png
 from .hotkeys import HotkeyRouter
@@ -69,6 +70,8 @@ def first_available_camera(
 
 
 class MainWindow:
+    TIMELINE_USABLE_HEIGHT = 220
+
     def __init__(
         self,
         root: tk.Tk,
@@ -79,6 +82,7 @@ class MainWindow:
     ) -> None:
         self.root = root
         self.config = config
+        self._restore_startup_view()
         self.config_path = config_path
         self._persistent_camera_source_type = persistent_camera_source_type
         self._selected_camera_startup_feedback = startup_camera_index is not None
@@ -182,6 +186,16 @@ class MainWindow:
             self.root.after(350, self.show_onboarding)
 
     # ------------------------------------------------------------------ UI
+    def _restore_startup_view(self) -> None:
+        """Start every session with the complete judging workspace visible."""
+        display = self.config.display
+        display.show_attempts_panel = True
+        display.show_timeline = True
+        display.show_status_bar = True
+        display.show_live_preview = True
+        display.timeline_height = max(self.TIMELINE_USABLE_HEIGHT, display.timeline_height)
+        self.config.competition.show_competition_board = True
+
     def _build_variables(self) -> None:
         d = self.config.display
         self.var_show_attempts = tk.BooleanVar(value=d.show_attempts_panel)
@@ -1967,7 +1981,10 @@ class MainWindow:
         self.config.competition.show_competition_board = bool(self.var_show_board.get())
         self._apply_visibility(); self._save_config_safely()
     def toggle_timeline(self) -> None:
-        self.config.display.show_timeline = bool(self.var_show_timeline.get()); self._apply_visibility(); self._save_config_safely()
+        self.config.display.show_timeline = bool(self.var_show_timeline.get())
+        if self.config.display.show_timeline:
+            self.config.display.timeline_height = max(self.TIMELINE_USABLE_HEIGHT, self.config.display.timeline_height)
+        self._apply_visibility(); self._save_config_safely()
     def toggle_live_preview(self) -> None:
         self.config.display.show_live_preview = bool(self.var_show_live.get()); self._apply_layout(); self._save_config_safely()
     def toggle_status_bar(self) -> None:
@@ -1983,7 +2000,9 @@ class MainWindow:
             self.content_pane.forget(self.attempts_panel); self._attempts_pane_added = False
         show_timeline = bool(self.var_show_timeline.get())
         if show_timeline and not self._timeline_pane_added:
-            self.media_pane.add(self.timeline_wrap, weight=1); self._timeline_pane_added = True; self.root.after_idle(self._set_timeline_sash)
+            self.media_pane.add(self.timeline_wrap, weight=1); self._timeline_pane_added = True
+            self.root.after_idle(self._set_timeline_sash)
+            self.root.after(180, self._set_timeline_sash)
         elif not show_timeline and self._timeline_pane_added:
             self.media_pane.forget(self.timeline_wrap); self._timeline_pane_added = False
         show_status = bool(self.var_show_status.get())
@@ -2013,7 +2032,9 @@ class MainWindow:
     def _set_timeline_sash(self) -> None:
         if not self._timeline_pane_added: return
         try:
-            total = self.media_pane.winfo_height(); self.media_pane.sashpos(0, max(240, total - max(176, self.config.display.timeline_height)))
+            total = self.media_pane.winfo_height()
+            desired = max(self.TIMELINE_USABLE_HEIGHT, self.config.display.timeline_height)
+            self.media_pane.sashpos(0, max(240, total - desired))
         except tk.TclError: pass
 
     def _apply_layout(self) -> None:
@@ -2050,8 +2071,8 @@ class MainWindow:
         self._update_athlete_timer_display()
 
     # -------------------------------------------------------------- settings
-    def open_settings(self) -> None:
-        SettingsDialog(self.root, self.config, self.apply_settings, self.open_camera_diagnostic, self.show_onboarding)
+    def open_settings(self) -> SettingsDialog:
+        return SettingsDialog(self.root, self.config, self.apply_settings, self.open_camera_diagnostic, self.show_onboarding)
 
     def restart_now(self, startup_camera_index: int | None = None) -> None:
         """Launch the same command line again, then use the normal bounded shutdown."""
@@ -2223,14 +2244,38 @@ class MainWindow:
 
     # ------------------------------------------------------ competition setup
     def start_competition_wizard(self) -> None:
-        CompetitionWizard(self.root, self.config, self._finish_competition_wizard)
+        CompetitionWizard(
+            self.root,
+            self.config,
+            self._finish_competition_wizard,
+            readiness_provider=self._competition_wizard_readiness,
+            on_open_settings=self.open_settings,
+            on_camera_help=self.show_camera_help,
+        )
 
-    def _finish_competition_wizard(self, new_config: AppConfig, clear_previous: bool) -> None:
-        c = new_config.competition
-        c.current_competitor_by_group = {"Boys": 1, "Girls": 1}
-        c.finalist_numbers_by_group = {"Boys": [], "Girls": []}
-        c.final_round_started_by_group = {"Boys": False, "Girls": False}
-        if clear_previous:
+    def _competition_wizard_readiness(self) -> WizardReadiness:
+        capture = self.capture.stats()
+        buffer = self.buffer.stats()
+        return WizardReadiness(
+            language=self.config.general.language,
+            capture_running=self.capture.is_running,
+            captured_frames=capture.captured_frames,
+            capture_fps=capture.capture_fps,
+            requested_fps=self.config.camera.fps,
+            source_description=capture.source_description,
+            last_error=capture.last_error,
+            buffer_frame_count=buffer.frame_count,
+            buffer_seconds=buffer.duration_seconds,
+            cache_bytes=self.attempts.cache_size_bytes(),
+            cache_limit_bytes=int(self.config.attempts.max_cache_gb * 1024 ** 3),
+            temporary_recording_count=len(self.attempts.attempts()),
+        )
+
+    def _finish_competition_wizard(self, competition: CompetitionConfig, disposition: RecordingDisposition) -> None:
+        # Merge only competition choices into the latest configuration. Settings
+        # may have changed camera/language values while the wizard was open.
+        new_config = merge_competition_setup(self.config, competition)
+        if disposition == "clear":
             self._clear_recordings_mode("all", ask=False)
         self.apply_settings(new_config)
         self._last_board_signature = None
@@ -2335,10 +2380,10 @@ class MainWindow:
             8,
         )
 
-    def show_camera_help(self) -> None:
+    def show_camera_help(self) -> tk.Toplevel:
         if self._camera_help_dialog is not None and self._camera_help_dialog.winfo_exists():
             self._camera_help_dialog.lift()
-            return
+            return self._camera_help_dialog
         dialog = tk.Toplevel(self.root)
         configure_popup(dialog, self.root)
         self._camera_help_dialog = dialog
@@ -2379,6 +2424,7 @@ class MainWindow:
             self._camera_help_dialog = None
             dialog.destroy()
         ttk.Button(footer, text=self._t("camera.help_close"), command=close_help).pack(side="right")
+        return dialog
 
     def open_camera_diagnostic(self) -> None:
         dialog = tk.Toplevel(self.root)
@@ -2504,7 +2550,10 @@ class MainWindow:
             if self._attempts_pane_added and self.content_pane.winfo_width() > 10:
                 self.config.display.attempts_panel_width = max(220, self.content_pane.winfo_width() - int(self.content_pane.sashpos(0)))
             if self._timeline_pane_added and self.media_pane.winfo_height() > 10:
-                self.config.display.timeline_height = max(100, self.media_pane.winfo_height() - int(self.media_pane.sashpos(0)))
+                self.config.display.timeline_height = max(
+                    self.TIMELINE_USABLE_HEIGHT,
+                    self.media_pane.winfo_height() - int(self.media_pane.sashpos(0)),
+                )
         except tk.TclError: pass
         self._save_config_safely(); self.mode_var.set("CLOSING"); self.message_var.set("Stopping camera and background workers…")
         for child in self.root.winfo_children():

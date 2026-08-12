@@ -206,14 +206,35 @@ class VideoCanvas(tk.Canvas):
         fit = min(w / fw, h / fh)
         scale = max(.05, fit * self.zoom)
         dw, dh = max(1, round(fw * scale)), max(1, round(fh * scale))
-        resized = cv2.resize(self._frame, (dw, dh), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        self._photo = ImageTk.PhotoImage(Image.fromarray(rgb))
         cx, cy = w / 2 + self.pan_x, h / 2 + self.pan_y
-        self.coords(self._image_item, cx, cy)
-        self.itemconfigure(self._image_item, state="normal", image=self._photo)
         left, top, right, bottom = cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2
         self._image_bounds = (left, top, right, bottom)
+        visible_left, visible_top = max(0.0, left), max(0.0, top)
+        visible_right, visible_bottom = min(float(w), right), min(float(h), bottom)
+        if visible_right > visible_left and visible_bottom > visible_top:
+            # Resize only the source pixels that can appear in the viewport.
+            # Rendering the complete image at 10x zoom created tens of millions
+            # of temporary pixels for Tk to clip away on every preview frame.
+            sx0 = max(0, min(fw - 1, math.floor((visible_left - left) / scale)))
+            sy0 = max(0, min(fh - 1, math.floor((visible_top - top) / scale)))
+            sx1 = max(sx0 + 1, min(fw, math.ceil((visible_right - left) / scale)))
+            sy1 = max(sy0 + 1, min(fh, math.ceil((visible_bottom - top) / scale)))
+            source = self._frame[sy0:sy1, sx0:sx1]
+            render_width = max(1, round((sx1 - sx0) * scale))
+            render_height = max(1, round((sy1 - sy0) * scale))
+            resized = cv2.resize(
+                source,
+                (render_width, render_height),
+                interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR,
+            )
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            self._photo = ImageTk.PhotoImage(Image.fromarray(rgb))
+            render_cx = left + sx0 * scale + render_width / 2
+            render_cy = top + sy0 * scale + render_height / 2
+            self.coords(self._image_item, render_cx, render_cy)
+            self.itemconfigure(self._image_item, state="normal", image=self._photo)
+        else:
+            self.itemconfigure(self._image_item, state="hidden")
         if self.board_roi_enabled and (self.board_roi_visible or self.calibration_mode):
             self._draw_roi(left, top, dw, dh)
         if self.guide_enabled:
