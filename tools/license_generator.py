@@ -21,6 +21,7 @@ from tools.license_admin import create_license, private_key_path
 
 
 MACHINE_CODE_PATTERN = re.compile(r"^[0-9A-F]{4}(?:-[0-9A-F]{4}){3}$")
+MACHINE_CODE_HEX_LENGTH = 16
 
 
 def normalize_machine_code(value: str) -> str:
@@ -29,6 +30,20 @@ def normalize_machine_code(value: str) -> str:
     if len(compact) == 16 and re.fullmatch(r"[0-9A-F]+", compact):
         return "-".join(compact[index : index + 4] for index in range(0, 16, 4))
     return value.strip().upper()
+
+
+def format_machine_code_input(value: str) -> str:
+    """Format editable machine-code input as four uppercase hex groups."""
+    compact = re.sub(r"[^0-9A-F]", "", value.upper())[:MACHINE_CODE_HEX_LENGTH]
+    return "-".join(compact[index : index + 4] for index in range(0, len(compact), 4))
+
+
+def destroy_root(root: tk.Tk) -> None:
+    """Destroy a Tk root unless its application has already been destroyed."""
+    try:
+        root.destroy()
+    except tk.TclError:
+        pass
 
 
 def default_license_id() -> str:
@@ -44,6 +59,8 @@ class LicenseGenerator:
         self.root.rowconfigure(0, weight=1)
 
         self.machine_var = tk.StringVar()
+        self._formatting_machine_code = False
+        self.machine_var.trace_add("write", self._format_machine_code)
         self.customer_var = tk.StringVar()
         self.license_id_var = tk.StringVar(value=default_license_id())
         self.key_var = tk.StringVar()
@@ -68,7 +85,7 @@ class LicenseGenerator:
         ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 22))
 
         self._field(body, 2, "Customer / organization", self.customer_var)
-        self._field(body, 3, "Machine code", self.machine_var)
+        self.machine_entry = self._field(body, 3, "Machine code", self.machine_var)
         self._field(body, 4, "License ID", self.license_id_var)
 
         ttk.Label(body, text="Generated license key").grid(row=5, column=0, columnspan=3, sticky="w", pady=(22, 4))
@@ -98,9 +115,25 @@ class LicenseGenerator:
             self.status_var.set(f"Private key not found: {private_key_path()}")
 
     @staticmethod
-    def _field(body: ttk.Frame, row: int, label: str, variable: tk.StringVar) -> None:
+    def _field(body: ttk.Frame, row: int, label: str, variable: tk.StringVar) -> ttk.Entry:
         ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", pady=5)
-        ttk.Entry(body, textvariable=variable).grid(row=row, column=1, columnspan=2, sticky="ew", pady=5)
+        entry = ttk.Entry(body, textvariable=variable)
+        entry.grid(row=row, column=1, columnspan=2, sticky="ew", pady=5)
+        return entry
+
+    def _format_machine_code(self, *_args: object) -> None:
+        if self._formatting_machine_code:
+            return
+        formatted = format_machine_code_input(self.machine_var.get())
+        if formatted == self.machine_var.get():
+            return
+        self._formatting_machine_code = True
+        try:
+            self.machine_var.set(formatted)
+            if hasattr(self, "machine_entry"):
+                self.machine_entry.icursor("end")
+        finally:
+            self._formatting_machine_code = False
 
     def generate(self) -> None:
         machine = normalize_machine_code(self.machine_var.get())
@@ -165,7 +198,7 @@ def main() -> int:
         LicenseGenerator(root)
         root.mainloop()
     finally:
-        root.destroy()
+        destroy_root(root)
     return 0
 
 

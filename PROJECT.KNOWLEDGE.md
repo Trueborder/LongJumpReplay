@@ -1,5 +1,10 @@
 # Long Jump Replay — Project Knowledge
 
+## Documentation changes (2026-08-12)
+
+- Added `RECOMMENDED_SYSTEM_REQUIREMENTS.md` with a short bilingual hardware/software recommendation for event computers. It is a practical target rather than a formally benchmarked minimum and retains the requirement to test the complete camera setup before an event.
+- The owner-only license generator formats machine-code input live as four uppercase hexadecimal groups, filters unsupported characters, and limits input to the 16-character machine identifier. Its final Tk cleanup tolerates a window that has already destroyed the application, preventing a close-time `TclError`.
+
 ## Audit changes (2026-08-11)
 
 - Licensing tests now create an isolated temporary test signing key and patch the matching public modulus for their round-trip checks. Build and CI test runs therefore no longer require the ignored production `tools\.license_private_key.json`; the real key remains required only for the owner-only license administration tools.
@@ -12,6 +17,7 @@
 - `BUILD_CUSTOMER_RELEASE.bat` invokes its version reader with `-ExecutionPolicy Bypass`, matching the other release PowerShell calls so restrictive machine execution policy does not stop version detection before the build starts.
 - The static sales site now uses a runway-control visual system and accurately describes the Capture/Freeze/Replay/Decide workflow. English/Czech copy is valid UTF-8, public download language says Windows installer rather than MSI, and `BUILD_SITE.ps1` reads transformed HTML/CSS with explicit UTF-8 encoding so deployable output cannot reintroduce mojibake. Every page loads the shared SVG `TP` favicon, and the About page uses a four-part bilingual narrative covering approach, focus, process, and current work. The LongJumpReplay product gallery uses the current project screenshots for the main station, recordings list, and competition board; the static fallback images use the same current captures.
 - The `website/tomaspisar.cz` source now carries a persisted UI/UX Pro Max design system and an Evidence Desk visual layer: Barlow typography, timing-black/chalk themes, live-capture cyan, review amber, a restrained take-off-line/timecode hero, flat evidence panels, active navigation, SVG controls, declared screenshot dimensions, and keyboard-friendly menu/lightbox behavior. The bilingual content, product metadata, installer link, and dark/light theme persistence remain shared through the existing configuration and script.
+- The publish-ready `website/tomaspisar.cz/downloads/LongJumpReplay-Setup-3.1.exe` file is the installer target used by the site's `/downloads/LongJumpReplay-Setup-3.1.exe` links.
 - `src/config.py` preserves malformed settings as `.corrupt` backups and starts from validated defaults; `config_from_dict` still raises for direct callers that need strict validation.
 - `AttemptManager.delete()` protects collecting/encoding/exporting attempts from destructive races. Export copies use temporary destinations before replacement, and cache-size directory scans are throttled and invalidated after cache mutations.
 - Encoded replay reads use a bounded per-attempt LRU plus a sequential decoder position. This preserves frame stepping while reducing repeated random seeks during playback/comparison.
@@ -704,6 +710,7 @@ Highest-value future work, in rough order:
 ## 20. Build entry points
 
 - `BUILD_CUSTOMER_RELEASE.bat` is the one-click customer release command and the only entry point intended to assemble the complete public `release` folder. Existing content in that exact folder is replaced only after source checks and installer assembly succeed.
+- `BUILD_RELEASE.bat` rebuilds and tests the current portable application through `BUILD_PORTABLE.bat`, stages the verified payload, adds `LICENSE.txt`, validates the expected executable/runtime/readme/self-test files, and then replaces the ignored `ProductFinal` folder with rollback protection. Pass `--no-pause` for automation. A failure before the final folder swap leaves the previous `ProductFinal` untouched.
 - `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-3.1.exe`, and writes its SHA-256 sidecar.
 - `ProductFinal` is a generated, portable customer payload copied from the verified PyInstaller build. It includes `LongJumpReplay.exe`, the complete `_internal` runtime tree, `README.txt`, and the frozen self-test report. It is ignored by Git because it is a build artifact.
 - The payload can be copied beneath `C:\Program Files\LongJumpReplay`, but the application still uses `%LOCALAPPDATA%\LongJumpReplay` for writable per-user configuration, license data, cache, exports/evidence, runtime logs, and crash logs. Program Files is therefore not the only storage location; do not remove the AppData directory after installation.
