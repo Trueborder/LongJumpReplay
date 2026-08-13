@@ -45,7 +45,7 @@ The production application remains the verified Python 3.12/Tkinter/OpenCV build
 
 Run the repeatable 30-second synthetic capture gate with `RUN_STABILITY_CHECK.bat`. The JSON report checks measured capture rate, queue drops, encoder failures, live-buffer statistics, and remaining workers.
 
-An incremental Windows-native preview lives in `native/` and targets .NET 10 WPF. It contains separated Core, Windows Video, Infrastructure, App, and Tests projects; English/Czech preview text; a synthetic camera; bounded Live/Freeze/Replay buffering; frame stepping; camera pause/resume; compatible config reading; bounded shutdown; and a selectable Media Foundation source with friendly-name enumeration and real-time BGRA frames. Launch it with `RUN_NATIVE_PREVIEW.bat`, or create a runtime-independent Windows x64 folder with `BUILD_NATIVE_PREVIEW.bat`. The preview starts synthetically and offers discovered cameras in its source list, with safe synthetic fallback after an open failure. Mode negotiation/reconnect, hardware validation, MP4 evidence, competition workflows, full settings, HID, and exports must reach parity before cutover. Continue using `RUN_CAMERA.bat` for real judging and camera work.
+An incremental Windows-native preview lives in `native/` and targets .NET 10 WPF. It contains separated Core, Windows Video, Infrastructure, App, and Tests projects; English/Czech preview text; a synthetic camera; bounded Live/Freeze/Replay buffering; frame stepping; camera pause/resume; compatible config reading; bounded shutdown; and a selectable Media Foundation source with friendly-name enumeration and real-time BGRA frames. Launch it with `RUN_NATIVE_PREVIEW.bat`, or create a runtime-independent Windows x64 folder with `BUILD_NATIVE_PREVIEW.bat`. The preview starts synthetically and offers discovered cameras in its source list, with safe synthetic fallback after an open failure. Mode negotiation/reconnect, hardware validation, MP4 evidence, competition workflows, full settings, HID, and exports must reach parity before cutover. Continue using `scripts\run\RUN_CAMERA.bat` for real judging and camera work.
 
 A Windows-oriented live replay application for reviewing long-jump take-off-board decisions. It keeps a rolling live buffer, freezes attempts without stopping capture, preserves attempts as temporary MP4 sessions, supports frame-by-frame ShuttleXpress control, and can optionally manage athletes and rounds.
 
@@ -234,10 +234,10 @@ Exported MP4 files and evidence images are not deleted.
 ## Run from source on Windows
 
 1. Install Python 3.12 x64.
-2. Run `INSTALL_WINDOWS.bat`.
+2. Run `scripts\setup\INSTALL_WINDOWS.bat`.
 3. Run `SELF_TEST.bat`.
-4. Run `RUN_SYNTHETIC.bat`.
-5. Run `RUN_CAMERA.bat` after selecting/testing the camera.
+4. Run `scripts\run\RUN_SYNTHETIC.bat`.
+5. Run `scripts\run\RUN_CAMERA.bat` after selecting/testing the camera.
 
 ## Build a portable Windows application
 
@@ -258,7 +258,7 @@ The customer release intentionally excludes the loose application payload, priva
 For the portable fallback package only, run:
 
 ```text
-BUILD_PORTABLE.bat
+scripts\build\BUILD_PORTABLE.bat
 ```
 
 The builder:
@@ -283,9 +283,9 @@ A single-file build is available through `BUILD_SINGLE_EXE.bat`, but the portabl
 
 ## Generate customer license keys
 
-Run `RUN_LICENSE_GENERATOR.bat` on the owner/support computer. Enter the machine code shown by the customer’s first launch, the customer name, and an internal license ID. Use **Generate key**, then **Copy key** or **Save key…** and send only the resulting `LJR2...` key to the customer.
+Run `scripts\run\RUN_LICENSE_GENERATOR.bat` on the owner/support computer. Enter the machine code shown by the customer’s first launch, the customer name, and an internal license ID. Use **Generate key**, then **Copy key** or **Save key…** and send only the resulting `LJR2...` key to the customer.
 
-The optional `BUILD_LICENSE_GENERATOR.bat` creates an admin-only GUI EXE under `release\LongJumpReplay-License-Generator`. It reads the private signing key from `tools\.license_private_key.json`; never distribute that file or the generator with customer software. See `docs\LICENSE_ADMIN.md` for the operating procedure.
+The optional `scripts\build\BUILD_LICENSE_GENERATOR.bat` creates an admin-only GUI EXE under `release\LongJumpReplay-License-Generator`. It reads the private signing key from `tools\.license_private_key.json`; never distribute that file or the generator with customer software. See `docs\LICENSE_ADMIN.md` for the operating procedure.
 
 ## Testing performed in this package
 

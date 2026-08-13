@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import sys
 import tkinter as tk
 
 
@@ -34,7 +35,10 @@ def event_to_hotkey(event: tk.Event) -> str:
     state = int(event.state)
     if state & 0x0004: modifiers.append("Control")
     if state & 0x0001: modifiers.append("Shift")
-    if state & 0x0008: modifiers.append("Alt")
+    # Tk uses Mod1 (0x0008) for Alt on X11, but that bit represents
+    # Num Lock on Windows. Windows reports Alt with its extended 0x20000 bit.
+    alt_mask = 0x00020000 if sys.platform == "win32" else 0x0008
+    if state & alt_mask: modifiers.append("Alt")
     key = str(event.keysym)
     if key in {"Control_L", "Control_R", "Shift_L", "Shift_R", "Alt_L", "Alt_R"}:
         return ""

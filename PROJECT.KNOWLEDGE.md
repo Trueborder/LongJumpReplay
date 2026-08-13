@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## Developer repository layout (2026-08-13)
+
+- Active developer entry points are grouped under `scripts/build`, `scripts/run`, `scripts/setup`, and `scripts/maintenance`. Each moved script resolves and enters the repository root before accessing source, environments, tools, or output paths, so it can be launched from any working directory.
+- Secondary documentation is stored under `docs/`; the root retains the primary `README.md`, license/notices, dependency metadata, application entry point, configuration, and developer-agent source-of-truth files.
+- PyInstaller metadata lives under `packaging/`. `packaging/LongJumpReplay.spec` resolves source and asset inputs from the repository root and the optional Windows version metadata beside the spec.
+
 ## Localization expansion (2026-08-13)
 
 - The language catalog now supports English, Czech, Slovak, Polish, Hungarian, German, Simplified Chinese, Hindi, Spanish, French, Arabic, Bengali, Portuguese, Russian, Indonesian, and Urdu. Settings shows each language by its native name and persists a stable two-letter code.
@@ -9,7 +15,7 @@
 
 ## Documentation changes (2026-08-12)
 
-- Added `RECOMMENDED_SYSTEM_REQUIREMENTS.md` with a short bilingual hardware/software recommendation for event computers. It is a practical target rather than a formally benchmarked minimum and retains the requirement to test the complete camera setup before an event.
+- Added `docs/RECOMMENDED_SYSTEM_REQUIREMENTS.md` with a short bilingual hardware/software recommendation for event computers. It is a practical target rather than a formally benchmarked minimum and retains the requirement to test the complete camera setup before an event.
 - The owner-only license generator formats machine-code input live as four uppercase hexadecimal groups, filters unsupported characters, and limits input to the 16-character machine identifier. Its final Tk cleanup tolerates a window that has already destroyed the application, preventing a close-time `TclError`.
 
 ## Audit changes (2026-08-11)
@@ -20,11 +26,11 @@
 - GUI test Tk creation retries only transient Tcl/Tk library-initialization errors five times with a short bound; a genuinely incomplete Python installation still fails explicitly.
 - The clear-recordings GUI regression test waits a bounded period for the synthetic capture buffer to refill instead of treating one fixed scheduler timestamp as a failure.
 - GUI shutdown stops capture before the attempt manager, preventing new frames from feeding attempt workers while teardown is already in progress.
-- `RUN_TESTS.bat` runs non-GUI tests together and each `tests\*_gui.py` file in a fresh pytest process. All Windows build/test batch entry points use it so Tk interpreters and capture workers cannot leak across GUI test-file boundaries.
+- `scripts/run/RUN_TESTS.bat` runs non-GUI tests together and each `tests\*_gui.py` file in a fresh pytest process. All Windows build/test batch entry points use it so Tk interpreters and capture workers cannot leak across GUI test-file boundaries.
 - `BUILD_CUSTOMER_RELEASE.bat` invokes its version reader with `-ExecutionPolicy Bypass`, matching the other release PowerShell calls so restrictive machine execution policy does not stop version detection before the build starts.
 - The static sales site now uses a runway-control visual system and accurately describes the Capture/Freeze/Replay/Decide workflow. English/Czech copy is valid UTF-8, public download language says Windows installer rather than MSI, and `BUILD_SITE.ps1` reads transformed HTML/CSS with explicit UTF-8 encoding so deployable output cannot reintroduce mojibake. Every page loads the shared SVG `TP` favicon, and the About page uses a four-part bilingual narrative covering approach, focus, process, and current work. The LongJumpReplay product gallery uses the current project screenshots for the main station, recordings list, and competition board; the static fallback images use the same current captures.
 - The `website/tomaspisar.cz` source now carries a persisted UI/UX Pro Max design system and an Evidence Desk visual layer: Barlow typography, timing-black/chalk themes, live-capture cyan, review amber, a restrained take-off-line/timecode hero, flat evidence panels, active navigation, SVG controls, declared screenshot dimensions, and keyboard-friendly menu/lightbox behavior. The bilingual content, product metadata, installer link, and dark/light theme persistence remain shared through the existing configuration and script.
-- The publish-ready `website/tomaspisar.cz/downloads/LongJumpReplay-Setup-3.1.exe` file is the installer target used by the site's `/downloads/LongJumpReplay-Setup-3.1.exe` links.
+- The publish-ready installer is deployed from `website/files.tomaspisar.cz/LongJumpReplay-Setup-3.1.exe` and linked as `https://files.tomaspisar.cz/LongJumpReplay-Setup-3.1.exe`.
 - `src/config.py` preserves malformed settings as `.corrupt` backups and starts from validated defaults; `config_from_dict` still raises for direct callers that need strict validation.
 - `AttemptManager.delete()` protects collecting/encoding/exporting attempts from destructive races. Export copies use temporary destinations before replacement, and cache-size directory scans are throttled and invalidated after cache mutations.
 - Encoded replay reads use a bounded per-attempt LRU plus a sequential decoder position. This preserves frame stepping while reducing repeated random seeks during playback/comparison.
@@ -499,9 +505,9 @@ The portable folder build is preferred over one-file:
 
 The Windows build scripts detect a stale `.venv` whose interpreter points to a different machine, leave it untouched, and create a fresh `.venv-build-*` Python 3.12 environment. Single-file builds disable UPX compression to reduce bootloader/antivirus extraction failures. The portable folder remains the supported customer path when Windows cannot unpack a one-file executable.
 
-The portable PyInstaller spec uses `COLLECT`/`exclude_binaries=True` so `BUILD_PORTABLE.bat` produces and tests `dist\LongJumpReplay\LongJumpReplay.exe`; it must not regress to an untested one-file `dist\LongJumpReplay.exe`.
+The portable PyInstaller spec uses `COLLECT`/`exclude_binaries=True` so `scripts/build/BUILD_PORTABLE.bat` produces and tests `dist\LongJumpReplay\LongJumpReplay.exe`; it must not regress to an untested one-file `dist\LongJumpReplay.exe`.
 
-Single-file build commands write generated specs under `build\generated`; they must not overwrite the portable `LongJumpReplay.spec` in the project root.
+Single-file build commands write generated specs under `build\generated`; they must not overwrite the portable `packaging/LongJumpReplay.spec`.
 
 ## 13. Tests and verification
 
@@ -574,24 +580,24 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
 - Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
 - License administration uses `tools\license_admin.py`; the customer supplies the machine code shown on first launch and receives a signed key by email.
-- `RUN_LICENSE_GENERATOR.bat` launches the Tkinter admin GUI. It generates, copies, or saves signed keys and normalizes pasted machine codes. `BUILD_LICENSE_GENERATOR.bat` can create an admin-only GUI EXE, which reads the private key from the project-side `tools\.license_private_key.json` file; it must never be sent to customers.
+- `scripts/run/RUN_LICENSE_GENERATOR.bat` launches the Tkinter admin GUI. It generates, copies, or saves signed keys and normalizes pasted machine codes. `scripts/build/BUILD_LICENSE_GENERATOR.bat` can create an admin-only GUI EXE, which reads the private key from the project-side `tools\.license_private_key.json` file; it must never be sent to customers.
 - `docs\LICENSE_ADMIN.md` documents the customer activation and key-delivery workflow. The private key must remain backed up and outside customer installers, ZIPs, and support attachments.
 - The first-run license dialog is independent of the withdrawn Tk root, centered, raised, focused, and temporarily topmost so frozen Windows launches cannot wait invisibly for activation.
 - The static sales site is under `website`; edit `website\site.config.js` to change the contact email, price, domain, or installer URL, then run `website\BUILD_SITE.ps1` to create the deployable `website\dist` folder. The build must preserve UTF-8 for Czech copy and symbols, rewrite source-only asset paths, and keep the 390 px mobile layout free of horizontal overflow.
 
 ### Source setup
 
-- `INSTALL_WINDOWS.bat`
+- `scripts/setup/INSTALL_WINDOWS.bat`
 
 ### Run
 
-- `RUN_SYNTHETIC.bat`
-- `RUN_CAMERA.bat`
+- `scripts/run/RUN_SYNTHETIC.bat`
+- `scripts/run/RUN_CAMERA.bat`
 - `SELF_TEST.bat`
 
 ### Portable release
 
-- `BUILD_PORTABLE.bat`
+- `scripts/build/BUILD_PORTABLE.bat`
 - output: `release\LongJumpReplay-3.1-Windows-x64.zip`
 
 ### Single EXE
@@ -722,9 +728,9 @@ Highest-value future work, in rough order:
 ## 20. Build entry points
 
 - `BUILD_CUSTOMER_RELEASE.bat` is the one-click customer release command and the only entry point intended to assemble the complete public `release` folder. Existing content in that exact folder is replaced only after source checks and installer assembly succeed.
-- `BUILD_RELEASE.bat` rebuilds and tests the current portable application through `BUILD_PORTABLE.bat`, stages the verified payload, adds `LICENSE.txt`, validates the expected executable/runtime/readme/self-test files, and then replaces the ignored `ProductFinal` folder with rollback protection. Pass `--no-pause` for automation. A failure before the final folder swap leaves the previous `ProductFinal` untouched.
+- `scripts/build/BUILD_RELEASE.bat` invokes `scripts/build/BUILD_PORTABLE.bat --folder-only`, validates the tested payload, and adds `LICENSE.txt`. Its only distributable output is the loose `release/LongJumpReplay` application folder; it must not create `ProductFinal`, a ZIP, or a checksum sidecar. Pass `--no-pause` for automation.
 - `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-3.1.exe`, and writes its SHA-256 sidecar.
-- `ProductFinal` is a generated, portable customer payload copied from the verified PyInstaller build. It includes `LongJumpReplay.exe`, the complete `_internal` runtime tree, `README.txt`, and the frozen self-test report. It is ignored by Git because it is a build artifact.
+- The loose `release/LongJumpReplay` payload includes `LongJumpReplay.exe`, the complete `_internal` runtime tree, `README.txt`, `LICENSE.txt`, and the frozen self-test report.
 - The payload can be copied beneath `C:\Program Files\LongJumpReplay`, but the application still uses `%LOCALAPPDATA%\LongJumpReplay` for writable per-user configuration, license data, cache, exports/evidence, runtime logs, and crash logs. Program Files is therefore not the only storage location; do not remove the AppData directory after installation.
 
 ## 21. Definition of done for changes

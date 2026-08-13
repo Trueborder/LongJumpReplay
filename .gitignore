@@ -19,9 +19,10 @@ config.local.json
 .pytest-temp/
 cache/
 build/
+!scripts/build/
+!scripts/build/**
 dist/
 dist-single/
-ProductFinal/
 native/**/bin/
 native/**/obj/
 __pycache__/

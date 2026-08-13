@@ -74,7 +74,7 @@ Before event use, validate on the exact setup:
 ## Release build
 
 ```powershell
-.\BUILD_PORTABLE.bat
+.\scripts\build\BUILD_PORTABLE.bat
 ```
 
 Do not distribute until the frozen self-test passes and the ZIP has been extracted and launched from a clean directory.
@@ -101,6 +101,6 @@ Update consistently:
 - changelog/test report;
 - build scripts;
 - GitHub workflow artifact names;
-- `windows_version_info.txt`;
+- `packaging\windows_version_info.txt`;
 - PyInstaller spec if applicable;
 - release filenames.

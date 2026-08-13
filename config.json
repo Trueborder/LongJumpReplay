@@ -7,7 +7,7 @@
   },
   "camera": {
     "source_type": "camera",
-    "device_index": 1,
+    "device_index": 0,
     "file_path": "",
     "width": 1280,
     "height": 720,
@@ -46,8 +46,8 @@
     "auto_advance_on_attempt_complete": true,
     "boys_enabled": true,
     "girls_enabled": true,
-    "boys_competitors": 8,
-    "girls_competitors": 8,
+    "boys_competitors": 19,
+    "girls_competitors": 21,
     "default_attempts_per_competitor": 3,
     "attempts_overrides": {
       "Girls:5": 1
@@ -64,8 +64,8 @@
     "show_competitor_selector": true,
     "show_competition_board": true,
     "show_state_banner": true,
-    "next_athlete_overlay": false,
-    "final_round_enabled": false,
+    "next_athlete_overlay": true,
+    "final_round_enabled": true,
     "finalists_count": 8,
     "final_attempts": 3,
     "final_order": "same",
@@ -185,7 +185,7 @@
       "toggle_guide": "g",
       "toggle_comparison": "c",
       "start_competition_wizard": "Control-n",
-      "timer_toggle": "Alt-BackSpace"
+      "timer_toggle": ""
     }
   },
   "shuttle": {

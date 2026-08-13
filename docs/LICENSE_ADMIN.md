@@ -1,6 +1,6 @@
 # LongJumpReplay license administration
 
-Use `RUN_LICENSE_GENERATOR.bat` on the owner/support computer. Enter the
+Use `scripts\run\RUN_LICENSE_GENERATOR.bat` on the owner/support computer. Enter the
 machine code supplied by the customer, their name, and an internal license ID.
 Press **Generate key**, then use **Copy key** or **Save key…**.
 

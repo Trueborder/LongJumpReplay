@@ -145,7 +145,7 @@ Create a separate branch for each meaningful feature or bug fix. Do not let a lo
 ## 7. Build a shareable Windows application
 
 ```powershell
-.\BUILD_PORTABLE.bat
+.\scripts\build\BUILD_PORTABLE.bat
 ```
 
 Expected output:
@@ -161,7 +161,7 @@ The portable folder build is recommended. Test it from a clean extracted folder 
 Before large refactors:
 
 ```powershell
-.\CREATE_PROJECT_BACKUP.ps1
+.\scripts\maintenance\CREATE_PROJECT_BACKUP.ps1
 ```
 
 Backups are placed next to the project under:

@@ -1,7 +1,23 @@
+from types import SimpleNamespace
 import tkinter as tk
 from tkinter import ttk
 
+from src import hotkeys
 from src.hotkeys import HotkeyRouter
+
+
+def test_event_to_hotkey_uses_windows_alt_mask(monkeypatch):
+    monkeypatch.setattr(hotkeys.sys, "platform", "win32")
+
+    assert hotkeys.event_to_hotkey(SimpleNamespace(state=0x0008, keysym="v")) == "v"
+    assert hotkeys.event_to_hotkey(SimpleNamespace(state=0x20000, keysym="v")) == "Alt-v"
+    assert hotkeys.event_to_hotkey(SimpleNamespace(state=0x20005, keysym="v")) == "Control-Shift-Alt-v"
+
+
+def test_event_to_hotkey_keeps_x11_alt_mask(monkeypatch):
+    monkeypatch.setattr(hotkeys.sys, "platform", "linux")
+
+    assert hotkeys.event_to_hotkey(SimpleNamespace(state=0x0008, keysym="v")) == "Alt-v"
 
 
 def test_space_beats_focused_button():
