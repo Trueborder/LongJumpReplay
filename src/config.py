@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from .language_catalog import SUPPORTED_LANGUAGES
+
 
 DEFAULT_HOTKEYS = {
     "freeze_toggle": "space",
@@ -43,7 +45,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class GeneralConfig:
-    language: str = "en"  # en | cs
+    language: str = "en"
     confirm_destructive_actions: bool = True
     show_tooltips: bool = True
     onboarding_completed: bool = False
@@ -311,8 +313,8 @@ class AppConfig:
     shuttle: ShuttleConfig = field(default_factory=ShuttleConfig)
 
     def validate(self) -> None:
-        if self.general.language not in {"en", "cs"}:
-            raise ValueError("general.language must be en or cs")
+        if self.general.language not in SUPPORTED_LANGUAGES:
+            raise ValueError(f"general.language must be one of: {', '.join(SUPPORTED_LANGUAGES)}")
         if self.camera.source_type not in {"camera", "synthetic", "file"}:
             raise ValueError("camera.source_type must be camera, synthetic, or file")
         if self.camera.source_type == "file" and not self.camera.file_path.strip():

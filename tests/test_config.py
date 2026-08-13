@@ -32,6 +32,17 @@ def test_invalid_theme_rejected():
         raise AssertionError('invalid theme accepted')
 
 
+def test_supported_world_languages_are_validated():
+    for language in ("sk", "pl", "hu", "de", "zh", "hi", "es", "ar"):
+        assert config_from_dict({"general": {"language": language}}).general.language == language
+    try:
+        config_from_dict({"general": {"language": "xx"}})
+    except ValueError as exc:
+        assert "general.language" in str(exc)
+    else:
+        raise AssertionError("unsupported language accepted")
+
+
 def test_corrupt_config_is_quarantined_and_replaced_with_defaults(tmp_path):
     path = tmp_path / 'config.json'
     path.write_text('{"camera": [', encoding='utf-8')

@@ -1,9 +1,46 @@
 from src.i18n import CS, EN, Translator
+from src.language_catalog import (
+    CORE_KEYS,
+    LANGUAGE_NAMES,
+    LANGUAGE_OPTIONS,
+    SUPPORTED_LANGUAGES,
+    TRANSLATION_OVERRIDES,
+    language_from_option,
+    language_option,
+)
 from src.main_window import camera_waiting_messages, first_available_camera
 
 
 def test_english_and_czech_translation_keys_stay_in_sync():
     assert EN.keys() == CS.keys()
+
+
+def test_world_language_catalog_includes_requested_central_european_languages():
+    assert {"sk", "pl", "hu", "de"} <= set(SUPPORTED_LANGUAGES)
+    assert {"zh", "hi", "es", "fr", "ar", "bn", "pt", "ru", "id", "ur"} <= set(SUPPORTED_LANGUAGES)
+    assert tuple(LANGUAGE_NAMES) == SUPPORTED_LANGUAGES
+    assert len(LANGUAGE_OPTIONS) == len(SUPPORTED_LANGUAGES)
+
+
+def test_language_options_round_trip_to_config_codes():
+    for code in SUPPORTED_LANGUAGES:
+        assert language_from_option(language_option(code)) == code
+
+
+def test_all_language_overrides_are_known_and_fall_back_to_english():
+    assert set(TRANSLATION_OVERRIDES) == set(SUPPORTED_LANGUAGES) - {"en", "cs"}
+    assert set(CORE_KEYS) <= set(EN)
+    for code, table in TRANSLATION_OVERRIDES.items():
+        assert table.keys() == set(CORE_KEYS), code
+        translator = Translator(code)
+        assert translator("button.freeze") == table["button.freeze"]
+        assert translator("camera.help_title") == EN["camera.help_title"]
+
+
+def test_unknown_language_falls_back_to_english():
+    translator = Translator("xx")
+    assert translator.language == "en"
+    assert translator("button.freeze") == EN["button.freeze"]
 
 
 def test_camera_waiting_message_keeps_initial_copy_and_supports_selected_index():

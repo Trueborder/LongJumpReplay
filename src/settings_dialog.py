@@ -9,6 +9,7 @@ from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_r
 from .camera_devices import enumerate_camera_devices
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
+from .language_catalog import LANGUAGE_OPTIONS, language_from_option, language_option
 from .theme import ask_themed_yes_no, ask_themed_yes_no_cancel, configure_popup, show_themed_info, style_popup_menu
 
 
@@ -514,9 +515,9 @@ class SettingsDialog(tk.Toplevel):
 
     def _build_appearance(self, f: ttk.Frame) -> None:
         r = self._title(f, "Language & appearance", "Jazyk a vzhled", "The language is applied to the main interface after Apply.", "Jazyk se na hlavní rozhraní použije po stisku Použít.")
-        self._vars["language"] = tk.StringVar(value=self.working.general.language)
+        self._vars["language"] = tk.StringVar(value=language_option(self.working.general.language))
         self._vars["theme"] = tk.StringVar(value=self.working.display.theme)
-        self._row(f, r, "Language", "Jazyk", self._vars["language"], "combo", ("en", "cs"), desc_en="English (en) or Czech (cs).", desc_cs="Angličtina (en) nebo čeština (cs)."); r += 1
+        self._row(f, r, "Language", "Jazyk", self._vars["language"], "combo", LANGUAGE_OPTIONS, desc_en="Choose a language by its native name. Specialist text falls back to English when needed.", desc_cs="Vyberte jazyk podle jeho vlastního názvu. Specializovaný text se v případě potřeby zobrazí anglicky."); r += 1
         self._row(f, r, "Theme", "Motiv", self._vars["theme"], "combo", ("system", "dark", "light"), impact="low")
 
     def _build_performance(self, f: ttk.Frame) -> None:
@@ -1022,7 +1023,7 @@ class SettingsDialog(tk.Toplevel):
 
     def _apply_vars(self) -> AppConfig:
         w = self.working
-        w.general.language = str(self._vars["language"].get())
+        w.general.language = language_from_option(str(self._vars["language"].get()))
         w.general.confirm_destructive_actions = bool(self._vars["confirm_destructive"].get())
         w.general.show_tooltips = bool(self._vars["show_tooltips"].get())
         d = w.display

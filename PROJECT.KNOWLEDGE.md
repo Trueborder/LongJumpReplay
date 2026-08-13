@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## Localization expansion (2026-08-13)
+
+- The language catalog now supports English, Czech, Slovak, Polish, Hungarian, German, Simplified Chinese, Hindi, Spanish, French, Arabic, Bengali, Portuguese, Russian, Indonesian, and Urdu. Settings shows each language by its native name and persists a stable two-letter code.
+- English and Czech retain complete translation tables. Every additional locale translates the most frequently used operator controls and safely falls back to English for specialist copy that has not yet received a locale-specific translation; it must never fall through to Czech or expose an internal translation key.
+- `src/language_catalog.py` is the single registry for supported codes, native names, selector options, normalization, and per-locale operator translations. Configuration validation, settings, the translator, timeline, video canvases, and competition board all consume that registry.
+- Tests enforce the requested Central European languages, the broad world-language set, selector/code round trips, complete core override coverage, English fallback, and rejection of unknown language codes.
+
 ## Documentation changes (2026-08-12)
 
 - Added `RECOMMENDED_SYSTEM_REQUIREMENTS.md` with a short bilingual hardware/software recommendation for event computers. It is a practical target rather than a formally benchmarked minimum and retains the requirement to test the complete camera setup before an event.
@@ -78,7 +85,7 @@ Preserve these rules unless the product owner explicitly changes them:
 10. **Space must always control Freeze/Live even after clicking a button.** Focused widgets must not steal it.
 11. **Evidence quality must not be silently reduced by performance presets.** Reduce preview/UI analysis work first. The separate Older PC mode is an explicit operator choice and may retain every second source frame; it must clearly disclose that tradeoff.
 12. **The app must close even if a camera backend or worker misbehaves.** Shutdown has bounded waits and emergency release behavior.
-13. **English and Czech are supported.** New user-facing strings must go through `src/i18n.py`.
+13. **All registered interface languages are supported through a deterministic English fallback.** New user-facing strings must go through `src/i18n.py`; frequently used operator controls should also be added to each locale override in `src/language_catalog.py`.
 14. **Dark mode controls must remain readable.** Always test combobox popups, selections, disabled text, and focus states.
 15. **Competition management must be completely disableable.** Judge-only mode must remain simple.
 16. **Take-off Assist may locate a candidate frame but must never decide Valid/Foul.** A human remains responsible.
@@ -304,7 +311,12 @@ Communication back to the GUI uses queues and scheduled polling. Do not update w
   - ttk style definitions and dark/light/system theme support.
 
 - `src/i18n.py`
-  - English/Czech translation dictionary and translator.
+  - complete English/Czech translation dictionaries, locale-aware translator, and deterministic English fallback.
+
+- `src/language_catalog.py`
+  - supported language codes and native names;
+  - settings selector conversion and language normalization;
+  - core operator translations for additional world languages.
 
 ### Input and analysis
 

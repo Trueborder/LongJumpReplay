@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from .i18n import tr
+from .language_catalog import normalize_language
 
 
 class VideoCanvas(tk.Canvas):
@@ -38,7 +39,7 @@ class VideoCanvas(tk.Canvas):
     ) -> None:
         super().__init__(master, background=palette["video"], highlightthickness=1, highlightbackground=palette["border"], **kwargs)
         self.palette = palette
-        self.language = language if language in {"en", "cs"} else "en"
+        self.language = normalize_language(language)
         self._frame: np.ndarray | None = None
         self._photo: ImageTk.PhotoImage | None = None
         self._status_text = tr(self.language, "overlay.waiting_video")
@@ -95,7 +96,7 @@ class VideoCanvas(tk.Canvas):
 
     def set_language(self, language: str) -> None:
         previous_waiting = tr(self.language, "overlay.waiting_video")
-        self.language = language if language in {"en", "cs"} else "en"
+        self.language = normalize_language(language)
         if self._status_text == previous_waiting:
             self._status_text = tr(self.language, "overlay.waiting_video")
         self.request_render()

@@ -1780,13 +1780,13 @@ class MainWindow:
         live = self.buffer.stats()
         body = ttk.Frame(dialog, style="App.TFrame", padding=18)
         body.pack(fill="both", expand=True)
-        title = "Clear temporary recordings?" if self.config.general.language == "en" else "Vymazat dočasné záznamy?"
+        title = "Clear temporary recordings?" if self.config.general.language != "cs" else "Vymazat dočasné záznamy?"
         ttk.Label(body, text=title, style="Title.TLabel").pack(anchor="w")
         details = (
             f"{len(attempts)} temporary recordings · {unresolved} unresolved\n"
             f"{cache_mb:.1f} MB cache · {live.duration_seconds:.1f} s live buffer\n\n"
             "Exported MP4 files and evidence images will not be deleted."
-            if self.config.general.language == "en" else
+            if self.config.general.language != "cs" else
             f"{len(attempts)} dočasných záznamů · {unresolved} nerozhodnutých\n"
             f"{cache_mb:.1f} MB cache · {live.duration_seconds:.1f} s živého bufferu\n\n"
             "Exportovaná MP4 a důkazní snímky nebudou smazány."
@@ -1794,9 +1794,9 @@ class MainWindow:
         ttk.Label(body, text=details, style="Muted.TLabel", justify="left").pack(anchor="w", pady=(7, 16))
         buttons = ttk.Frame(body, style="App.TFrame")
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Clear everything" if self.config.general.language == "en" else "Vymazat vše", style="Danger.TButton", command=lambda: result.set("all")).pack(fill="x", pady=3)
-        ttk.Button(buttons, text="Clear live buffer only" if self.config.general.language == "en" else "Vymazat jen živý buffer", command=lambda: result.set("live")).pack(fill="x", pady=3)
-        ttk.Button(buttons, text="Clear unresolved recordings" if self.config.general.language == "en" else "Vymazat nerozhodnuté záznamy", command=lambda: result.set("unresolved")).pack(fill="x", pady=3)
+        ttk.Button(buttons, text="Clear everything" if self.config.general.language != "cs" else "Vymazat vše", style="Danger.TButton", command=lambda: result.set("all")).pack(fill="x", pady=3)
+        ttk.Button(buttons, text="Clear live buffer only" if self.config.general.language != "cs" else "Vymazat jen živý buffer", command=lambda: result.set("live")).pack(fill="x", pady=3)
+        ttk.Button(buttons, text="Clear unresolved recordings" if self.config.general.language != "cs" else "Vymazat nerozhodnuté záznamy", command=lambda: result.set("unresolved")).pack(fill="x", pady=3)
         ttk.Button(buttons, text=self._t("settings.cancel"), command=lambda: result.set("cancel")).pack(fill="x", pady=(10, 0))
         dialog.protocol("WM_DELETE_WINDOW", lambda: result.set("cancel"))
         dialog.wait_variable(result)
@@ -1843,11 +1843,11 @@ class MainWindow:
             self._refresh_competition_board(self.attempts.attempts(), self.competition.assignment_for_current(self.attempts.attempts()))
             self.competition_board.focus_cell((1, 1))
         if mode == "live":
-            message = "Live buffer cleared. Capture continues." if self.config.general.language == "en" else "Živý buffer vymazán. Záznam pokračuje."
+            message = "Live buffer cleared. Capture continues." if self.config.general.language != "cs" else "Živý buffer vymazán. Záznam pokračuje."
         elif mode == "unresolved":
-            message = f"Cleared {count} unresolved temporary recording(s)." if self.config.general.language == "en" else f"Vymazáno {count} nerozhodnutých dočasných záznamů."
+            message = f"Cleared {count} unresolved temporary recording(s)." if self.config.general.language != "cs" else f"Vymazáno {count} nerozhodnutých dočasných záznamů."
         else:
-            message = f"Cleared {count} temporary recording(s). Capture continues with a fresh buffer." if self.config.general.language == "en" else f"Vymazáno {count} dočasných záznamů. Kamera pokračuje s čistým bufferem."
+            message = f"Cleared {count} temporary recording(s). Capture continues with a fresh buffer." if self.config.general.language != "cs" else f"Vymazáno {count} dočasných záznamů. Kamera pokračuje s čistým bufferem."
         self._show_message(message, 5)
         return count
 
@@ -2088,7 +2088,7 @@ class MainWindow:
         except OSError as exc:
             show_themed_info(
                 self.root,
-                "Restart failed" if self.config.general.language == "en" else "Restart se nezdařil",
+                "Restart failed" if self.config.general.language != "cs" else "Restart se nezdařil",
                 str(exc),
             )
             return
@@ -2229,7 +2229,7 @@ class MainWindow:
         self.shuttle.start()
         save_config(self._config_for_persistence(new_config), self.config_path)
         if camera_changed:
-            language_is_en = new_config.general.language == "en"
+            language_is_en = new_config.general.language != "cs"
             restart = ask_themed_yes_no(
                 self.root,
                 "Restart required" if language_is_en else "Je nutný restart",
@@ -2281,7 +2281,7 @@ class MainWindow:
         self._last_board_signature = None
         self._refresh_competitor_selector()
         self._show_message(
-            "Competition started." if self.config.general.language == "en" else "Soutěž byla spuštěna.",
+            "Competition started." if self.config.general.language != "cs" else "Soutěž byla spuštěna.",
             5,
         )
 
@@ -2307,12 +2307,12 @@ class MainWindow:
             return
         keep = ask_themed_yes_no(
             self.root,
-            "Restore previous session" if self.config.general.language == "en" else "Obnovit předchozí relaci",
+            "Restore previous session" if self.config.general.language != "cs" else "Obnovit předchozí relaci",
             (f"Found {len(recovered)} temporary recording(s) from an earlier session. Keep and restore them?"
-             if self.config.general.language == "en"
+             if self.config.general.language != "cs"
              else f"Bylo nalezeno {len(recovered)} dočasných záznamů z předchozí relace. Zachovat je a obnovit?"),
-            yes="Keep" if self.config.general.language == "en" else "Ponechat",
-            no="Clear" if self.config.general.language == "en" else "Vymazat",
+            yes="Keep" if self.config.general.language != "cs" else "Ponechat",
+            no="Clear" if self.config.general.language != "cs" else "Vymazat",
         )
         if not keep:
             self._clear_recordings_mode("all", ask=False)
@@ -2320,7 +2320,7 @@ class MainWindow:
             self._refresh_attempts()
             self._show_message(
                 f"Restored {len(recovered)} temporary recording(s)."
-                if self.config.general.language == "en"
+                if self.config.general.language != "cs"
                 else f"Obnoveno {len(recovered)} dočasných záznamů.",
                 6,
             )
@@ -2329,7 +2329,7 @@ class MainWindow:
         if not self.config.competition.event_export_enabled:
             self._show_message(
                 "Competition package export is disabled in Settings."
-                if self.config.general.language == "en"
+                if self.config.general.language != "cs"
                 else "Export balíčku soutěže je vypnutý v Nastavení.",
                 5,
             )
@@ -2375,7 +2375,7 @@ class MainWindow:
         config_path.unlink(missing_ok=True)
         self._show_message(
             f"Competition package exported: {output.name}"
-            if self.config.general.language == "en"
+            if self.config.general.language != "cs"
             else f"Balíček soutěže exportován: {output.name}",
             8,
         )
@@ -2429,7 +2429,7 @@ class MainWindow:
     def open_camera_diagnostic(self) -> None:
         dialog = tk.Toplevel(self.root)
         configure_popup(dialog, self.root)
-        dialog.title("Camera diagnostic" if self.config.general.language == "en" else "Diagnostika kamery")
+        dialog.title("Camera diagnostic" if self.config.general.language != "cs" else "Diagnostika kamery")
         dialog.geometry("600x430")
         dialog.minsize(520, 360)
         dialog.transient(self.root)

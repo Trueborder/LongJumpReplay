@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable
 
 from .config import CompetitionConfig
 from .i18n import tr
+from .language_catalog import normalize_language
 from .models import AttemptDecision, AttemptSession
 
 
@@ -117,7 +118,7 @@ class CompetitionBoard(ttk.Frame):
         self._group = group
         self._active_athlete = active_athlete
         self._active_attempt = active_attempt
-        self._language = language if language in {"en", "cs"} else "en"
+        self._language = normalize_language(language)
         self._attempts = list(attempts)
         self._rebuild_context_menu()
         self.redraw()
@@ -132,7 +133,7 @@ class CompetitionBoard(ttk.Frame):
         self._cell_grid = []
         config = self._config
         if not config or not config.enabled:
-            text = "Competition management is disabled" if self._language == "en" else "Správa soutěže je vypnutá"
+            text = tr(self._language, "competition.roster_disabled")
             self.canvas.create_text(18, 18, text=text, anchor="nw", fill=self.palette["muted"], font=("Segoe UI", 9))
             self.canvas.configure(scrollregion=(0, 0, 500, 200))
             return
@@ -146,8 +147,8 @@ class CompetitionBoard(ttk.Frame):
         p = self.palette
 
         self.canvas.create_rectangle(0, 0, width, header_h, fill=p["surface2"], outline=p["border"])
-        athlete_label = "Athlete" if self._language == "en" else "Závodník"
-        attempt_label = "Attempt" if self._language == "en" else "Pokus"
+        athlete_label = tr(self._language, "table.athlete")
+        attempt_label = tr(self._language, "table.attempt")
         self.canvas.create_text(12, header_h / 2, text=athlete_label, anchor="w", fill=p["muted"], font=("Segoe UI Semibold", 9))
         for col in range(1, total_cols + 1):
             x0 = athlete_w + (col - 1) * cell_w

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .language_catalog import TRANSLATION_OVERRIDES, normalize_language
+
 
 EN = {
     "app.title": "Long Jump Replay 3.1",
@@ -606,11 +608,19 @@ CS = {
 class Translator:
     language: str = "en"
 
+    def __post_init__(self) -> None:
+        self.language = normalize_language(self.language)
+
     def set_language(self, language: str) -> None:
-        self.language = language if language in {"en", "cs"} else "en"
+        self.language = normalize_language(language)
 
     def __call__(self, key: str, **kwargs) -> str:
-        table = CS if self.language == "cs" else EN
+        if self.language == "cs":
+            table = CS
+        elif self.language == "en":
+            table = EN
+        else:
+            table = TRANSLATION_OVERRIDES.get(self.language, {})
         value = table.get(key, EN.get(key, key))
         try:
             return value.format(**kwargs)

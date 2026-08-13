@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from .models import TimelineModel
 from .i18n import tr
+from .language_catalog import normalize_language
 
 
 NICE_STEPS = [1 / 240, 1 / 120, 1 / 60, 1 / 30, .05, .1, .2, .5, 1, 2, 5, 10, 15, 30, 60, 120, 300]
@@ -72,7 +73,7 @@ class ProfessionalTimeline(tk.Canvas):
             **kwargs,
         )
         self.palette = palette
-        self.language = language if language in {"en", "cs"} else "en"
+        self.language = normalize_language(language)
         self.on_seek = on_seek
         self.model: TimelineModel | None = None
         self.detail_seconds = detail_window_seconds
@@ -139,7 +140,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._overview_ticks = [self.create_line(0, 0, 0, 0, fill=p["tick"], state="hidden") for _ in range(self.MAX_OVERVIEW_TICKS)]
 
     def set_language(self, language: str) -> None:
-        self.language = language if language in {"en", "cs"} else "en"
+        self.language = normalize_language(language)
         self.itemconfigure(self._items["freeze_label"], text=tr(self.language, "timeline.freeze"))
         self.request_render(force=True)
 
