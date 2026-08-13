@@ -21,6 +21,10 @@ class FakeClock:
 
 def _config(tmp_path):
     config = AppConfig()
+    # Keep the workflow test focused on the timer.  The real first-run
+    # onboarding dialog is modal and would otherwise capture the synthetic
+    # click when startup takes longer than its 350 ms delay.
+    config.general.onboarding_completed = True
     config.camera.source_type = "synthetic"
     config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
     config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256

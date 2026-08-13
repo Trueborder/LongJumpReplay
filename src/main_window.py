@@ -43,6 +43,7 @@ from .shuttle_hid import ShuttleHIDPoller, list_shuttle_devices
 from .takeoff_assist import detect_takeoff_candidate
 from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed_info
 from .timeline import ProfessionalTimeline
+from .trial import record_successful_export, trial_exports_remaining, trial_is_active
 from .video_canvas import VideoCanvas
 
 
@@ -1083,13 +1084,11 @@ class MainWindow:
             self._selected_action_attempt_id is not None
             and self.attempts.get_attempt(self._selected_action_attempt_id) is not None
         )
-        action_state = ["!disabled"] if selected_attempt else ["disabled"]
-        for button in (self.export_button, self.delete_button):
-            button.state(action_state)
-        attempt_style = "Control.TButton" if selected_attempt else "MutedAction.TButton"
-        for button in (self.export_button, self.delete_button):
-            if button.cget("style") != attempt_style:
-                button.configure(style=attempt_style)
+        export_allowed = not trial_is_active() or trial_exports_remaining() > 0
+        self.export_button.state(["!disabled"] if selected_attempt and export_allowed else ["disabled"])
+        self.delete_button.state(["!disabled"] if selected_attempt else ["disabled"])
+        self.export_button.configure(style="Control.TButton" if selected_attempt and export_allowed else "MutedAction.TButton")
+        self.delete_button.configure(style="Control.TButton" if selected_attempt else "MutedAction.TButton")
         has_temporary_recordings = bool(self.attempts.attempts())
         self.clear_button.state(["!disabled"] if has_temporary_recordings else ["disabled"])
         clear_style = "Danger.TButton" if has_temporary_recordings else "MutedAction.TButton"
@@ -1421,7 +1420,16 @@ class MainWindow:
             elif event == "attempt_ready":
                 self._show_message(self._t("message.attempt_ready", attempt=int(payload)), 5); self._last_replay_key = None
             elif event == "attempt_exported":
-                attempt_id, path = payload; self._end_busy(); self._show_message(f"Attempt #{attempt_id:02d} exported: {Path(path).name}", 7)
+                attempt_id, path = payload; self._end_busy()
+                if trial_is_active():
+                    try:
+                        remaining = record_successful_export().exports_remaining
+                        self._show_message(f"Attempt #{attempt_id:02d} exported: {Path(path).name} · trial exports remaining: {remaining}", 8)
+                    except Exception as exc:
+                        self._show_message(f"Attempt #{attempt_id:02d} exported, but trial state could not be updated: {exc}", 10)
+                else:
+                    self._show_message(f"Attempt #{attempt_id:02d} exported: {Path(path).name}", 7)
+                self._update_judging_controls()
             elif event == "attempt_error":
                 attempt_id, error = payload; self._end_busy(); self._show_message(f"Attempt #{attempt_id:02d} error: {error}", 10)
             elif event == "takeoff_candidate":
@@ -1745,6 +1753,9 @@ class MainWindow:
         cv2.putText(frame, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), (25, 70), cv2.FONT_HERSHEY_SIMPLEX, .52, (190, 200, 215), 1, cv2.LINE_AA)
 
     def export_current_attempt(self) -> None:
+        if trial_is_active() and trial_exports_remaining() <= 0:
+            self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
+            return
         attempt_id = self._selected_action_attempt_id
         if attempt_id is None or self.attempts.get_attempt(attempt_id) is None:
             self._show_message("Select or freeze an attempt before exporting.", 5); return
@@ -2326,6 +2337,9 @@ class MainWindow:
             )
 
     def export_competition_package(self) -> None:
+        if trial_is_active() and trial_exports_remaining() <= 0:
+            self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
+            return
         if not self.config.competition.event_export_enabled:
             self._show_message(
                 "Competition package export is disabled in Settings."
@@ -2379,6 +2393,12 @@ class MainWindow:
             else f"Balíček soutěže exportován: {output.name}",
             8,
         )
+        if trial_is_active():
+            try:
+                remaining = record_successful_export().exports_remaining
+                self._show_message(f"Competition package exported: {output.name} · trial exports remaining: {remaining}", 8)
+            except Exception as exc:
+                self._show_message(f"Export completed, but trial state could not be updated: {exc}", 10)
 
     def show_camera_help(self) -> tk.Toplevel:
         if self._camera_help_dialog is not None and self._camera_help_dialog.winfo_exists():

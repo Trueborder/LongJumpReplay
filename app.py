@@ -18,7 +18,7 @@ from src.capture import CaptureEngine
 from src.config import load_config
 from src.main_window import MainWindow
 from src.models import AttemptState
-from src.licensing import ensure_license
+from src.licensing import ensure_license_or_trial
 from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_path
 from src.ring_buffer import TimeRingBuffer
 from src.runtime_diagnostics import configure_runtime_logging, log_event
@@ -234,7 +234,7 @@ def main() -> int:
         if args.windowed: config.display.fullscreen = False
         root = tk.Tk()
         root.withdraw()
-        if getattr(sys, "frozen", False) and not ensure_license(root, config.general.language):
+        if getattr(sys, "frozen", False) and not ensure_license_or_trial(root, config.general.language):
             root.destroy()
             return 2
         splash, splash_status, splash_progress, splash_action = _startup_splash(root, config.general.language)

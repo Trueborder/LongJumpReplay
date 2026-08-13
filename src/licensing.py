@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -16,7 +17,10 @@ from .portable_paths import writable_data_directory
 
 
 PRODUCT_ID = "LongJumpReplay"
-SUPPORTED_MAJOR_VERSION = "2"
+# Version 2 keys were issued by the previous 3.1 release despite the product
+# now being version 3. Keep accepting them while new keys use version 3.
+SUPPORTED_MAJOR_VERSION = "3"
+SUPPORTED_PAID_MAJOR_VERSIONS = frozenset({"2", "3"})
 
 # Public half of the offline signing key. The private half stays in the local
 # license-admin tool and is never imported by the application.
@@ -46,12 +50,16 @@ def _encoded_message(message: bytes, size: int) -> bytes:
     return b"\x00\x01" + b"\xff" * (size - len(digest_info) - 3) + b"\x00" + digest_info
 
 
-def _rsa_verify(message: bytes, signature: bytes) -> bool:
-    size = (PUBLIC_KEY_N.bit_length() + 7) // 8
+def _rsa_verify_with_key(message: bytes, signature: bytes, modulus: int, exponent: int = PUBLIC_KEY_E) -> bool:
+    size = (modulus.bit_length() + 7) // 8
     if len(signature) != size:
         return False
-    encoded = pow(int.from_bytes(signature, "big"), PUBLIC_KEY_E, PUBLIC_KEY_N).to_bytes(size, "big")
+    encoded = pow(int.from_bytes(signature, "big"), exponent, modulus).to_bytes(size, "big")
     return encoded == _encoded_message(message, size)
+
+
+def _rsa_verify(message: bytes, signature: bytes) -> bool:
+    return _rsa_verify_with_key(message, signature, PUBLIC_KEY_N, PUBLIC_KEY_E)
 
 
 def machine_code() -> str:
@@ -81,7 +89,7 @@ def verify_license(key: str, expected_machine: str | None = None) -> tuple[bool,
             return False, "license.invalid_signature", None
         if payload.get("product") != PRODUCT_ID:
             return False, "license.wrong_product", None
-        if str(payload.get("major_version")) != SUPPORTED_MAJOR_VERSION:
+        if str(payload.get("major_version")) not in SUPPORTED_PAID_MAJOR_VERSIONS:
             return False, "license.wrong_version", None
         if expected_machine and payload.get("machine_code") != expected_machine:
             return False, "license.wrong_machine", None
@@ -168,5 +176,134 @@ def ensure_license(root: tk.Tk, language: str) -> bool:
         pass
     dialog.focus_force()
     key_entry.focus_set()
+    root.wait_window(dialog)
+    return accepted
+
+
+def _trial_copy(language: str) -> dict[str, str]:
+    if language == "cs":
+        return {
+            "title": "Aktivace LongJumpReplay",
+            "intro": "Aktivujte placenou licenci, nebo spusťte bezplatné testování na 72 hodin.",
+            "machine": "Kód počítače",
+            "key": "Licenční klíč",
+            "email": "E-mail pro registraci testování",
+            "terms": "Souhlasím s podmínkami testování a zásadami ochrany soukromí na tomaspisar.cz/privacy/.",
+            "marketing": "Chci dostávat novinky a informace o LongJumpReplay.",
+            "activate": "Aktivovat licenci",
+            "start": "Spustit testování na 72 hodin",
+            "continue": "Pokračovat v testování",
+            "cancel": "Ukončit",
+            "active": "Testování je aktivní do {expiry}. Zbývá exportů: {remaining}.",
+            "required": "Pro spuštění testování zadejte e-mail a potvrďte podmínky.",
+        }
+    return {
+        "title": "Activate LongJumpReplay",
+        "intro": "Activate a paid license, or start a free 72-hour evaluation.",
+        "machine": "Machine code",
+        "key": "License key",
+        "email": "Email for trial registration",
+        "terms": "I agree to the evaluation terms and privacy notice at tomaspisar.cz/privacy/.",
+        "marketing": "Send me LongJumpReplay news and product updates.",
+        "activate": "Activate license",
+        "start": "Start 72-hour trial",
+        "continue": "Continue trial",
+        "cancel": "Exit",
+        "active": "Trial active until {expiry}. Exports remaining: {remaining}.",
+        "required": "Enter an email and accept the terms to start the trial.",
+    }
+
+
+def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
+    """Show paid activation or the free-trial choice before a frozen launch."""
+    paid_valid, _, _ = load_saved_license()
+    if paid_valid:
+        return True
+    from .trial import refresh_trial_status, start_trial, trial_status
+
+    copy = _trial_copy(language)
+    status = refresh_trial_status()
+    accepted = False
+    dialog = tk.Toplevel(root)
+    dialog.title(copy["title"])
+    dialog.resizable(False, False)
+    dialog.grab_set()
+    body = ttk.Frame(dialog, padding=22)
+    body.pack(fill="both", expand=True)
+    ttk.Label(body, text=copy["title"], style="Title.TLabel").pack(anchor="w")
+    ttk.Label(body, text=copy["intro"], wraplength=560, justify="left").pack(anchor="w", pady=(8, 16))
+    ttk.Label(body, text=copy["machine"], style="Heading.TLabel").pack(anchor="w")
+    machine_entry = ttk.Entry(body, width=30)
+    machine_entry.insert(0, machine_code())
+    machine_entry.configure(state="readonly")
+    machine_entry.pack(anchor="w", pady=(4, 12))
+    if status.active:
+        expiry = datetime.fromtimestamp(status.expires_at or 0).astimezone().strftime("%Y-%m-%d %H:%M")
+        ttk.Label(body, text=copy["active"].format(expiry=expiry, remaining=status.exports_remaining), wraplength=560, justify="left").pack(anchor="w", pady=(0, 12))
+    ttk.Label(body, text=copy["key"], style="Heading.TLabel").pack(anchor="w")
+    key_var = tk.StringVar()
+    ttk.Entry(body, textvariable=key_var, width=70).pack(fill="x", pady=(4, 10))
+    ttk.Label(body, text=copy["email"], style="Heading.TLabel").pack(anchor="w")
+    email_var = tk.StringVar()
+    ttk.Entry(body, textvariable=email_var, width=54).pack(fill="x", pady=(4, 8))
+    terms_var = tk.BooleanVar(value=False)
+    ttk.Checkbutton(body, text=copy["terms"], variable=terms_var).pack(anchor="w", pady=2)
+    marketing_var = tk.BooleanVar(value=False)
+    ttk.Checkbutton(body, text=copy["marketing"], variable=marketing_var).pack(anchor="w", pady=2)
+    status_label = ttk.Label(body, text="", wraplength=560, justify="left")
+    status_label.pack(anchor="w", pady=(10, 12))
+    buttons = ttk.Frame(body)
+    buttons.pack(fill="x")
+
+    def activate() -> None:
+        nonlocal accepted
+        valid, reason, _ = verify_license(key_var.get(), machine_code())
+        if not valid:
+            status_label.configure(text=Translator(language)(reason))
+            return
+        _save_license(key_var.get())
+        accepted = True
+        dialog.destroy()
+
+    def begin_trial() -> None:
+        nonlocal accepted
+        if not terms_var.get() or not email_var.get().strip():
+            status_label.configure(text=copy["required"])
+            return
+        try:
+            trial_status_after = start_trial(email_var.get(), marketing_var.get())
+        except Exception as exc:
+            status_label.configure(text=str(exc))
+            return
+        if not trial_status_after.active:
+            status_label.configure(text="The trial service returned an inactive trial.")
+            return
+        accepted = True
+        dialog.destroy()
+
+    def continue_trial() -> None:
+        nonlocal accepted
+        if trial_status().active:
+            accepted = True
+            dialog.destroy()
+        else:
+            status_label.configure(text="The trial has expired or is no longer valid.")
+
+    def cancel() -> None:
+        dialog.destroy()
+
+    ttk.Button(buttons, text=copy["cancel"], command=cancel).pack(side="right")
+    if status.active:
+        ttk.Button(buttons, text=copy["continue"], command=continue_trial, style="Accent.TButton").pack(side="right", padx=(0, 8))
+    else:
+        ttk.Button(buttons, text=copy["start"], command=begin_trial, style="Accent.TButton").pack(side="right", padx=(0, 8))
+    ttk.Button(buttons, text=copy["activate"], command=activate).pack(side="right", padx=(0, 8))
+    dialog.protocol("WM_DELETE_WINDOW", cancel)
+    dialog.bind("<Return>", lambda _event: activate())
+    dialog.update_idletasks()
+    width, height = dialog.winfo_width(), dialog.winfo_height()
+    screen_width, screen_height = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
+    dialog.geometry(f"{width}x{height}+{max(0, (screen_width - width) // 2)}+{max(0, (screen_height - height) // 2)}")
+    dialog.deiconify(); dialog.lift(); dialog.focus_force()
     root.wait_window(dialog)
     return accepted

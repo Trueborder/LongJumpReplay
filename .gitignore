@@ -4,6 +4,8 @@
 !.env.example
 config.local.json
 **/.license_private_key.json
+**/.license_trial_private_key.json
+trial_service/data.json
 *.secret
 *.secrets
 *.token
@@ -17,12 +19,14 @@ config.local.json
 .venv.stale-*/
 .pytest_cache/
 .pytest-temp/
+.pytest-temp-*/
 cache/
 build/
 !scripts/build/
 !scripts/build/**
 dist/
 dist-single/
+release/
 native/**/bin/
 native/**/obj/
 __pycache__/

@@ -20,6 +20,19 @@
   const storedLanguage = localStorage.getItem('site-language');
   let lang = storedLanguage === 'cs' ? 'cs' : 'en';
 
+  document.querySelectorAll('.site-footer').forEach((footer) => {
+    const github = cfg.developer?.github;
+    if (!github || footer.querySelector('[data-github-link]')) return;
+    const link = document.createElement('a');
+    link.href = github;
+    link.target = '_blank';
+    link.rel = 'me noopener noreferrer';
+    link.dataset.githubLink = '';
+    link.textContent = 'GitHub ↗';
+    link.setAttribute('aria-label', 'GitHub profile');
+    footer.append(link);
+  });
+
   const ui = {
     en: {
       skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact',
