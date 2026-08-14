@@ -27,7 +27,10 @@ def _install_tk_startup_retry() -> None:
             except tkinter.TclError as exc:
                 last_error = exc
                 message = str(exc)
-                if not any(token in message for token in ("tcl_findLibrary", "init.tcl", "usable init.tcl")):
+                if not any(token in message for token in (
+                    "tcl_findLibrary", "init.tcl", "usable init.tcl",
+                    "Can't find a usable tk.tcl", "couldn't read file",
+                )):
                     raise
                 _configure_tk_library_paths()
                 if attempt < 4:

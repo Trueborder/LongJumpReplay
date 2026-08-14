@@ -1,0 +1,31 @@
+{
+  "attempt_id": 4,
+  "group": "Boys",
+  "competitor": 2,
+  "try": 1,
+  "decision": "Foul",
+  "created_local": "2026-08-13T19:25:10.817773+02:00",
+  "adjudication_record_id": "f74b1b44-c7b8-4aa1-9d05-85c1eeb17993",
+  "frame_index": 900,
+  "frame_timestamp_ns": 164114937000000,
+  "capture_fps": 120.00384812475747,
+  "quality_warning": "",
+  "guide": {
+    "x": 0.6553308823529411,
+    "y": 0.886437908496732,
+    "angle_deg": 6.458816378718656
+  },
+  "board_roi": [
+    0.38590990954392834,
+    0.265459939205008,
+    0.23767361111111163,
+    0.43703703703703634
+  ],
+  "evidence_layers": {
+    "raw_file": "original camera pixels decoded from the retained attempt",
+    "annotated_file": "derived copy with software overlays",
+    "judge_metadata": "separate fields in this JSON document"
+  },
+  "raw_file": "boys-2_try-1_foul_2026-08-13_19-25-10_790_raw.png",
+  "annotated_file": "boys-2_try-1_foul_2026-08-13_19-25-10_790_annotated.png"
+}

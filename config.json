@@ -7,7 +7,7 @@
   },
   "camera": {
     "source_type": "camera",
-    "device_index": 0,
+    "device_index": 1,
     "file_path": "",
     "width": 1280,
     "height": 720,
@@ -54,11 +54,13 @@
     },
     "active_group": "Boys",
     "current_competitor_by_group": {
-      "Boys": 1,
+      "Boys": 6,
       "Girls": 1
     },
     "auto_advance_after_decision": false,
     "auto_save_evidence": true,
+    "prompt_distance_after_valid": true,
+    "prompt_wind_after_valid": false,
     "auto_return_live": false,
     "auto_return_delay_seconds": 1.5,
     "show_competitor_selector": true,

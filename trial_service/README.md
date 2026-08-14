@@ -1,7 +1,8 @@
-# LongJumpReplay trial service
+# LongJumpReplay optional trial service
 
-This is a small WSGI service for the free 72-hour evaluation. It is not
-deployed by the desktop project automatically.
+This is a small WSGI service for optional centrally registered evaluations.
+The standard desktop build now starts a local 72-hour trial without email or
+network registration, so this service is not required for normal customers.
 
 Production requirements:
 

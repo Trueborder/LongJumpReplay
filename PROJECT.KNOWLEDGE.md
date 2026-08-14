@@ -1,5 +1,30 @@
 # Long Jump Replay — Project Knowledge
 
+## Specialized adjudication architecture (2026-08-13)
+
+- LongJumpReplay is a board-video adjudication appliance, not a replacement for AK2 or a complete athletics office. The primary workflow remains Capture -> Freeze -> frame inspection -> Valid/Foul/Review -> evidence -> next athlete; rankings, qualification/final administration, and official publishing are secondary and must stay modular.
+- `src/adjudication.py` is the authoritative attempt-result store. Every frozen or placeholder attempt receives a stable adjudication ID, and verdict updates use a checksummed, fsynced write-ahead journal before the temporary attempt model changes. Atomic snapshots, a backup, journal replay, and recovery warnings protect decisions across crashes and corrupted snapshots.
+- Temporary replay media and authoritative decisions have separate lifetimes. Deleting or expiring a recording marks its media unavailable but retains athlete/attempt context, verdict, selected frame metadata, board-line state, optional distance/wind, and evidence paths/hashes.
+- Evidence preserves clean camera pixels separately from annotated derivatives and judge metadata. The explicit evidence package exports generic CSV and JSON interchange, a local session report, and available evidence; it never claims AK2 compatibility.
+- Roster import is adapter-based (`CSV`, `XLSX`, `JSON`) and follows Parse -> Preview -> Validate -> Confirm -> Commit. Parsing cannot mutate the active roster. AK2-specific behavior must remain behind adapter boundaries and disabled/experimental until an official format or successful AK2 import verifies it.
+- Distance and wind are optional manual metadata entered after a Valid verdict in a non-modal strip. All distance entry, board/recordings display, and generic interchange use whole centimetres; wind remains in m/s. Distance is never estimated from the camera. Saving or skipping the post-verdict measurement immediately returns Live and advances to the next athlete without an extra Space action, even when general automatic-advance/return settings are off.
+- Right-clicking a Valid Competition Board attempt offers `Enter / edit measurement` and opens a focused popup for centimetres and wind. Popup edits update the durable record and board without changing the current athlete or Live/Replay state; non-Valid and empty cells keep this action disabled.
+- The Competition Board is operational context: current/next athlete, attempt, verdict, optional distance, and immediate evidence reopening. Full official result books, complex rankings/tie resolution, result publishing, and speculative hardware integrations are deferred behind the core judging workflow.
+- Local-only session reports measure attempts, verdicts, corrections, decision latency, missing evidence, skipped distance, recovery warnings, capture/drop statistics, buffer use, and UI timing. No personal telemetry is sent remotely by default.
+- `docs/PRODUCT_STRATEGY.md` is the feature-priority boundary: CORE, USEFUL, DEFER, and REMOVE / AVOID. New competition-management work must be checked against it before it can displace adjudication reliability or performance work.
+
+## Recordings context menu and explicit export (2026-08-13)
+
+- The Recordings tab now supports right-click (and Shift+F10) on a recording with Open recording, Export, and Delete actions, matching the competition-board interaction model.
+- Final video exports are explicit operator actions only: use the Recordings footer Export button or the recording context menu. Automatic final exports are not performed; temporary replay media remains in the managed cache so playback and retention continue to work.
+
+## Local trial activation (2026-08-13)
+
+- The standard customer activation dialog starts a machine-bound local 72-hour evaluation directly. It no longer asks for an email, marketing consent, or trial-service registration, so customers do not need Cloudflare, an API deployment, or an always-on computer.
+- Local trial state uses the existing protected writable-data store and tracks the same three successful-export limit and clock-rollback guard. The old signed WSGI registration client/service remain available only for an explicitly customized legacy deployment.
+- The customer EXE must be rebuilt from this source before distributing the change; existing frozen binaries still contain the previous email/API flow.
+- Local-trial tests use a current issue timestamp rather than a historical fixed timestamp, so the 72-hour assertion remains valid as the calendar advances.
+
 ## Developer repository layout (2026-08-13)
 
 - Active developer entry points are grouped under `scripts/build`, `scripts/run`, `scripts/setup`, and `scripts/maintenance`. Each moved script resolves and enters the repository root before accessing source, environments, tools, or output paths, so it can be launched from any working directory.
@@ -13,6 +38,13 @@
 - `src/language_catalog.py` is the single registry for supported codes, native names, selector options, normalization, and per-locale operator translations. Configuration validation, settings, the translator, timeline, video canvases, and competition board all consume that registry.
 - Tests enforce the requested Central European languages, the broad world-language set, selector/code round trips, complete core override coverage, English fallback, and rejection of unknown language codes.
 
+## Website Apple-inspired redesign (2026-08-13)
+
+- The correct website checkout is `C:\Users\xpisa\LongJumpReplay\website\tomaspisar.cz`; the earlier `.ai_projects` website tree is separate and was not changed in this pass.
+- `website/tomaspisar.cz/overrides.css` now applies an Apple-inspired material layer over the Evidence Desk system: translucent rounded navigation, system-ui body typography, calmer spacing, rounded evidence surfaces, one restrained primary-action treatment, and a frosted screenshot lightbox while preserving the live-cyan/decision-amber workflow language.
+- `website/tomaspisar.cz/script.js` now provides scroll-aware header separation, accessible mobile-menu controls with outside-press dismissal, keyboard-operable screenshot opening with focus return from the lightbox, and optional IntersectionObserver reveals using opacity/transform only. Reduced motion and reduced transparency keep the site usable without decorative motion or blur.
+- UI/UX Pro Max's local search helper could not execute because the checkout's Python launcher points to a missing Python 3.12 installation; the persisted website design system and its quick-reference accessibility/motion rules were used instead. No framework or dependency was added.
+
 ## Documentation changes (2026-08-12)
 
 - Added `docs/RECOMMENDED_SYSTEM_REQUIREMENTS.md` with a short bilingual hardware/software recommendation for event computers. It is a practical target rather than a formally benchmarked minimum and retains the requirement to test the complete camera setup before an event.
@@ -23,7 +55,7 @@
 - Licensing tests now create an isolated temporary test signing key and patch the matching public modulus for their round-trip checks. Build and CI test runs therefore no longer require the ignored production `tools\.license_private_key.json`; the real key remains required only for the owner-only license administration tools.
 - Pytest uses a unique per-process temporary root unless the caller supplies `--basetemp`, preventing `pytest-current` cleanup from colliding with folders created by an elevated or different Windows account.
 - Pytest also validates Tcl/Tk library paths against the active Python installation before GUI modules load, preventing intermittent `tcl_findLibrary` startup failures in Windows customer-release runs.
-- GUI test Tk creation retries only transient Tcl/Tk library-initialization errors five times with a short bound; a genuinely incomplete Python installation still fails explicitly.
+- GUI test Tk creation retries transient Tcl/Tk library-initialization errors five times with a short bound, including Windows races that temporarily report an existing `tk.tcl` dependency as unreadable; a genuinely incomplete Python installation still fails explicitly after the bound.
 - The clear-recordings GUI regression test waits a bounded period for the synthetic capture buffer to refill instead of treating one fixed scheduler timestamp as a failure.
 - GUI shutdown stops capture before the attempt manager, preventing new frames from feeding attempt workers while teardown is already in progress.
 - `scripts/run/RUN_TESTS.bat` runs non-GUI tests together and each `tests\*_gui.py` file in a fresh pytest process. All Windows build/test batch entry points use it so Tk interpreters and capture workers cannot leak across GUI test-file boundaries.

@@ -187,30 +187,22 @@ def _trial_copy(language: str) -> dict[str, str]:
             "intro": "Aktivujte placenou licenci, nebo spusťte bezplatné testování na 72 hodin.",
             "machine": "Kód počítače",
             "key": "Licenční klíč",
-            "email": "E-mail pro registraci testování",
-            "terms": "Souhlasím s podmínkami testování a zásadami ochrany soukromí na tomaspisar.cz/privacy/.",
-            "marketing": "Chci dostávat novinky a informace o LongJumpReplay.",
             "activate": "Aktivovat licenci",
             "start": "Spustit testování na 72 hodin",
             "continue": "Pokračovat v testování",
             "cancel": "Ukončit",
             "active": "Testování je aktivní do {expiry}. Zbývá exportů: {remaining}.",
-            "required": "Pro spuštění testování zadejte e-mail a potvrďte podmínky.",
         }
     return {
         "title": "Activate LongJumpReplay",
         "intro": "Activate a paid license, or start a free 72-hour evaluation.",
         "machine": "Machine code",
         "key": "License key",
-        "email": "Email for trial registration",
-        "terms": "I agree to the evaluation terms and privacy notice at tomaspisar.cz/privacy/.",
-        "marketing": "Send me LongJumpReplay news and product updates.",
         "activate": "Activate license",
         "start": "Start 72-hour trial",
         "continue": "Continue trial",
         "cancel": "Exit",
         "active": "Trial active until {expiry}. Exports remaining: {remaining}.",
-        "required": "Enter an email and accept the terms to start the trial.",
     }
 
 
@@ -219,7 +211,7 @@ def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
     paid_valid, _, _ = load_saved_license()
     if paid_valid:
         return True
-    from .trial import refresh_trial_status, start_trial, trial_status
+    from .trial import refresh_trial_status, start_local_trial, trial_status
 
     copy = _trial_copy(language)
     status = refresh_trial_status()
@@ -243,13 +235,6 @@ def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
     ttk.Label(body, text=copy["key"], style="Heading.TLabel").pack(anchor="w")
     key_var = tk.StringVar()
     ttk.Entry(body, textvariable=key_var, width=70).pack(fill="x", pady=(4, 10))
-    ttk.Label(body, text=copy["email"], style="Heading.TLabel").pack(anchor="w")
-    email_var = tk.StringVar()
-    ttk.Entry(body, textvariable=email_var, width=54).pack(fill="x", pady=(4, 8))
-    terms_var = tk.BooleanVar(value=False)
-    ttk.Checkbutton(body, text=copy["terms"], variable=terms_var).pack(anchor="w", pady=2)
-    marketing_var = tk.BooleanVar(value=False)
-    ttk.Checkbutton(body, text=copy["marketing"], variable=marketing_var).pack(anchor="w", pady=2)
     status_label = ttk.Label(body, text="", wraplength=560, justify="left")
     status_label.pack(anchor="w", pady=(10, 12))
     buttons = ttk.Frame(body)
@@ -267,11 +252,8 @@ def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
 
     def begin_trial() -> None:
         nonlocal accepted
-        if not terms_var.get() or not email_var.get().strip():
-            status_label.configure(text=copy["required"])
-            return
         try:
-            trial_status_after = start_trial(email_var.get(), marketing_var.get())
+            trial_status_after = start_local_trial()
         except Exception as exc:
             status_label.configure(text=str(exc))
             return

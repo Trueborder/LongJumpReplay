@@ -1,16 +1,20 @@
 # LongJumpReplay free trial
 
-The customer installer contains a 72-hour evaluation mode. On first launch,
-the user chooses paid activation or trial registration. The trial allows the
-full capture/freeze/replay/judging workflow and three successful final
-exports. After expiry or the export limit, paid activation is required for
-further final exports; after expiry, the application remains at activation.
+The customer installer contains a local 72-hour evaluation mode. On first
+launch, the user chooses paid activation or starts the trial directly; no
+email address, registration API, Cloudflare route, or always-on computer is
+required. The trial allows the full capture/freeze/replay/judging workflow and
+three successful final exports. After expiry or the export limit, paid
+activation is required for further final exports; after expiry, the application
+remains at activation.
 
-## Service deployment
+## Optional service deployment (legacy)
 
-`trial_service/app.py` is a dependency-free WSGI service. Deploy it behind
-HTTPS at `https://api.tomaspisar.cz/longjumpreplay`, or set
-`LJR_TRIAL_SERVICE_URL` in the customer build environment to another endpoint.
+`trial_service/app.py` remains available for deployments that need centrally
+registered trials, but the desktop application no longer calls it by default.
+Deploy it behind HTTPS at `https://api.tomaspisar.cz/longjumpreplay`, or set
+`LJR_TRIAL_SERVICE_URL` in a custom build that uses the legacy registration
+client.
 The service requires:
 
 - `LONGJUMP_TRIAL_KEY_PATH`: private RSA JSON key containing `n` and `d`;

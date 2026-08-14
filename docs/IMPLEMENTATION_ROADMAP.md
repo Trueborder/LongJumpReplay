@@ -1,6 +1,6 @@
 # Long Jump Replay implementation roadmap
 
-This roadmap keeps the product focused on one job: helping a judge review take-off-board fouls. Athlete identity remains number-based; names, clubs, distances, and broader meet-management features are intentionally out of scope.
+This roadmap is governed by `PRODUCT_STRATEGY.md`: the product focuses on defensible take-off-board video adjudication rather than replacing AK2. Lightweight names, bibs, clubs, categories, attempt context, and optional whole-centimetre distance/wind metadata are in scope when they improve the judge workflow; broader meet management remains out of scope.
 
 ## Phase 1 — judge-station interface and reliability
 

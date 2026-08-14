@@ -1,0 +1,31 @@
+{
+  "attempt_id": 7,
+  "group": "Boys",
+  "competitor": 5,
+  "try": 1,
+  "decision": "Valid",
+  "created_local": "2026-08-13T19:25:34.691263+02:00",
+  "adjudication_record_id": "1648e677-cfbe-4678-87ba-f4df83618f58",
+  "frame_index": 900,
+  "frame_timestamp_ns": 164136609000000,
+  "capture_fps": 120.02583756308617,
+  "quality_warning": "",
+  "guide": {
+    "x": 0.6553308823529411,
+    "y": 0.886437908496732,
+    "angle_deg": 6.458816378718656
+  },
+  "board_roi": [
+    0.38590990954392834,
+    0.265459939205008,
+    0.23767361111111163,
+    0.43703703703703634
+  ],
+  "evidence_layers": {
+    "raw_file": "original camera pixels decoded from the retained attempt",
+    "annotated_file": "derived copy with software overlays",
+    "judge_metadata": "separate fields in this JSON document"
+  },
+  "raw_file": "boys-5_try-1_valid_2026-08-13_19-25-34_659_raw.png",
+  "annotated_file": "boys-5_try-1_valid_2026-08-13_19-25-34_659_annotated.png"
+}

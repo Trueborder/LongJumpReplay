@@ -241,10 +241,54 @@ def start_trial(
     return trial_status(trusted_now)
 
 
+def start_local_trial(time_fetcher: Callable[[], int] = lambda: int(time.time())) -> TrialStatus:
+    """Start the no-registration evaluation on this computer.
+
+    The local mode intentionally needs no email address, API, or Cloudflare
+    service. State is protected with Windows DPAPI when available and remains
+    bound to the machine code, matching the customer's offline workflow.
+    """
+    issued = int(time_fetcher())
+    _save_state({
+        "local_trial": True,
+        "machine_code": machine_code(),
+        "issued_at": issued,
+        "expires_at": issued + TRIAL_DURATION_SECONDS,
+        "export_limit": TRIAL_EXPORT_LIMIT,
+        "exports_used": 0,
+        "last_trusted_at": issued,
+        "last_seen_at": issued,
+    })
+    return trial_status(issued)
+
+
 def trial_status(now: int | None = None) -> TrialStatus:
     state = _load_state()
     if not state:
         return TrialStatus(False, False, 0, 0, None, "trial.missing")
+    if state.get("local_trial"):
+        if state.get("machine_code") != machine_code():
+            return TrialStatus(False, True, 0, 0, None, "trial.wrong_machine")
+        try:
+            used = int(state.get("exports_used", 0))
+            limit = int(state.get("export_limit", TRIAL_EXPORT_LIMIT))
+            expires_at = int(state["expires_at"])
+            current = int(now if now is not None else time.time())
+            last_seen = int(state.get("last_seen_at", 0))
+        except (KeyError, TypeError, ValueError):
+            return TrialStatus(False, True, 0, 0, None, "trial.invalid_format")
+        if current < last_seen:
+            return TrialStatus(False, True, used, max(0, limit - used), expires_at, "trial.clock_rollback")
+        if used < 0 or used > limit or limit != TRIAL_EXPORT_LIMIT:
+            return TrialStatus(False, True, used, 0, expires_at, "trial.invalid_counter")
+        state["last_seen_at"] = current
+        state["last_trusted_at"] = max(int(state.get("last_trusted_at", 0)), current)
+        try:
+            _save_state(state)
+        except OSError:
+            pass
+        expired = current >= expires_at
+        return TrialStatus(not expired, expired, used, max(0, limit - used), expires_at, "trial.expired" if expired else "")
     valid, reason, payload = verify_trial_token(str(state.get("token", "")), machine_code())
     if not valid or payload is None:
         return TrialStatus(False, True, 0, 0, None, reason)
@@ -275,6 +319,9 @@ def refresh_trial_status(time_fetcher: Callable[[], int] = fetch_worldtime_utc) 
     """
     state = _load_state()
     if not state:
+        return trial_status()
+    if state.get("local_trial"):
+        # Local trials deliberately do not call an external time/API service.
         return trial_status()
     try:
         trusted_now = int(time_fetcher())

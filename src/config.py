@@ -109,6 +109,8 @@ class CompetitionConfig:
     current_competitor_by_group: dict[str, int] = field(default_factory=lambda: {"Boys": 1, "Girls": 1})
     auto_advance_after_decision: bool = False
     auto_save_evidence: bool = True
+    prompt_distance_after_valid: bool = False
+    prompt_wind_after_valid: bool = False
     auto_return_live: bool = False
     auto_return_delay_seconds: float = 1.5
     show_competitor_selector: bool = True
@@ -364,6 +366,8 @@ class AppConfig:
             raise ValueError("competition.active_group must be Boys or Girls")
         if not 0 <= c.auto_return_delay_seconds <= 30:
             raise ValueError("Auto-return delay must be between 0 and 30 seconds")
+        if not isinstance(c.prompt_distance_after_valid, bool) or not isinstance(c.prompt_wind_after_valid, bool):
+            raise ValueError("Distance and wind prompts must be true or false")
         for key, value in c.attempts_overrides.items():
             if ":" not in str(key) or not 1 <= int(value) <= 20:
                 raise ValueError("Invalid per-athlete attempts override")

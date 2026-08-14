@@ -21,6 +21,7 @@ trial_service/data.json
 .pytest-temp/
 .pytest-temp-*/
 cache/
+adjudication/
 build/
 !scripts/build/
 !scripts/build/**

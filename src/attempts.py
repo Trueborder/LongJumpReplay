@@ -279,6 +279,16 @@ class AttemptManager:
         self.event_queue.put(("attempt_updated", attempt_id))
         return True
 
+    def set_adjudication_record_id(self, attempt_id: int, record_id: str) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None:
+                return False
+            attempt.adjudication_record_id = str(record_id)
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
     def set_evidence_paths(self, attempt_id: int, raw_path: Path | None, annotated_path: Path | None) -> bool:
         with self._lock:
             attempt = self._find_locked(attempt_id)
@@ -662,6 +672,7 @@ class AttemptManager:
             "rotation_completed": attempt.rotation_completed,
             "counts_for_rotation": attempt.counts_for_rotation,
             "quality_warning": attempt.quality_warning,
+            "adjudication_record_id": attempt.adjudication_record_id,
             "video": attempt.temp_video_path.name if attempt.temp_video_path else None,
             "fps": attempt.fps,
             "frame_count": attempt.frame_count,
@@ -720,6 +731,7 @@ class AttemptManager:
                     rotation_completed=bool(data.get("rotation_completed", False)),
                     counts_for_rotation=bool(data.get("counts_for_rotation", True)),
                     quality_warning=str(data.get("quality_warning", "")),
+                    adjudication_record_id=str(data.get("adjudication_record_id", "")),
                     temp_video_path=video_path,
                     temp_metadata_path=path,
                     fps=float(data["fps"]),

@@ -17,11 +17,18 @@ from queue import Empty, Queue
 from threading import Event, Lock, Thread
 import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 
 import cv2
 import numpy as np
 
+from .adjudication import (
+    AdjudicationSessionStore,
+    BoardReferenceState,
+    DurabilityError,
+    parse_distance_centimetres,
+    parse_wind_metres_per_second,
+)
 from .attempts import AttemptManager
 from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
 from .capture import CaptureEngine, OpenCVCameraSource
@@ -29,13 +36,14 @@ from .competition import CompetitionSession, RosterAssignment
 from .competition_board import CompetitionBoard
 from .competition_setup import RecordingDisposition, WizardReadiness, merge_competition_setup
 from .competition_wizard import CompetitionWizard
+from .competition_io import CsvExportAdapter, JsonExportAdapter, adapter_for_path
 from .config import AppConfig, CompetitionConfig, save_config
 from .i18n import Translator
 from .exporter import save_bgr_png
 from .hotkeys import HotkeyRouter
 from .models import AttemptDecision, AttemptSession, AttemptState, TimelineModel
 from .playback import PlaybackController, PlaybackMode
-from .portable_paths import resolve_user_path
+from .portable_paths import resolve_user_path, writable_data_directory
 from .ring_buffer import TimeRingBuffer
 from .runtime_diagnostics import RuntimeTelemetry, log_event
 from .settings_dialog import SettingsDialog
@@ -105,6 +113,7 @@ class MainWindow:
             resolve_user_path(config_path, config.attempts.cache_directory),
             self.event_queue,
         )
+        self.adjudication = AdjudicationSessionStore(config_path.parent / "adjudication", writable_data_directory() / "adjudication-recovery")
         self.playback = PlaybackController(self.buffer, self.attempts)
         self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
         self.competition = CompetitionSession(config.competition)
@@ -160,6 +169,11 @@ class MainWindow:
         # Export/Delete follow the last explicit capture selection, not merely
         # whichever attempt the replay controller still has open.
         self._selected_action_attempt_id: int | None = None
+        self._durability_blocked_attempt_id: int | None = None
+        self._measurement_record_id: str | None = None
+        self._measurement_continue_attempt_id: int | None = None
+        self._measurement_popup: tk.Toplevel | None = None
+        self._measurement_popup_save_button: ttk.Button | None = None
         self._telemetry = RuntimeTelemetry()
         self._logger = logging.getLogger("long_jump_replay")
 
@@ -179,6 +193,7 @@ class MainWindow:
         self.root.bind("<Configure>", self._on_root_configure, add="+")
 
         self.attempts.start()
+        self._reconcile_adjudication_records()
         self.root.after(150, self._check_recovered_session)
         self._start_camera_with_feedback(self._t("status.starting"))
         self.shuttle.start()
@@ -220,6 +235,9 @@ class MainWindow:
         self.competitor_var = tk.StringVar(value=str(self.config.competition.current_competitor_by_group.get(self.config.competition.active_group, 1)))
         self.current_try_var = tk.StringVar(value="Try 1")
         self.board_target_var = tk.StringVar(value="")
+        self.measurement_distance_var = tk.StringVar(value="")
+        self.measurement_wind_var = tk.StringVar(value="")
+        self.measurement_error_var = tk.StringVar(value="")
 
     def _t(self, key: str, **kwargs) -> str:
         return self.translator(key, **kwargs)
@@ -262,9 +280,11 @@ class MainWindow:
         # popup menus are created once and never rebuilt by the video loop.
         self.file_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.file_menu.add_command(label=self._t("menu.wizard") + "\tCtrl+N", command=self.start_competition_wizard)
+        self.file_menu.add_command(label=self._t("menu.import_roster"), command=self.import_roster)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.export") + "\tE", command=self.export_current_attempt)
         self.file_menu.add_command(label=self._t("menu.save_frame") + "\tP", command=self.save_current_frame)
+        self.file_menu.add_command(label=self._t("menu.export_evidence"), command=self.export_adjudication_package)
         if self.config.competition.event_export_enabled:
             self.file_menu.add_command(label=self._t("menu.export_event"), command=self.export_competition_package)
         self.file_menu.add_separator()
@@ -443,6 +463,24 @@ class MainWindow:
         self.board_setup_button.pack(side="left")
         self.board_setup_frame.pack(side="right", padx=(6, 0))
 
+        self.measurement_frame = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(10, 7))
+        self.measurement_title_label = ttk.Label(self.measurement_frame, text=self._t("measurement.title"), style="ContextTitle.TLabel")
+        self.measurement_title_label.pack(side="left", padx=(0, 12))
+        self.measurement_distance_label = ttk.Label(self.measurement_frame, text=self._t("measurement.distance"), style="Muted.TLabel")
+        self.measurement_distance_label.pack(side="left")
+        self.measurement_distance_entry = ttk.Entry(self.measurement_frame, textvariable=self.measurement_distance_var, width=8)
+        self.measurement_distance_entry.pack(side="left", padx=(5, 12))
+        self.measurement_wind_label = ttk.Label(self.measurement_frame, text=self._t("measurement.wind"), style="Muted.TLabel")
+        self.measurement_wind_entry = ttk.Entry(self.measurement_frame, textvariable=self.measurement_wind_var, width=7)
+        self.measurement_save_button = ttk.Button(self.measurement_frame, text=self._t("measurement.save"), style="Accent.TButton", command=self._save_measurement)
+        self.measurement_save_button.pack(side="right")
+        self.measurement_skip_button = ttk.Button(self.measurement_frame, text=self._t("measurement.skip"), command=self._skip_measurement)
+        self.measurement_skip_button.pack(side="right", padx=(0, 7))
+        self.measurement_error_label = ttk.Label(self.measurement_frame, textvariable=self.measurement_error_var, style="Warning.TLabel")
+        self.measurement_error_label.pack(side="right", padx=(0, 10))
+        self.measurement_frame.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        self.measurement_frame.grid_remove()
+
         self.center_overlay = tk.Label(self.video_host, text="", justify="center", padx=18, pady=10, font=("Segoe UI Semibold", 14), borderwidth=0)
         self.camera_waiting_frame = ttk.Frame(self.video_host, style="Toolbar.TFrame", padding=(18, 14))
         self.camera_waiting_title = ttk.Label(self.camera_waiting_frame, text=self._t("camera.input_waiting"), style="ContextTitle.TLabel")
@@ -460,7 +498,7 @@ class MainWindow:
         self.camera_action_frame.place_forget()
 
         self.status_bar = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(10, 5))
-        self.status_bar.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        self.status_bar.grid(row=3, column=0, sticky="ew", pady=(5, 0))
         self.status_bar.columnconfigure(0, weight=1)
         ttk.Label(self.status_bar, textvariable=self.status_var, style="Status.TLabel", anchor="w").grid(row=0, column=0, sticky="ew")
         self.status_progress = ttk.Progressbar(self.status_bar, mode="indeterminate", length=110)
@@ -496,17 +534,27 @@ class MainWindow:
         self.side_notebook.add(self.recordings_tab, text=self._t("attempts.title").title())
         self.side_notebook.add(self.board_tab, text=self._t("board.title").title())
 
-        tree = ttk.Treeview(self.recordings_tab, columns=("group", "athlete", "try", "result", "time", "media", "keep"), show="headings", selectmode="browse")
+        tree = ttk.Treeview(self.recordings_tab, columns=("group", "athlete", "try", "result", "distance", "wind", "time", "media", "keep"), show="headings", selectmode="browse")
         specs = [
             ("group", self._t("table.group"), 54), ("athlete", "#", 30), ("try", self._t("table.attempt"), 50),
             ("result", self._t("table.result"), 82), ("time", self._t("table.time"), 58), ("media", self._t("table.media"), 65), ("keep", self._t("table.keep"), 54),
+            ("distance", self._t("table.distance"), 62), ("wind", self._t("table.wind"), 52),
         ]
         for key, label, width in specs:
             tree.heading(key, text=label); tree.column(key, width=width, anchor="center", stretch=key in {"result", "media"})
         tree.pack(fill="both", expand=True)
         tree.bind("<<TreeviewSelect>>", self._attempt_tree_selected)
         tree.bind("<Double-1>", lambda _e: self._attempt_tree_selected(None))
+        tree.bind("<Button-3>", self._show_attempt_context_menu)
+        tree.bind("<Shift-F10>", self._show_attempt_keyboard_context_menu)
         self.attempt_tree = tree
+        self.attempt_context_menu = tk.Menu(self.root, tearoff=False)
+        self.attempt_context_menu.add_command(label=self._t("attempts.open"), command=self._open_attempt_from_recordings)
+        self.attempt_context_menu.add_command(label=self._t("attempts.export"), command=self._export_attempt_from_recordings)
+        self.attempt_context_menu.add_command(label=self._t("attempts.measurement"), command=self._edit_measurement_from_recordings)
+        self.attempt_context_menu.add_separator()
+        self.attempt_context_menu.add_command(label=self._t("attempts.delete"), command=self._delete_attempt_from_recordings)
+        self.theme.style_menu(self.attempt_context_menu)
 
         self.board_navigation = ttk.Frame(self.board_tab, style="Toolbar.TFrame", padding=(10, 7))
         self.board_navigation.pack(fill="x", pady=(0, 5))
@@ -527,6 +575,7 @@ class MainWindow:
         self.competition_board = CompetitionBoard(
             self.board_tab, self.palette, self._open_attempt_from_board, self._select_cell_from_board,
             self._mark_attempt_from_board, self._mark_empty_cell_from_board, self._delete_attempt_from_board,
+            self._edit_measurement_from_board,
         )
         self.theme.style_menu(self.competition_board.context_menu)
         self.competition_board.pack(fill="both", expand=True)
@@ -593,6 +642,14 @@ class MainWindow:
             return False
 
     def _handle_context_key(self, event: tk.Event) -> bool:
+        if self._measurement_record_id:
+            key = str(event.keysym)
+            if key == "space":
+                self._skip_measurement()
+                return True
+            if key in {"Return", "KP_Enter"}:
+                self._save_measurement()
+                return True
         if not self._competition_board_keyboard_active() or int(event.state) & 0x000D:
             return False
         # Horizontal arrows are reserved for replay frame stepping.  Only
@@ -1190,13 +1247,17 @@ class MainWindow:
             count = self.competition.competitor_count(assignment.group)
             phase_total = self.config.competition.final_attempts if assignment.phase == "final" else self.competition.qualification_limit(assignment.group, assignment.competitor_number)
             phase_round = assignment.attempt_number - self.competition.qualification_limit(assignment.group, assignment.competitor_number) if assignment.phase == "final" else assignment.attempt_number
-            self.competition_banner_var.set(self._t("competition.banner", group=self._group_display(assignment.group), round=phase_round, total=phase_total, athlete=assignment.competitor_number, count=count, attempt=assignment.attempt_number))
+            athlete_context = self.adjudication.athlete_for(assignment.group, assignment.competitor_number)
+            identity = " · ".join(value for value in (athlete_context.bib, athlete_context.name) if value) or str(assignment.competitor_number)
+            self.competition_banner_var.set(self._t("competition.banner", group=self._group_display(assignment.group), round=phase_round, total=phase_total, athlete=identity, count=count, attempt=assignment.attempt_number))
         else:
             self.current_try_var.set(self._t("competition.roster_disabled"))
             self.competition_banner_var.set("")
         if display_assignment:
             limit = self.competition.attempt_limit(display_assignment.group, display_assignment.competitor_number)
-            self.board_target_var.set(self._t("board.target", athlete=display_assignment.competitor_number, attempt=display_assignment.attempt_number, limit=limit))
+            athlete_context = self.adjudication.athlete_for(display_assignment.group, display_assignment.competitor_number)
+            identity = " · ".join(value for value in (athlete_context.bib, athlete_context.name) if value) or str(display_assignment.competitor_number)
+            self.board_target_var.set(self._t("board.target", athlete=identity, attempt=display_assignment.attempt_number, limit=limit))
         else:
             self.board_target_var.set(self._t("competition.roster_disabled"))
         self._refresh_competition_board(attempts, assignment)
@@ -1215,18 +1276,48 @@ class MainWindow:
                 )
         athlete = board_assignment.competitor_number if board_assignment else self.competition.current_competitor()
         attempt_no = board_assignment.attempt_number if board_assignment else 0
+        adjudication_by_attempt = {
+            attempt.attempt_id: self.adjudication.get_for_attempt(attempt)
+            for attempt in attempts
+        }
         signature = (
             group, athlete, attempt_no, self.config.competition.enabled, self.config.competition.show_competition_board,
             self.config.general.language,
             self.config.competition.boys_competitors, self.config.competition.girls_competitors,
             self.config.competition.default_attempts_per_competitor, self.config.competition.final_round_enabled,
             self.config.competition.final_attempts, tuple(self.config.competition.finalist_numbers_by_group.get(group, [])),
-            tuple((a.attempt_id, a.decision.value, a.competitor_number, a.competitor_attempt_number) for a in attempts),
+            tuple(
+                (
+                    attempt.attempt_id,
+                    attempt.decision.value,
+                    attempt.competitor_number,
+                    attempt.competitor_attempt_number,
+                    adjudication_by_attempt[attempt.attempt_id].distance_cm
+                    if adjudication_by_attempt[attempt.attempt_id]
+                    else None,
+                )
+                for attempt in attempts
+            ),
         )
         if signature == self._last_board_signature:
             return
         self._last_board_signature = signature
-        self.competition_board.set_data(self.config.competition, group, attempts, athlete, attempt_no, self.config.general.language)
+        athlete_labels: dict[int, str] = {}
+        count = self.competition.competitor_count(group)
+        for number in range(1, count + 1):
+            context = self.adjudication.athlete_for(group, number)
+            parts = [context.bib or f"#{number:02d}"]
+            if context.name: parts.append(context.name)
+            athlete_labels[number] = "  ".join(parts)
+        attempt_values: dict[int, str] = {}
+        for attempt in attempts:
+            record = adjudication_by_attempt[attempt.attempt_id]
+            if record and record.distance_cm is not None and attempt.decision is AttemptDecision.VALID:
+                attempt_values[attempt.attempt_id] = str(record.distance_cm)
+        self.competition_board.set_data(
+            self.config.competition, group, attempts, athlete, attempt_no, self.config.general.language,
+            athlete_labels=athlete_labels, attempt_values=attempt_values,
+        )
 
     def _group_changed(self, _event=None) -> None:
         group = self._group_internal(self.group_var.get())
@@ -1276,6 +1367,20 @@ class MainWindow:
             self._update_judging_controls()
 
     def _mark_attempt_from_board(self, attempt_id: int, decision: AttemptDecision) -> None:
+        attempt = self.attempts.get_attempt(attempt_id)
+        if attempt is None:
+            return
+        try:
+            record = self._ensure_adjudication_record(attempt)
+            self.adjudication.record_verdict(
+                record.record_id, decision.value,
+                frame_index=record.selected_frame_index if record.selected_frame_index is not None else attempt.freeze_frame_index,
+                frame_timestamp_ns=record.selected_frame_timestamp_ns or attempt.freeze_timestamp_ns,
+                board_reference=self._board_reference_state(),
+            )
+        except (DurabilityError, KeyError) as exc:
+            self._show_message(f"The verdict could not be stored safely: {exc}", 10)
+            return
         if not self.attempts.set_decision(attempt_id, decision):
             return
         attempt = self.attempts.get_attempt(attempt_id)
@@ -1296,6 +1401,16 @@ class MainWindow:
         qualification_limit = self.competition.qualification_limit(group, athlete)
         phase = "qualification" if attempt_no <= qualification_limit else "final"
         created = self.attempts.create_placeholder_attempt(group, athlete, attempt_no, decision, phase)
+        try:
+            record = self._ensure_adjudication_record(created)
+            self.adjudication.record_verdict(
+                record.record_id, decision.value, frame_index=None,
+                frame_timestamp_ns=0, board_reference=self._board_reference_state(),
+            )
+        except (DurabilityError, KeyError) as exc:
+            self.attempts.delete(created.attempt_id, force=True)
+            self._show_message(f"The result could not be stored safely: {exc}", 10)
+            return
         self._show_message(self._t(
             "message.decision_marked", roster=self._attempt_roster_display(created),
             decision=self._decision_display(decision).upper(),
@@ -1310,7 +1425,12 @@ class MainWindow:
             return
         if self.playback.attempt_id == attempt_id:
             self._enter_live(complete_rotation=False)
+        attempt = self.attempts.get_attempt(attempt_id)
+        record = self.adjudication.get_for_attempt(attempt) if attempt else None
         if self.attempts.delete(attempt_id, force=True):
+            if record:
+                try: self.adjudication.mark_media_unavailable(record.record_id)
+                except DurabilityError as exc: self._show_message(f"Result retained in memory; storage warning: {exc}", 8)
             self.competition_board.clear_focus(); self._last_board_signature = None; self._refresh_attempts(); self._refresh_current_try()
         else:
             self._show_message(self._t("board.delete_failed"), 5)
@@ -1367,7 +1487,10 @@ class MainWindow:
             group = self._group_display(attempt.competitor_group)[:1] if attempt.competitor_group else "—"
             athlete = attempt.competitor_number if attempt.competitor_number else "—"
             try_no = attempt.competitor_attempt_number if attempt.competitor_attempt_number else "—"
-            values = (group, athlete, try_no, self._decision_display(attempt.decision), created, media, ttl)
+            record = self.adjudication.get_for_attempt(attempt)
+            distance = str(record.distance_cm) if record and record.distance_cm is not None else "—"
+            wind = f"{record.wind_tenths / 10:+.1f}" if record and record.wind_tenths is not None else "—"
+            values = (group, athlete, try_no, self._decision_display(attempt.decision), distance, wind, created, media, ttl)
             tag = self._decision_tag(attempt.decision)
             if self.attempt_tree.exists(iid): self.attempt_tree.item(iid, values=values, tags=(tag,))
             else: self.attempt_tree.insert("", "end", iid=iid, values=values, tags=(tag,))
@@ -1378,6 +1501,87 @@ class MainWindow:
         decided = sum(a.decision in {AttemptDecision.VALID, AttemptDecision.FOUL, AttemptDecision.REVIEW} for a in attempts)
         self.attempt_summary_var.set(self._t("attempts.summary", count=len(attempts), decided=decided) if attempts else self._t("attempts.none"))
         self._refresh_competition_board(attempts, self.competition.assignment_for_current(attempts))
+
+    def _selected_recording_id(self) -> int | None:
+        selection = self.attempt_tree.selection()
+        if not selection:
+            return None
+        try:
+            return int(selection[0])
+        except (TypeError, ValueError):
+            return None
+
+    def _show_attempt_context_menu(self, event: tk.Event) -> str:
+        row = self.attempt_tree.identify_row(event.y)
+        if not row:
+            return "break"
+        return self._post_attempt_context_menu(row, event.x_root, event.y_root)
+
+    def _post_attempt_context_menu(self, row: str, x_root: int, y_root: int) -> str:
+        self.attempt_tree.selection_set(row)
+        self.attempt_tree.focus(row)
+        self._attempt_tree_selected(None)
+        attempt_id = self._selected_recording_id()
+        attempt = self.attempts.get_attempt(attempt_id or -1)
+        if attempt is None:
+            return "break"
+        self.attempt_context_menu.entryconfigure(0, state="normal")
+        self.attempt_context_menu.entryconfigure(1, state="normal" if attempt.temp_video_path or attempt.state.name in {"COLLECTING", "ENCODING"} else "disabled")
+        deletable = not attempt.protected and attempt.state.name not in {"COLLECTING", "ENCODING", "EXPORTING"}
+        record = self.adjudication.get_for_attempt(attempt)
+        self.attempt_context_menu.entryconfigure(2, state="normal" if record and record.verdict == AttemptDecision.VALID.value else "disabled")
+        self.attempt_context_menu.entryconfigure(4, state="normal" if deletable else "disabled")
+        try:
+            self.attempt_context_menu.tk_popup(x_root, y_root)
+        finally:
+            self.attempt_context_menu.grab_release()
+        return "break"
+
+    def _show_attempt_keyboard_context_menu(self, _event: tk.Event) -> str:
+        selection = self.attempt_tree.selection()
+        if not selection:
+            return "break"
+        bbox = self.attempt_tree.bbox(selection[0])
+        if not bbox:
+            return "break"
+        x, y, width, height = bbox
+        return self._post_attempt_context_menu(
+            selection[0],
+            self.attempt_tree.winfo_rootx() + x + 4,
+            self.attempt_tree.winfo_rooty() + y + height // 2,
+        )
+
+    def _open_attempt_from_recordings(self) -> None:
+        attempt_id = self._selected_recording_id()
+        if attempt_id is not None:
+            self._open_attempt_from_board(attempt_id)
+
+    def _export_attempt_from_recordings(self) -> None:
+        attempt_id = self._selected_recording_id()
+        if attempt_id is None:
+            return
+        self._selected_action_attempt_id = attempt_id
+        self.export_current_attempt()
+
+    def _delete_attempt_from_recordings(self) -> None:
+        attempt_id = self._selected_recording_id()
+        if attempt_id is None:
+            return
+        self._selected_action_attempt_id = attempt_id
+        self.delete_current_attempt()
+
+    def _edit_measurement_from_recordings(self) -> None:
+        attempt_id = self._selected_recording_id()
+        attempt = self.attempts.get_attempt(attempt_id or -1)
+        record = self.adjudication.get_for_attempt(attempt) if attempt else None
+        if record and record.verdict == AttemptDecision.VALID.value:
+            self._show_measurement_strip(record.record_id, continue_attempt_id=None)
+
+    def _edit_measurement_from_board(self, attempt_id: int) -> None:
+        attempt = self.attempts.get_attempt(attempt_id)
+        record = self.adjudication.get_for_attempt(attempt) if attempt else None
+        if record and record.verdict == AttemptDecision.VALID.value:
+            self._show_measurement_popup(record.record_id)
 
     @staticmethod
     def _format_ttl(seconds: float) -> str:
@@ -1447,6 +1651,186 @@ class MainWindow:
             elif event == "message": self._show_message(str(payload), 6)
             elif event in {"attempt_deleted", "attempt_updated", "attempt_selected"}: self._last_attempts_refresh = 0
 
+    # ------------------------------------------------ durable adjudication
+    def _board_reference_state(self) -> BoardReferenceState:
+        display = self.config.display
+        return BoardReferenceState(
+            enabled=bool(display.guide_enabled),
+            x_ratio=float(display.guide_x_ratio),
+            y_ratio=float(display.guide_y_ratio),
+            angle_deg=float(display.guide_angle_deg),
+            width_px=int(display.guide_width_px),
+            roi=[
+                float(display.board_roi_x), float(display.board_roi_y),
+                float(display.board_roi_width), float(display.board_roi_height),
+            ],
+        )
+
+    def _ensure_adjudication_record(self, attempt: AttemptSession):
+        record = self.adjudication.ensure_attempt(
+            attempt,
+            camera_source=self.capture.stats().source_description,
+            board_reference=self._board_reference_state(),
+        )
+        if attempt.adjudication_record_id != record.record_id:
+            self.attempts.set_adjudication_record_id(attempt.attempt_id, record.record_id)
+        return record
+
+    def _reconcile_adjudication_records(self) -> None:
+        for attempt in self.attempts.attempts():
+            try:
+                self._ensure_adjudication_record(attempt)
+            except DurabilityError as exc:
+                self._durability_blocked_attempt_id = attempt.attempt_id
+                self._logger.error("adjudication_recovery_failed attempt_id=%s error=%s", attempt.attempt_id, exc)
+
+    def _show_measurement_strip(self, record_id: str, continue_attempt_id: int | None) -> None:
+        record = self.adjudication.get(record_id)
+        if record is None:
+            return
+        self._measurement_record_id = record_id
+        self._measurement_continue_attempt_id = continue_attempt_id
+        self.measurement_distance_var.set(str(record.distance_cm) if record.distance_cm is not None else "")
+        self.measurement_wind_var.set(f"{record.wind_tenths / 10:+.1f}" if record.wind_tenths is not None else "")
+        self.measurement_error_var.set("")
+        if self.config.competition.prompt_wind_after_valid:
+            self.measurement_wind_label.pack(side="left")
+            self.measurement_wind_entry.pack(side="left", padx=(5, 12))
+        else:
+            self.measurement_wind_label.pack_forget()
+            self.measurement_wind_entry.pack_forget()
+        self.measurement_frame.grid()
+        self.measurement_distance_entry.focus_set()
+        self.measurement_distance_entry.selection_range(0, "end")
+
+    def _hide_measurement_strip(self) -> tuple[str | None, int | None]:
+        record_id = self._measurement_record_id
+        continue_attempt_id = self._measurement_continue_attempt_id
+        self._measurement_record_id = None
+        self._measurement_continue_attempt_id = None
+        self.measurement_error_var.set("")
+        self.measurement_frame.grid_remove()
+        try: self.root.focus_set()
+        except tk.TclError: pass
+        return record_id, continue_attempt_id
+
+    def _save_measurement(self) -> None:
+        if not self._measurement_record_id:
+            return
+        try:
+            distance = parse_distance_centimetres(self.measurement_distance_var.get())
+            wind = parse_wind_metres_per_second(self.measurement_wind_var.get()) if self.config.competition.prompt_wind_after_valid else None
+            self.adjudication.set_measurement(self._measurement_record_id, distance_cm=distance, wind_tenths=wind)
+        except (ValueError, KeyError, DurabilityError) as exc:
+            self.measurement_error_var.set(self._t("measurement.invalid"))
+            self._logger.warning("measurement_save_failed error=%s", exc)
+            return
+        _record_id, attempt_id = self._hide_measurement_strip()
+        self._show_message(self._t("measurement.saved", distance=f"{distance} cm"), 4)
+        self._last_attempts_refresh = 0
+        if attempt_id is not None:
+            self._finish_decision_workflow(attempt_id, force_next_athlete=True)
+
+    def _skip_measurement(self) -> None:
+        _record_id, attempt_id = self._hide_measurement_strip()
+        if attempt_id is not None:
+            self._finish_decision_workflow(attempt_id, force_next_athlete=True)
+
+    def _finish_decision_workflow(self, attempt_id: int, force_next_athlete: bool = False) -> None:
+        attempt = self.attempts.get_attempt(attempt_id)
+        should_advance = force_next_athlete or self.config.competition.auto_advance_after_decision
+        if self.config.competition.enabled and should_advance and attempt and not attempt.rotation_completed:
+            self.attempts.set_rotation_completed(attempt_id, True)
+            next_assignment = self.competition.advance(self.attempts.attempts())
+            self._refresh_competitor_selector(); self._save_config_safely()
+            if next_assignment and self.config.competition.next_athlete_overlay:
+                self._show_next_athlete_overlay(next_assignment)
+        self._last_attempts_refresh = 0; self._last_board_signature = None
+        if force_next_athlete:
+            if self._auto_live_job:
+                try: self.root.after_cancel(self._auto_live_job)
+                except tk.TclError: pass
+                self._auto_live_job = None
+            self._enter_live(complete_rotation=False)
+            return
+        if self.config.competition.auto_return_live:
+            delay = max(0, int(self.config.competition.auto_return_delay_seconds * 1000))
+            if self._auto_live_job:
+                try: self.root.after_cancel(self._auto_live_job)
+                except tk.TclError: pass
+            self._auto_live_job = self.root.after(delay, self.return_live)
+
+    def _show_measurement_popup(self, record_id: str) -> tk.Toplevel | None:
+        record = self.adjudication.get(record_id)
+        if record is None:
+            return None
+        if self._measurement_popup is not None and self._measurement_popup.winfo_exists():
+            self._measurement_popup.destroy()
+        dialog = tk.Toplevel(self.root)
+        configure_popup(dialog, self.root)
+        dialog.title(self._t("measurement.edit_title"))
+        dialog.geometry("430x245")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        self._measurement_popup = dialog
+        self._measurement_popup_distance_var = tk.StringVar(
+            dialog, value=str(record.distance_cm) if record.distance_cm is not None else ""
+        )
+        self._measurement_popup_wind_var = tk.StringVar(
+            dialog, value=f"{record.wind_tenths / 10:+.1f}" if record.wind_tenths is not None else ""
+        )
+        error_var = tk.StringVar(dialog, value="")
+
+        card = ttk.Frame(dialog, style="Panel.TFrame", padding=18)
+        card.pack(fill="both", expand=True, padx=12, pady=12)
+        ttk.Label(card, text=self._t("measurement.edit_title"), style="PanelTitle.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 12)
+        )
+        ttk.Label(card, text=self._t("measurement.distance"), style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=5)
+        distance_entry = ttk.Entry(card, textvariable=self._measurement_popup_distance_var, width=16)
+        distance_entry.grid(row=1, column=1, sticky="ew", pady=5)
+        ttk.Label(card, text=self._t("measurement.wind"), style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Entry(card, textvariable=self._measurement_popup_wind_var, width=16).grid(row=2, column=1, sticky="ew", pady=5)
+        ttk.Label(card, textvariable=error_var, style="Warning.TLabel").grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        actions = ttk.Frame(card, style="Panel.TFrame")
+        actions.grid(row=4, column=0, columnspan=2, sticky="e", pady=(14, 0))
+
+        def close_popup() -> None:
+            self._measurement_popup = None
+            self._measurement_popup_save_button = None
+            try: dialog.grab_release()
+            except tk.TclError: pass
+            dialog.destroy()
+
+        def save_popup() -> None:
+            try:
+                distance = parse_distance_centimetres(self._measurement_popup_distance_var.get())
+                wind = parse_wind_metres_per_second(self._measurement_popup_wind_var.get())
+                self.adjudication.set_measurement(record_id, distance_cm=distance, wind_tenths=wind)
+            except (ValueError, KeyError, DurabilityError) as exc:
+                error_var.set(self._t("measurement.invalid"))
+                self._logger.warning("measurement_popup_save_failed error=%s", exc)
+                return
+            close_popup()
+            self._last_attempts_refresh = 0
+            self._last_board_signature = None
+            self._refresh_attempts()
+            self._show_message(self._t("measurement.saved", distance=f"{distance} cm"), 4)
+
+        ttk.Button(actions, text=self._t("settings.cancel"), command=close_popup).pack(side="right")
+        self._measurement_popup_save_button = ttk.Button(
+            actions, text=self._t("measurement.save_changes"), style="Accent.TButton", command=save_popup,
+        )
+        self._measurement_popup_save_button.pack(side="right", padx=(0, 7))
+        dialog.protocol("WM_DELETE_WINDOW", close_popup)
+        dialog.bind("<Escape>", lambda _event: close_popup())
+        dialog.bind("<Return>", lambda _event: save_popup())
+        card.columnconfigure(1, weight=1)
+        distance_entry.focus_set()
+        distance_entry.selection_range(0, "end")
+        return dialog
+
     # --------------------------------------------------------- core controls
     def toggle_freeze(self) -> None:
         self._cancel_scheduled_review()
@@ -1474,6 +1858,15 @@ class MainWindow:
                 log_event(self._logger, "freeze_failed", reason="live_buffer_empty")
                 self._show_message("The live buffer does not contain a frame yet.", 4); return
             self._selected_action_attempt_id = attempt_id
+            attempt = self.attempts.get_attempt(attempt_id)
+            if attempt is not None:
+                try:
+                    self._ensure_adjudication_record(attempt)
+                    self._durability_blocked_attempt_id = None
+                except DurabilityError as exc:
+                    self._durability_blocked_attempt_id = attempt_id
+                    log_event(self._logger, "adjudication_storage_failed", attempt_id=attempt_id, error=str(exc))
+                    self._show_message("Critical: this attempt is pinned, but its result storage is unavailable. Do not advance until storage recovers.", 12)
             log_event(
                 self._logger, "freeze_succeeded", attempt_id=attempt_id,
                 competitor_number=assignment.competitor_number if assignment else 0,
@@ -1497,6 +1890,13 @@ class MainWindow:
             return True
         if attempt.rotation_completed:
             return True
+        if self._durability_blocked_attempt_id == attempt.attempt_id:
+            try:
+                self._ensure_adjudication_record(attempt)
+                self._durability_blocked_attempt_id = None
+            except DurabilityError:
+                self._show_message("Result storage is still unavailable. The attempt remains pinned; retry before advancing.", 10)
+                return False
         if self.config.competition.require_decision_before_continue and attempt.decision is AttemptDecision.NOT_DECIDED:
             self._show_message(self._t("dialog.decision_required"), 8)
             return False
@@ -1528,6 +1928,9 @@ class MainWindow:
     def return_live(self) -> None:
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
+        if self._measurement_record_id:
+            self._skip_measurement()
+            return
         self._cancel_scheduled_review()
         self._enter_live(complete_rotation=True)
 
@@ -1564,26 +1967,42 @@ class MainWindow:
         if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
             self._show_message("Freeze or select an attempt before recording a decision.", 5); return
         attempt_id = self.playback.attempt_id
+        attempt = self.attempts.get_attempt(attempt_id)
+        if attempt is None:
+            return
+        try:
+            record = self._ensure_adjudication_record(attempt)
+            record = self.adjudication.record_verdict(
+                record.record_id,
+                decision.value,
+                frame_index=self.playback.attempt_frame_index,
+                frame_timestamp_ns=self._displayed_timestamp_ns,
+                board_reference=self._board_reference_state(),
+            )
+            self._durability_blocked_attempt_id = None
+        except (DurabilityError, KeyError) as exc:
+            self._durability_blocked_attempt_id = attempt_id
+            log_event(self._logger, "verdict_storage_failed", attempt_id=attempt_id, error=str(exc))
+            self._show_message("Critical: the verdict could not be stored safely. The attempt remains open; retry the verdict.", 12)
+            return
         if not self.attempts.set_decision(attempt_id, decision): return
         log_event(self._logger, "decision_changed", attempt_id=attempt_id, decision=decision.value)
         attempt = self.attempts.get_attempt(attempt_id)
         if attempt and self.config.competition.auto_save_evidence and decision in {AttemptDecision.VALID, AttemptDecision.FOUL, AttemptDecision.REVIEW}:
-            try: self._save_evidence(attempt, decision)
+            try:
+                raw_path, annotated_path, metadata_path = self._save_evidence(attempt, decision)
+                self.adjudication.set_evidence(
+                    record.record_id,
+                    raw_path=raw_path,
+                    annotated_path=annotated_path,
+                    metadata_path=metadata_path,
+                )
             except Exception as exc: self._show_message(f"Evidence could not be saved: {exc}", 8)
         self._show_message(self._t("message.decision_marked", roster=self._attempt_roster_display(attempt) if attempt else f"#{attempt_id:02d}", decision=self._decision_display(decision).upper()), 5)
-        if self.config.competition.enabled and self.config.competition.auto_advance_after_decision and attempt and not attempt.rotation_completed:
-            self.attempts.set_rotation_completed(attempt_id, True)
-            next_assignment = self.competition.advance(self.attempts.attempts())
-            self._refresh_competitor_selector(); self._save_config_safely()
-            if next_assignment and self.config.competition.next_athlete_overlay:
-                self._show_next_athlete_overlay(next_assignment)
-        self._last_attempts_refresh = 0; self._last_board_signature = None
-        if self.config.competition.auto_return_live:
-            delay = max(0, int(self.config.competition.auto_return_delay_seconds * 1000))
-            if self._auto_live_job:
-                try: self.root.after_cancel(self._auto_live_job)
-                except tk.TclError: pass
-            self._auto_live_job = self.root.after(delay, self.return_live)
+        if decision is AttemptDecision.VALID and self.config.competition.prompt_distance_after_valid:
+            self._show_measurement_strip(record.record_id, continue_attempt_id=attempt_id)
+        else:
+            self._finish_decision_workflow(attempt_id)
 
     def mark_special_result(self, decision: AttemptDecision) -> None:
         if self._system_paused:
@@ -1593,7 +2012,14 @@ class MainWindow:
         assignment = self.competition.assignment_for_current(self.attempts.attempts())
         if assignment is None:
             self._show_message("No pending attempt is available for the current athlete.", 5); return
-        self.attempts.create_placeholder_attempt(assignment.group, assignment.competitor_number, assignment.attempt_number, decision, assignment.phase)
+        created = self.attempts.create_placeholder_attempt(assignment.group, assignment.competitor_number, assignment.attempt_number, decision, assignment.phase)
+        try:
+            record = self._ensure_adjudication_record(created)
+            self.adjudication.record_verdict(record.record_id, decision.value, frame_index=None, frame_timestamp_ns=0, board_reference=self._board_reference_state())
+        except (DurabilityError, KeyError) as exc:
+            self.attempts.delete(created.attempt_id, force=True)
+            self._show_message(f"The result could not be stored safely: {exc}", 10)
+            return
         next_assignment = self.competition.advance(self.attempts.attempts())
         self._last_board_signature = None; self._refresh_competitor_selector(); self._refresh_attempts(); self._save_config_safely()
         if next_assignment and self.config.competition.next_athlete_overlay:
@@ -1604,6 +2030,17 @@ class MainWindow:
             self._show_message("Select the attempt that should be repeated.", 5); return
         attempt = self.attempts.get_attempt(self.playback.attempt_id)
         if not attempt or attempt.competitor_number <= 0:
+            return
+        try:
+            record = self._ensure_adjudication_record(attempt)
+            self.adjudication.record_verdict(
+                record.record_id, AttemptDecision.REATTEMPT.value,
+                frame_index=self.playback.attempt_frame_index,
+                frame_timestamp_ns=self._displayed_timestamp_ns,
+                board_reference=self._board_reference_state(),
+            )
+        except (DurabilityError, KeyError) as exc:
+            self._show_message(f"The result could not be stored safely: {exc}", 10)
             return
         self.attempts.set_decision(attempt.attempt_id, AttemptDecision.REATTEMPT)
         self.attempts.set_counts_for_rotation(attempt.attempt_id, False)
@@ -1679,7 +2116,7 @@ class MainWindow:
             self._show_message(f"Frame saved: {path.name}", 6)
         except Exception as exc: show_themed_info(self.root, "Save frame", str(exc))
 
-    def _save_evidence(self, attempt: AttemptSession, decision: AttemptDecision) -> None:
+    def _save_evidence(self, attempt: AttemptSession, decision: AttemptDecision) -> tuple[Path | None, Path | None, Path]:
         frame_index = max(0, min(max(0, attempt.frame_count - 1), self.playback.attempt_frame_index))
         media = self.attempts.get_frame(attempt.attempt_id, frame_index)
         if media.frame_bgr is None:
@@ -1707,10 +2144,16 @@ class MainWindow:
             metadata = {
                 "attempt_id": attempt.attempt_id, "group": attempt.competitor_group, "competitor": attempt.competitor_number,
                 "try": attempt.competitor_attempt_number, "decision": decision.value, "created_local": datetime.now().astimezone().isoformat(),
+                "adjudication_record_id": attempt.adjudication_record_id,
                 "frame_index": frame_index, "frame_timestamp_ns": media.timestamp_ns,
                 "capture_fps": self.capture.stats().capture_fps, "quality_warning": attempt.quality_warning,
                 "guide": {"x": self.config.display.guide_x_ratio, "y": self.config.display.guide_y_ratio, "angle_deg": self.config.display.guide_angle_deg},
                 "board_roi": [self.config.display.board_roi_x, self.config.display.board_roi_y, self.config.display.board_roi_width, self.config.display.board_roi_height],
+                "evidence_layers": {
+                    "raw_file": "original camera pixels decoded from the retained attempt",
+                    "annotated_file": "derived copy with software overlays",
+                    "judge_metadata": "separate fields in this JSON document",
+                },
                 "raw_file": raw_path.name if raw_path else None, "annotated_file": annotated_path.name if annotated_path else None,
             }
             metadata_path = base.with_suffix(".json")
@@ -1724,6 +2167,7 @@ class MainWindow:
                 except OSError: pass
             raise
         self.attempts.set_evidence_paths(attempt.attempt_id, raw_path, annotated_path)
+        return raw_path, annotated_path, metadata_path
 
     def _write_evidence_png(self, frame: np.ndarray, path: Path) -> None:
         temporary = path.with_name(path.name + ".tmp.png")
@@ -1770,7 +2214,12 @@ class MainWindow:
         if not ask_themed_yes_no(self.root, "Delete attempt", f"Delete temporary attempt #{attempt_id:02d}?\nExported and evidence files are not removed."): return
         self._cancel_scheduled_review()
         self._enter_live(complete_rotation=False)
+        attempt = self.attempts.get_attempt(attempt_id)
+        record = self.adjudication.get_for_attempt(attempt) if attempt else None
         if not self.attempts.delete(attempt_id, force=True): self._show_message("This attempt cannot be deleted while it is being encoded or exported.", 5)
+        elif record:
+            try: self.adjudication.mark_media_unavailable(record.record_id)
+            except DurabilityError as exc: self._show_message(f"Result retained in memory; storage warning: {exc}", 8)
         self._selected_action_attempt_id = None
         self._refresh_attempts()
 
@@ -1825,7 +2274,12 @@ class MainWindow:
         self._enter_live(complete_rotation=False)
         count = 0
         if mode == "all":
+            records = [self.adjudication.get_for_attempt(attempt) for attempt in self.attempts.attempts()]
             count = self.attempts.clear_all()
+            for record in records:
+                if record:
+                    try: self.adjudication.mark_media_unavailable(record.record_id)
+                    except DurabilityError: pass
             self.buffer.clear()
             # Clearing a session starts the board rotation from its first
             # editable cell, so an old clicked target cannot survive the wipe.
@@ -1840,7 +2294,15 @@ class MainWindow:
         elif mode == "live":
             self.buffer.clear()
         elif mode == "unresolved":
+            records = [
+                self.adjudication.get_for_attempt(attempt) for attempt in self.attempts.attempts()
+                if attempt.decision in {AttemptDecision.NOT_DECIDED, AttemptDecision.REVIEW}
+            ]
             count = self.attempts.clear_unresolved()
+            for record in records:
+                if record:
+                    try: self.adjudication.mark_media_unavailable(record.record_id)
+                    except DurabilityError: pass
         else:
             raise ValueError(f"Unsupported clear mode: {mode}")
         self._last_replay_key = None
@@ -2017,7 +2479,7 @@ class MainWindow:
         elif not show_timeline and self._timeline_pane_added:
             self.media_pane.forget(self.timeline_wrap); self._timeline_pane_added = False
         show_status = bool(self.var_show_status.get())
-        if show_status and not self.status_bar.winfo_manager(): self.status_bar.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        if show_status and not self.status_bar.winfo_manager(): self.status_bar.grid(row=3, column=0, sticky="ew", pady=(5, 0))
         elif not show_status and self.status_bar.winfo_manager(): self.status_bar.grid_remove()
         show_decisions = self.config.competition.decision_controls_enabled and self.config.display.show_decision_controls
         if show_decisions and not self.decision_frame.winfo_manager(): self.decision_frame.pack(side="left")
@@ -2179,12 +2641,21 @@ class MainWindow:
         self.special_result_button.configure(text=self._t("button.more"))
         self.board_target_title_label.configure(text=self._t("board.next_target"))
         self.board_keyboard_hint.configure(text=self._t("board.keyboard_hint"))
-        for key, label in (("group", self._t("table.group")), ("athlete", "#"), ("try", self._t("table.attempt")), ("result", self._t("table.result")), ("time", self._t("table.time")), ("media", self._t("table.media")), ("keep", self._t("table.keep"))):
+        for key, label in (("group", self._t("table.group")), ("athlete", "#"), ("try", self._t("table.attempt")), ("result", self._t("table.result")), ("distance", self._t("table.distance")), ("wind", self._t("table.wind")), ("time", self._t("table.time")), ("media", self._t("table.media")), ("keep", self._t("table.keep"))):
             self.attempt_tree.heading(key, text=label)
         self.attempts_title_label.configure(text=self._t("attempts.title"))
         self.export_button.configure(text=self._t("attempts.export"))
         self.delete_button.configure(text=self._t("attempts.delete"))
         self.clear_button.configure(text=self._t("attempts.clear"))
+        self.attempt_context_menu.entryconfigure(0, label=self._t("attempts.open"))
+        self.attempt_context_menu.entryconfigure(1, label=self._t("attempts.export"))
+        self.attempt_context_menu.entryconfigure(2, label=self._t("attempts.measurement"))
+        self.attempt_context_menu.entryconfigure(4, label=self._t("attempts.delete"))
+        self.measurement_title_label.configure(text=self._t("measurement.title"))
+        self.measurement_distance_label.configure(text=self._t("measurement.distance"))
+        self.measurement_wind_label.configure(text=self._t("measurement.wind"))
+        self.measurement_save_button.configure(text=self._t("measurement.save"))
+        self.measurement_skip_button.configure(text=self._t("measurement.skip"))
         try:
             self.side_notebook.tab(self.recordings_tab, text=self._t("attempts.title").title())
             self.side_notebook.tab(self.board_tab, text=self._t("board.title").title())
@@ -2314,6 +2785,11 @@ class MainWindow:
             return
         self._recovery_checked = True
         recovered = self.attempts.attempts()
+        if self.adjudication.recovery_warnings:
+            self._show_message(
+                f"Adjudication recovery: {len(self.adjudication.recovery_warnings)} warning(s). Decisions were recovered where possible.",
+                10,
+            )
         if not recovered or not self.config.competition.recovery_prompt_enabled:
             return
         keep = ask_themed_yes_no(
@@ -2399,6 +2875,111 @@ class MainWindow:
                 self._show_message(f"Competition package exported: {output.name} · trial exports remaining: {remaining}", 8)
             except Exception as exc:
                 self._show_message(f"Export completed, but trial state could not be updated: {exc}", 10)
+
+    def export_adjudication_package(self) -> None:
+        """Create an explicit, standalone evidence and decision package."""
+        if trial_is_active() and trial_exports_remaining() <= 0:
+            self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
+            return
+        records = self.adjudication.records()
+        if not records:
+            self._show_message("There are no adjudication records to export.", 5)
+            return
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        export_dir = self._exports_directory()
+        csv_path = export_dir / f"adjudication_{stamp}.csv"
+        json_path = export_dir / f"adjudication_{stamp}.json"
+        report_path = export_dir / f"adjudication_{stamp}_session-report.json"
+        output = export_dir / f"adjudication_{stamp}_evidence.zip"
+        temporary = output.with_suffix(output.suffix + ".tmp")
+        try:
+            CsvExportAdapter().export(records, csv_path)
+            JsonExportAdapter().export(records, json_path)
+            report = self.adjudication.session_report()
+            report["runtime"] = asdict(self._telemetry.snapshot(self.capture.stats(), self.buffer.stats()))
+            report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.write(csv_path, "decisions.csv")
+                archive.write(json_path, "decisions.json")
+                archive.write(report_path, "session-report.json")
+                included: set[Path] = set()
+                for record in records:
+                    for value in (
+                        record.evidence.raw_path, record.evidence.annotated_path,
+                        record.evidence.metadata_path, record.evidence.clip_path,
+                    ):
+                        source = Path(value) if value else None
+                        if source and source.exists() and source not in included:
+                            included.add(source)
+                            archive.write(source, f"evidence/{record.record_id}/{source.name}")
+            temporary.replace(output)
+        except Exception as exc:
+            temporary.unlink(missing_ok=True)
+            self._show_message(f"Evidence package could not be exported: {exc}", 10)
+            return
+        finally:
+            csv_path.unlink(missing_ok=True)
+            json_path.unlink(missing_ok=True)
+            report_path.unlink(missing_ok=True)
+        self._show_message(f"Evidence package exported: {output.name}", 8)
+        if trial_is_active():
+            try: record_successful_export()
+            except Exception as exc: self._show_message(f"Export completed, but trial state could not be updated: {exc}", 10)
+
+    def import_roster(self) -> None:
+        """Preview and atomically commit a generic roster into the active group."""
+        selected = filedialog.askopenfilename(
+            parent=self.root,
+            title=self._t("menu.import_roster"),
+            filetypes=(("Roster files", "*.csv *.tsv *.txt *.xlsx *.json"), ("All files", "*.*")),
+        )
+        if not selected:
+            return
+        source = Path(selected)
+        try:
+            draft = adapter_for_path(source).parse(source)
+        except Exception as exc:
+            show_themed_info(self.root, self._t("menu.import_roster"), f"The roster could not be parsed:\n{exc}")
+            return
+        if draft.issues:
+            details = "\n".join(f"Row {issue.row}: {issue.message}" for issue in draft.issues[:12])
+            show_themed_info(self.root, self._t("menu.import_roster"), f"Nothing was changed. Fix the import and try again:\n\n{details}")
+            return
+        group = self.competition.current_group()
+        prepared = []
+        for number, athlete in enumerate(sorted(draft.athletes, key=lambda item: item.start_order), start=1):
+            athlete.group = group
+            athlete.competitor_number = number
+            athlete.start_order = number
+            athlete.athlete_id = athlete.external_id or f"{group}:{number}:{athlete.bib or athlete.name}"
+            prepared.append(athlete)
+        preview = "\n".join(
+            f"{item.start_order:02d}  {item.bib or '—'}  {item.name}  {item.club}" for item in prepared[:10]
+        )
+        if len(prepared) > 10:
+            preview += f"\n… and {len(prepared) - 10} more"
+        if not ask_themed_yes_no(
+            self.root,
+            self._t("menu.import_roster"),
+            f"Replace the {self._group_display(group)} roster with {len(prepared)} athletes?\n\n{preview}\n\nNo active data changes until you confirm.",
+            yes="Import", no=self._t("settings.cancel"),
+        ):
+            return
+        retained = [item for item in self.adjudication.roster() if item.group != group]
+        try:
+            self.adjudication.replace_roster([*retained, *prepared])
+        except DurabilityError as exc:
+            show_themed_info(self.root, self._t("menu.import_roster"), f"Nothing was changed because the roster could not be saved safely:\n{exc}")
+            return
+        if group == "Boys":
+            self.config.competition.boys_competitors = len(prepared)
+        else:
+            self.config.competition.girls_competitors = len(prepared)
+        self.competition.update_config(self.config.competition)
+        self._save_config_safely()
+        self._last_board_signature = None
+        self._refresh_competitor_selector(); self._refresh_attempts()
+        self._show_message(f"Imported {len(prepared)} athletes into {self._group_display(group)}.", 6)
 
     def show_camera_help(self) -> tk.Toplevel:
         if self._camera_help_dialog is not None and self._camera_help_dialog.winfo_exists():
@@ -2516,6 +3097,7 @@ class MainWindow:
     def show_diagnostics(self) -> None:
         c, b = self.capture.stats(), self.buffer.stats(); devices = list_shuttle_devices(self.config.shuttle)
         runtime = self._telemetry.snapshot(c, b)
+        adjudication_report = self.adjudication.session_report()
         shuttle = "\n".join(f"{d.product} · VID {d.vendor_id:04X} PID {d.product_id:04X}" for d in devices) or "No direct-HID Shuttle detected"
         show_themed_info(
             self.root,
@@ -2526,7 +3108,9 @@ class MainWindow:
             f"{self._t('diagnostics.ui_stalls', count=runtime.ui_stalls_over_100ms)}\n"
             f"{self._t('diagnostics.uptime', seconds=runtime.uptime_seconds)}\n"
             f"Live buffer: {b.duration_seconds:.2f} s / {b.frame_count} frames / {b.memory_bytes / 1024 ** 2:.1f} MB\n"
-            f"Attempts: {len(self.attempts.attempts())}\nCache: {self.attempts.cache_size_bytes() / 1024 ** 2:.1f} MB\n"
+            f"Temporary recordings: {len(self.attempts.attempts())}\nDurable adjudications: {adjudication_report['attempts_processed']}\n"
+            f"Verdict corrections: {adjudication_report['operator_corrections']}\nMedian decision time: {adjudication_report['median_decision_seconds'] or 0:.2f} s\n"
+            f"Evidence gaps: {adjudication_report['evidence_failures']}\nCache: {self.attempts.cache_size_bytes() / 1024 ** 2:.1f} MB\n"
             f"Shuttle status: {self.shuttle.status}\n{shuttle}\n\nLast camera error: {c.last_error or 'None'}",
         )
 
@@ -2582,6 +3166,8 @@ class MainWindow:
         self._shutdown_started = time.perf_counter()
         def worker() -> None:
             alive = []
+            try: self.adjudication.close()
+            except Exception as exc: self._logger.error("adjudication_close_failed error=%s", exc)
             try: self.hotkeys.close()
             except Exception: pass
             try: alive.extend(self.shuttle.stop(timeout=.8))

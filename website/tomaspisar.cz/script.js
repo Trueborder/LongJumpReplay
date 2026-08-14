@@ -47,6 +47,22 @@
   };
 
   const menu = document.querySelector('[data-menu-toggle]');
+  const header = document.querySelector('.site-header');
+  const nav = document.querySelector('.main-nav');
+
+  const updateHeaderMaterial = () => {
+    header?.classList.toggle('is-scrolled', window.scrollY > 8);
+  };
+
+  let headerFrame = 0;
+  window.addEventListener('scroll', () => {
+    if (headerFrame) return;
+    headerFrame = requestAnimationFrame(() => {
+      headerFrame = 0;
+      updateHeaderMaterial();
+    });
+  }, { passive: true });
+  updateHeaderMaterial();
 
   const renderLanguage = () => {
     document.documentElement.lang = lang;
@@ -87,6 +103,9 @@
     renderLanguage();
   };
 
+  if (nav && !nav.id) nav.id = 'primary-navigation';
+  nav?.setAttribute('aria-label', nav.getAttribute('aria-label') || 'Primary navigation');
+  menu?.setAttribute('aria-controls', nav?.id || 'primary-navigation');
   menu?.setAttribute('aria-expanded', 'false');
   if (menu) menu.innerHTML = ICONS.menu;
   menu?.addEventListener('click', () => {
@@ -94,6 +113,11 @@
     menu.innerHTML = open ? ICONS.close : ICONS.menu;
     menu.setAttribute('aria-expanded', String(open));
     renderLanguage();
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (!document.body.classList.contains('menu-open') || header?.contains(event.target)) return;
+    closeMenu();
   });
 
   const path = window.location.pathname.toLowerCase();
@@ -159,18 +183,53 @@
     });
   }
 
+  const revealTargets = document.querySelectorAll('.page-hero, .content-section');
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (revealTargets.length && !reducedMotion && 'IntersectionObserver' in window) {
+    document.documentElement.classList.add('motion-ready');
+    revealTargets.forEach((element, index) => {
+      element.classList.add('reveal');
+      element.style.setProperty('--reveal-delay', `${Math.min(index * 35, 140)}ms`);
+    });
+    const revealObserver = new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: .06 });
+    revealTargets.forEach((element) => revealObserver.observe(element));
+  }
+
   const dialog = document.querySelector('[data-lightbox-dialog]');
   const dialogImage = dialog?.querySelector('img');
   const closeButton = document.querySelector('[data-lightbox-close]');
+  let lightboxTrigger = null;
   if (closeButton) closeButton.innerHTML = ICONS.x;
-  document.querySelectorAll('[data-lightbox]').forEach((image) => image.addEventListener('click', () => {
+  const openLightbox = (image) => {
     if (!dialog || !dialogImage) return;
+    lightboxTrigger = image;
     dialogImage.src = image.src;
     dialogImage.alt = image.alt;
     dialog.showModal();
     closeButton?.focus();
-  }));
+  };
+  document.querySelectorAll('[data-lightbox]').forEach((image) => {
+    image.tabIndex = 0;
+    image.setAttribute('role', 'button');
+    image.setAttribute('aria-label', `Open image: ${image.alt}`);
+    image.addEventListener('click', () => openLightbox(image));
+    image.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openLightbox(image);
+    });
+  });
   closeButton?.addEventListener('click', () => dialog?.close());
+  dialog?.addEventListener('close', () => {
+    lightboxTrigger?.focus();
+    lightboxTrigger = null;
+  });
   dialog?.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });

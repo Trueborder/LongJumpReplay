@@ -15,7 +15,7 @@ This is a planning list, not a promise. Preserve the current stable workflow bef
 - Reusable presets for numbered attempt rotations.
 - Faster recovery of interrupted review sessions.
 - Clearer audit history for operator actions and decisions.
-- Keep participants number-based; do not add names, clubs, distances, or broader meet management.
+- Keep athlete identity and optional whole-centimetre distance/wind context lightweight; do not expand it into broader meet management.
 
 ## Operator quality
 

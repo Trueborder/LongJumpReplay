@@ -70,6 +70,8 @@ class CompetitionWizard(tk.Toplevel):
             "require": tk.BooleanVar(self, value=c.require_decision_before_continue),
             "overlay": tk.BooleanVar(self, value=c.next_athlete_overlay),
             "banner": tk.BooleanVar(self, value=c.show_state_banner),
+            "distance": tk.BooleanVar(self, value=c.prompt_distance_after_valid),
+            "wind": tk.BooleanVar(self, value=c.prompt_wind_after_valid),
         }
 
     def _build_shell(self) -> None:
@@ -196,6 +198,9 @@ class CompetitionWizard(tk.Toplevel):
         self._aid_card(parent, "require", "wizard.aids.require.title", "wizard.aids.require.desc")
         self._aid_card(parent, "overlay", "wizard.aids.overlay.title", "wizard.aids.overlay.desc")
         self._aid_card(parent, "banner", "wizard.aids.banner.title", "wizard.aids.banner.desc")
+        self._aid_card(parent, "distance", "wizard.aids.distance.title", "wizard.aids.distance.desc")
+        if bool(self.vars["distance"].get()):
+            self._aid_card(parent, "wind", "wizard.aids.wind.title", "wizard.aids.wind.desc")
         if bool(self.vars["require"].get()):
             ttk.Label(parent, text=self.tr("wizard.aids.require.warning"), style="Warning.TLabel", wraplength=700, justify="left").pack(anchor="w", pady=(6, 0))
 
@@ -314,6 +319,8 @@ class CompetitionWizard(tk.Toplevel):
             c.require_decision_before_continue = bool(self.vars["require"].get())
             c.next_athlete_overlay = bool(self.vars["overlay"].get())
             c.show_state_banner = bool(self.vars["banner"].get())
+            c.prompt_distance_after_valid = bool(self.vars["distance"].get())
+            c.prompt_wind_after_valid = bool(self.vars["wind"].get()) and c.prompt_distance_after_valid
             self.model.normalize_dependencies()
             self.vars["active_group"].set(c.active_group)
             return True

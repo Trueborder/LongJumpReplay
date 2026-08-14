@@ -71,6 +71,14 @@ Use an 8px base: 8, 16, 24, 32, 48, 64. Sections may expand responsively but com
 - Interaction transitions: 150–280ms using color, opacity, and transform only.
 - Respect `prefers-reduced-motion`; content must remain visible without JavaScript.
 
+### Apple-inspired refinement (2026-08-13)
+
+- Keep the Evidence Desk vocabulary—live cyan, decision amber, take-off line, timecode, and real station screenshots—but use Apple-like restraint in the shell.
+- The shared site header is a translucent material with a stronger surface after scrolling; mobile navigation opens from its anchor with opacity and a short scale/translation.
+- Product and evidence surfaces use 18–24px radii, thin semantic borders, restrained shadow, and no decorative blur where it harms legibility. Reduced transparency replaces glass with solid surfaces.
+- The page uses system-ui for readable body copy while retaining Barlow Condensed for the athletic display voice and DM Mono for evidence metadata.
+- Scroll reveals are limited to opacity/translate, 150–420ms, and are disabled when reduced motion is requested. Core content remains visible without JavaScript.
+
 ## Accessibility and delivery rules
 
 - Maintain WCAG AA contrast, visible focus, semantic headings, and skip navigation.

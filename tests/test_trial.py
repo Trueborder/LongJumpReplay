@@ -115,6 +115,20 @@ def test_trial_registration_starts_72_hour_state(isolated_state):
     assert status.expires_at == 1_700_000_000 + trial.TRIAL_DURATION_SECONDS
 
 
+def test_local_trial_starts_without_email_or_service(isolated_state):
+    status = trial.start_local_trial(lambda: 1_700_000_000)
+    assert status.active
+    assert status.exports_remaining == 3
+    assert status.expires_at == 1_700_000_000 + trial.TRIAL_DURATION_SECONDS
+
+
+def test_local_trial_does_not_call_network_time_service(isolated_state):
+    issued = int(time.time())
+    trial.start_local_trial(lambda: issued)
+    status = trial.refresh_trial_status(lambda: (_ for _ in ()).throw(AssertionError("network called")))
+    assert status.active
+
+
 def test_successful_exports_are_counted_and_fourth_is_blocked(isolated_state):
     issued = int(time.time())
     token = _token(isolated_state, "AAAA-BBBB-CCCC-DDDD", issued=issued)

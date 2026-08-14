@@ -9,3 +9,312 @@
 @media (max-width:900px){.about-steps{grid-template-columns:1fr}.about-actions{justify-content:flex-start;min-width:0}}
 @media (max-width:650px){.about-actions{width:100%}.about-actions .button{width:100%}}
 }
+
+/* Apple-inspired material layer: the product remains Evidence Desk, the shell becomes calmer and more physical. */
+:root {
+  --apple-surface: rgba(18, 31, 36, .76);
+  --apple-surface-raised: rgba(26, 43, 47, .88);
+  --apple-border: rgba(190, 218, 214, .16);
+  --apple-border-strong: rgba(190, 218, 214, .28);
+  --apple-shadow: 0 24px 70px rgba(0, 0, 0, .24);
+  --apple-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 7rem;
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 82% 4%, color-mix(in srgb, var(--cyan) 9%, transparent), transparent 28rem),
+    radial-gradient(circle at 4% 38%, color-mix(in srgb, var(--amber) 6%, transparent), transparent 26rem);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body::before { display: none; }
+
+.site-header {
+  position: sticky;
+  top: .75rem;
+  z-index: 20;
+  width: min(1320px, calc(100% - 2rem));
+  min-height: 64px;
+  margin: 0 auto;
+  padding: .55rem .7rem .55rem 1rem;
+  border: 1px solid var(--apple-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(24px) saturate(145%);
+  transition: background-color 220ms var(--apple-ease), border-color 220ms var(--apple-ease), box-shadow 220ms var(--apple-ease), transform 220ms var(--apple-ease);
+}
+
+.site-header.is-scrolled {
+  background: color-mix(in srgb, var(--bg) 91%, transparent);
+  border-color: var(--apple-border-strong);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .2);
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  box-shadow: none;
+  transition: transform 220ms var(--apple-ease), border-radius 220ms var(--apple-ease);
+}
+
+.brand:hover .brand-mark { transform: rotate(-4deg) scale(1.04); border-radius: 10px; }
+
+.main-nav { gap: .35rem; }
+
+.main-nav a {
+  padding: .65rem .8rem;
+  border-radius: 11px;
+  transition: color 180ms ease, background-color 180ms ease, transform 180ms var(--apple-ease);
+}
+
+.main-nav a::after { display: none; }
+.main-nav a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); transform: translateY(-1px); }
+.main-nav a[aria-current="page"] { color: var(--text); background: color-mix(in srgb, var(--cyan) 13%, transparent); }
+
+.icon-button,
+.language-button,
+.menu-toggle {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border: 1px solid var(--apple-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease, transform 120ms ease;
+}
+
+.icon-button:hover,
+.language-button:hover,
+.menu-toggle:hover { border-color: var(--apple-border-strong); background: color-mix(in srgb, var(--text) 9%, transparent); }
+.icon-button:active,
+.language-button:active,
+.menu-toggle:active { transform: scale(.96); }
+
+h1,
+h2,
+h3 {
+  text-transform: none;
+  letter-spacing: -.045em;
+  line-height: .98;
+}
+
+h1 { font-size: clamp(3.5rem, 8vw, 8.2rem); }
+h2 { font-size: clamp(2.8rem, 5.5vw, 5.8rem); }
+h3 { font-size: clamp(1.7rem, 3vw, 2.6rem); }
+
+.section-shell { width: min(1180px, calc(100% - 2rem)); }
+
+.hero {
+  min-height: min(820px, calc(100dvh - 2rem));
+  padding-top: clamp(5rem, 10vw, 8rem);
+  padding-bottom: clamp(4rem, 9vw, 8rem);
+}
+
+.hero-visual {
+  border: 1px solid var(--apple-border-strong);
+  border-radius: 28px;
+  clip-path: none;
+  box-shadow: var(--apple-shadow);
+}
+
+.hero-image { filter: saturate(.72) contrast(1.04); }
+.hero-grid { opacity: .12; }
+.hero-badge { border-radius: 14px; background: rgba(7, 16, 20, .78); backdrop-filter: blur(16px); }
+.hero-line { box-shadow: 0 0 12px color-mix(in srgb, var(--amber) 52%, transparent); }
+
+.hero-facts,
+.signal-strip,
+.product-card,
+.download-panel,
+.download-card,
+.site-card,
+.contact-card,
+.workflow,
+.feature-list li,
+.screenshot-grid figure {
+  border-color: var(--apple-border);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--apple-surface) 94%, transparent), color-mix(in srgb, var(--surface) 78%, transparent));
+  box-shadow: none;
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.hero-facts { overflow: hidden; border-radius: 18px; }
+.hero-facts div { border-color: var(--apple-border); }
+
+.button {
+  min-height: 48px;
+  border-radius: 14px;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms var(--apple-ease);
+}
+
+.button-primary {
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--cyan) 18%, transparent);
+}
+
+.button-primary:hover { box-shadow: 0 14px 34px color-mix(in srgb, var(--amber) 20%, transparent); }
+.button:active { transform: scale(.975); }
+
+.signal-strip {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--apple-border);
+  border-radius: 18px;
+}
+
+.signal-strip div { border-color: var(--apple-border); }
+.content-section + .content-section { border-top: 0; }
+
+.section-heading-row,
+.section-intro { margin-bottom: clamp(2rem, 4vw, 3.5rem); }
+
+.product-card,
+.download-panel,
+.download-card,
+.contact-card { border-radius: 24px; box-shadow: var(--apple-shadow); }
+
+.product-card { border-left: 0; }
+.product-image,
+.screenshot-grid figure { overflow: hidden; border-radius: 18px; }
+.product-image { border-color: var(--apple-border); box-shadow: none; }
+.product-image img { transition: transform 420ms var(--apple-ease), filter 420ms var(--apple-ease); }
+.product-card:hover .product-image img { transform: scale(1.02); filter: contrast(1.04) saturate(1.04); }
+
+.tag { border-radius: 999px; background: color-mix(in srgb, var(--cyan) 9%, transparent); }
+
+.card-grid,
+.feature-list,
+.contact-grid { gap: .75rem; border: 0; background: transparent; }
+
+.site-card,
+.contact-card { transition: transform 240ms var(--apple-ease), border-color 180ms ease, background-color 180ms ease; }
+
+@media (hover: hover) {
+  .site-card:hover,
+  .contact-card:hover { transform: translateY(-4px); border-color: var(--apple-border-strong); }
+}
+
+.site-card::after { border-radius: 999px; transition: width 260ms var(--apple-ease); }
+.workflow { overflow: hidden; border-radius: 24px; }
+.workflow-step { border-color: var(--apple-border); background: transparent; }
+.workflow-step b { border-radius: 9px; }
+.feature-list li { border-top: 0; border-radius: 18px; }
+.feature-list li::before { border-radius: 99px; }
+.notice { border-radius: 14px; }
+
+.page-hero { border-bottom: 0; }
+.page-hero::after { height: 3px; border-radius: 99px; }
+
+.lightbox {
+  width: min(1180px, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: .75rem;
+  border: 1px solid var(--apple-border-strong);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 30px 100px rgba(0, 0, 0, .5);
+  opacity: 0;
+  transform: translateY(12px) scale(.98);
+  transition: opacity 180ms ease, transform 280ms var(--apple-ease);
+}
+
+.lightbox[open] { opacity: 1; transform: translateY(0) scale(1); }
+.lightbox::backdrop { background: rgba(3, 8, 10, 0); backdrop-filter: blur(0); transition: background 220ms ease, backdrop-filter 220ms ease; }
+.lightbox[open]::backdrop { background: rgba(3, 8, 10, .76); backdrop-filter: blur(12px); }
+.lightbox img { border-radius: 16px; }
+.lightbox button { top: 1.25rem; right: 1.25rem; border-radius: 12px; }
+
+html.motion-ready .reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 420ms var(--apple-ease), transform 420ms var(--apple-ease);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
+
+@media (max-width: 900px) {
+  .site-header { top: .5rem; width: calc(100% - 1rem); }
+  .main-nav {
+    top: calc(100% + .5rem);
+    z-index: 30;
+    margin: 0;
+    padding: .5rem;
+    border: 1px solid var(--apple-border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    box-shadow: var(--apple-shadow);
+    backdrop-filter: blur(24px) saturate(145%);
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-8px) scale(.98);
+    transform-origin: top right;
+    transition: opacity 180ms ease, transform 240ms var(--apple-ease), visibility 0s linear 240ms;
+  }
+
+  .menu-open .main-nav {
+    pointer-events: auto;
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition-delay: 0s;
+  }
+
+  .main-nav a { min-height: 48px; padding: .85rem 1rem; border-radius: 12px; }
+  .main-nav a:hover { transform: none; }
+}
+
+@media (max-width: 650px) {
+  body { background-image: radial-gradient(circle at 50% 0, color-mix(in srgb, var(--cyan) 8%, transparent), transparent 22rem); }
+  .section-shell,
+  .signal-strip { width: calc(100% - 1.5rem); }
+  .site-header { padding-inline: .55rem; }
+  .header-actions { gap: .3rem; }
+  .hero { padding-top: 3.5rem; }
+  .hero-visual { min-height: 390px; border-radius: 22px; }
+  .hero-facts { grid-template-columns: 1fr; }
+  .hero-facts div { border-right: 0; border-bottom: 1px solid var(--apple-border); }
+  .hero-facts div:last-child { border-bottom: 0; }
+  .product-card,
+  .download-panel,
+  .download-card,
+  .contact-card,
+  .workflow,
+  .screenshot-grid figure { border-radius: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.motion-ready .reveal { opacity: 1; transform: none; transition: none; }
+  .lightbox,
+  .lightbox[open] { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .site-header,
+  .site-header.is-scrolled,
+  .main-nav,
+  .hero-facts,
+  .signal-strip,
+  .product-card,
+  .download-panel,
+  .download-card,
+  .site-card,
+  .contact-card,
+  .workflow,
+  .feature-list li { background: var(--surface); backdrop-filter: none; }
+  .lightbox::backdrop,
+  .lightbox[open]::backdrop { backdrop-filter: none; }
+}
+
+@media (prefers-contrast: more) {
+  :root { --apple-border: var(--line); --apple-border-strong: var(--text); }
+}

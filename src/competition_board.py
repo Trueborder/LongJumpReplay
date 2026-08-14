@@ -41,6 +41,7 @@ class CompetitionBoard(ttk.Frame):
         on_mark_attempt: Callable[[int, AttemptDecision], None] | None = None,
         on_mark_empty_cell: Callable[[int, int, AttemptDecision], None] | None = None,
         on_delete_attempt: Callable[[int], None] | None = None,
+        on_edit_measurement: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
         self.palette = palette
@@ -49,6 +50,7 @@ class CompetitionBoard(ttk.Frame):
         self.on_mark_attempt = on_mark_attempt
         self.on_mark_empty_cell = on_mark_empty_cell
         self.on_delete_attempt = on_delete_attempt
+        self.on_edit_measurement = on_edit_measurement
         self.canvas = tk.Canvas(self, highlightthickness=1, highlightbackground=palette["border"], bd=0, background=palette["surface"], takefocus=True)
         self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.hbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
@@ -94,6 +96,7 @@ class CompetitionBoard(ttk.Frame):
         self._context_attempt_id: int | None = None
         self._context_cell: tuple[int, int] | None = None
         self._delete_menu_index = 0
+        self._measurement_menu_index = 0
         self._rebuild_context_menu()
 
     def apply_palette(self, palette: dict[str, str]) -> None:
@@ -110,6 +113,8 @@ class CompetitionBoard(ttk.Frame):
         active_athlete: int,
         active_attempt: int,
         language: str = "en",
+        athlete_labels: dict[int, str] | None = None,
+        attempt_values: dict[int, str] | None = None,
     ) -> None:
         if group != self._group:
             self._focused_cell = None
@@ -120,6 +125,9 @@ class CompetitionBoard(ttk.Frame):
         self._active_attempt = active_attempt
         self._language = normalize_language(language)
         self._attempts = list(attempts)
+        self._attempts_by_id = {attempt.attempt_id: attempt for attempt in self._attempts}
+        self._athlete_labels = dict(athlete_labels or {})
+        self._attempt_values = dict(attempt_values or {})
         self._rebuild_context_menu()
         self.redraw()
 
@@ -141,7 +149,7 @@ class CompetitionBoard(ttk.Frame):
         qualification_cols = config.default_attempts_per_competitor
         final_cols = config.final_attempts if config.final_round_enabled else 0
         total_cols = qualification_cols + final_cols
-        row_h, athlete_w, cell_w, header_h = 34, 92, 62, 52
+        row_h, athlete_w, cell_w, header_h = 40, 180 if getattr(self, "_athlete_labels", {}) else 92, 72, 52
         width = athlete_w + total_cols * cell_w + 2
         height = header_h + max(1, count) * row_h + 2
         p = self.palette
@@ -171,7 +179,8 @@ class CompetitionBoard(ttk.Frame):
             active_row = athlete == self._active_athlete
             row_fill = p["selection"] if active_row else p["surface"]
             self.canvas.create_rectangle(0, y0, athlete_w, y0 + row_h, fill=row_fill, outline=p["border"])
-            self.canvas.create_text(12, y0 + row_h / 2, text=f"#{athlete:02d}", anchor="w", fill=p["text"], font=("Segoe UI Semibold", 9))
+            label = getattr(self, "_athlete_labels", {}).get(athlete, f"#{athlete:02d}")
+            self.canvas.create_text(12, y0 + row_h / 2, text=label, anchor="w", fill=p["text"], font=("Segoe UI Semibold", 9))
             for col in range(1, total_cols + 1):
                 x0 = athlete_w + (col - 1) * cell_w
                 is_final_cell = col > qualification_cols
@@ -195,8 +204,22 @@ class CompetitionBoard(ttk.Frame):
                 outline = p["accent_hover"] if focused else p["accent"] if active else p["border"]
                 line_width = 3 if focused or active else 1
                 rectangle = self.canvas.create_rectangle(x0, y0, x0 + cell_w, y0 + row_h, fill=fill, outline=outline, width=line_width)
-                text = SYMBOLS.get(decision, "") if eligible else ""
-                self.canvas.create_text(x0 + cell_w / 2, y0 + row_h / 2, text=text, fill=p["text"] if eligible else p["muted"], font=("Segoe UI Semibold", 11))
+                value = getattr(self, "_attempt_values", {}).get(attempt.attempt_id, "") if attempt else ""
+                symbol = SYMBOLS.get(decision, "") if eligible else ""
+                if value and symbol:
+                    self.canvas.create_text(
+                        x0 + cell_w / 2, y0 + 13, text=value,
+                        fill=p["text"], font=("Segoe UI Semibold", 10),
+                    )
+                    self.canvas.create_text(
+                        x0 + cell_w / 2, y0 + 29, text=symbol,
+                        fill=p["muted"], font=("Segoe UI Semibold", 8),
+                    )
+                else:
+                    self.canvas.create_text(
+                        x0 + cell_w / 2, y0 + row_h / 2, text=value or symbol,
+                        fill=p["text"] if eligible else p["muted"], font=("Segoe UI Semibold", 10),
+                    )
                 self._cell_boxes.append((x0, y0, x0 + cell_w, y0 + row_h, athlete, attempt_no))
                 self._cell_items[cell] = (rectangle, fill)
                 self._cell_positions[cell] = (athlete - 1, col - 1)
@@ -331,6 +354,9 @@ class CompetitionBoard(ttk.Frame):
             return False
         self._context_attempt_id = attempt_id
         self._context_cell = hit
+        attempt = getattr(self, "_attempts_by_id", {}).get(attempt_id)
+        can_measure = bool(attempt and attempt.decision is AttemptDecision.VALID)
+        self.context_menu.entryconfigure(self._measurement_menu_index, state="normal" if can_measure else "disabled")
         self.context_menu.entryconfigure(self._delete_menu_index, state="normal" if attempt_id is not None else "disabled")
         return True
 
@@ -343,6 +369,9 @@ class CompetitionBoard(ttk.Frame):
             (AttemptDecision.WITHDRAWN, "status.withdrawn"),
         ):
             self.context_menu.add_command(label=tr(self._language, key), command=lambda value=decision: self._context_mark(value))
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label=tr(self._language, "attempts.measurement"), command=self._context_edit_measurement)
+        self._measurement_menu_index = int(self.context_menu.index("end"))
         self.context_menu.add_separator()
         self.context_menu.add_command(label=tr(self._language, "board.delete_attempt"), command=self._context_delete)
         self._delete_menu_index = int(self.context_menu.index("end"))
@@ -362,6 +391,10 @@ class CompetitionBoard(ttk.Frame):
     def _context_delete(self) -> None:
         if self._context_attempt_id is not None and self.on_delete_attempt:
             self.on_delete_attempt(self._context_attempt_id)
+
+    def _context_edit_measurement(self) -> None:
+        if self._context_attempt_id is not None and self.on_edit_measurement:
+            self.on_edit_measurement(self._context_attempt_id)
 
     def _wheel(self, event) -> str:
         delta = getattr(event, "delta", 0)

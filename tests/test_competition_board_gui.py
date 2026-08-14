@@ -33,10 +33,12 @@ def test_every_board_cell_is_clickable_and_recordings_open_on_one_click():
     marked: list[tuple[int, AttemptDecision]] = []
     marked_empty: list[tuple[int, int, AttemptDecision]] = []
     deleted: list[int] = []
+    measured: list[int] = []
     board = CompetitionBoard(
         root, DARK, opened.append, lambda athlete, attempt: selected.append((athlete, attempt)),
         lambda attempt_id, decision: marked.append((attempt_id, decision)),
         lambda athlete, attempt, decision: marked_empty.append((athlete, attempt, decision)), deleted.append,
+        measured.append,
     )
     board.pack(fill="both", expand=True)
     config = CompetitionConfig(
@@ -108,10 +110,16 @@ def test_every_board_cell_is_clickable_and_recordings_open_on_one_click():
         assert deleted == [202]
         assert board.context_menu.entrycget(board.context_menu.index("end"), "label")
 
+        assert board._prepare_context_cell((1, 2))
+        assert board.context_menu.entrycget(board._measurement_menu_index, "state") == "normal"
+        board._context_edit_measurement()
+        assert measured == [102]
+
         assert board._prepare_context_cell((1, 3))
         assert board._context_attempt_id is None
         assert board._context_cell == (1, 3)
         assert board.context_menu.entrycget(board._delete_menu_index, "state") == "disabled"
+        assert board.context_menu.entrycget(board._measurement_menu_index, "state") == "disabled"
         board._context_mark(AttemptDecision.FOUL)
         board._context_delete()
         assert marked_empty == [(1, 3, AttemptDecision.FOUL)]

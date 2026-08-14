@@ -794,6 +794,8 @@ class SettingsDialog(tk.Toplevel):
             "advance_complete": tk.BooleanVar(value=c.auto_advance_on_attempt_complete),
             "advance_decision": tk.BooleanVar(value=c.auto_advance_after_decision),
             "auto_evidence": tk.BooleanVar(value=c.auto_save_evidence),
+            "prompt_distance": tk.BooleanVar(value=c.prompt_distance_after_valid),
+            "prompt_wind": tk.BooleanVar(value=c.prompt_wind_after_valid),
             "auto_live": tk.BooleanVar(value=c.auto_return_live),
             "auto_live_delay": tk.DoubleVar(value=c.auto_return_delay_seconds),
             "special_results": tk.BooleanVar(value=c.enable_special_results),
@@ -804,6 +806,8 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Advance athlete when attempt is completed", "Posunout závodníka po dokončení pokusu", vals["advance_complete"], "check"); r += 1
         self._row(f, r, "Advance immediately after a decision", "Posunout ihned po rozhodnutí", vals["advance_decision"], "check"); r += 1
         self._row(f, r, "Save evidence automatically after a decision", "Automaticky uložit důkaz po rozhodnutí", vals["auto_evidence"], "check", impact="medium"); r += 1
+        self._row(f, r, "Offer distance after a Valid verdict", "Po platném pokusu nabídnout zadání délky", vals["prompt_distance"], "check", desc_en="Enter whole centimetres; optional and always skippable. The camera never estimates distance.", desc_cs="Zadává se v celých centimetrech; volitelné a vždy přeskočitelné. Kamera délku neodhaduje.", impact="low"); r += 1
+        self._row(f, r, "Offer optional wind with distance", "S délkou nabídnout volitelný vítr", vals["prompt_wind"], "check", desc_en="A missing wind reading never blocks judging.", desc_cs="Chybějící údaj o větru nikdy neblokuje rozhodování.", impact="low"); r += 1
         self._row(f, r, "Return to Live automatically after a decision", "Automaticky se vrátit na Živě po rozhodnutí", vals["auto_live"], "check", impact="low"); r += 1
         self._row(f, r, "Automatic Live delay (seconds)", "Prodleva automatického návratu (s)", vals["auto_live_delay"]); r += 1
         self._row(f, r, "Enable Passed / DNS / Withdrawn / Reattempt", "Zapnout Vynecháno / DNS / Odstoupení / Opakování", vals["special_results"], "check")
@@ -1051,6 +1055,7 @@ class SettingsDialog(tk.Toplevel):
         c.decision_controls_enabled = bool(self._vars["decision_controls"].get()); c.require_decision_before_continue = bool(self._vars["require_decision"].get())
         c.auto_advance_on_attempt_complete = bool(self._vars["advance_complete"].get()); c.auto_advance_after_decision = bool(self._vars["advance_decision"].get())
         c.auto_save_evidence = bool(self._vars["auto_evidence"].get()); c.auto_return_live = bool(self._vars["auto_live"].get()); c.auto_return_delay_seconds = float(self._vars["auto_live_delay"].get())
+        c.prompt_distance_after_valid = bool(self._vars["prompt_distance"].get()); c.prompt_wind_after_valid = bool(self._vars["prompt_wind"].get())
         c.enable_special_results = bool(self._vars["special_results"].get())
         w.athlete_timer.duration_seconds = int(self._vars["athlete_timer_duration"].get())
         c.final_round_enabled = bool(self._vars["final_enabled"].get()); c.finalists_count = int(self._vars["finalists_count"].get()); c.final_attempts = int(self._vars["final_attempts"].get()); c.final_order = str(self._vars["final_order"].get())

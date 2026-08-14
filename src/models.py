@@ -108,6 +108,7 @@ class AttemptSession:
     quality_warning: str = ""
     protected: bool = False
     selected: bool = False
+    adjudication_record_id: str = ""
 
     @property
     def start_timestamp_ns(self) -> int:
