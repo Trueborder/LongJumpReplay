@@ -140,10 +140,29 @@ def test_malformed_tokens_are_rejected(keypair):
         assert reason.startswith("authorization."), bad
 
 
-def test_no_embedded_key_fails_closed(keypair):
+def test_production_key_is_embedded():
+    """The shipped build must carry the server's public key.
+
+    If this is None the app fails closed and no customer can activate, so it is
+    worth failing the build rather than shipping that quietly.
+    """
+    from src.authorization import AUTHORIZATION_PUBLIC_KEY_N
+
+    assert AUTHORIZATION_PUBLIC_KEY_N is not None
+    assert AUTHORIZATION_PUBLIC_KEY_N.bit_length() >= 2048
+
+
+def test_token_signed_by_a_foreign_key_is_rejected_by_the_embedded_key(keypair):
+    """A throwaway key must not verify against the embedded production one."""
     payload = payload_for()
-    # AUTHORIZATION_PUBLIC_KEY_N is None until a production key is generated;
-    # until then nothing must verify.
+    ok, reason, _ = verify_authorization(make_token(keypair, payload), payload["machine_id"])
+    assert (ok, reason) == (False, "authorization.invalid_signature")
+
+
+def test_missing_key_fails_closed(keypair, monkeypatch):
+    """With no embedded key nothing may verify, whatever the token says."""
+    monkeypatch.setattr("src.authorization.AUTHORIZATION_PUBLIC_KEY_N", None)
+    payload = payload_for()
     ok, reason, _ = verify_authorization(make_token(keypair, payload), payload["machine_id"])
     assert (ok, reason) == (False, "authorization.no_key")
 

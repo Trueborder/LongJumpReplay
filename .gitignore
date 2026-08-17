@@ -47,3 +47,5 @@ licensing-api/key.txt
 licensing-api/.interop-crypto.mjs
 licensing-api/interop.json
 licensing-api/wrangler-dev.log
+licensing-api/key-*.txt
+licensing-api/secret-*.txt
