@@ -136,6 +136,14 @@
   document.querySelectorAll('[data-product-version]').forEach((element) => { element.textContent = product.version || '—'; });
   document.querySelectorAll('[data-product-price]').forEach((element) => { element.textContent = product.price || '—'; });
   document.querySelectorAll('[data-installer-url]').forEach((element) => { element.href = product.installerUrl || '#'; });
+
+  // Licensing figures live in one place so a change to the backend's real
+  // limits is a single edit in site.config.js. These write textContent, so
+  // never put data-en/data-cs on the same element - use a nested element.
+  const licensing = cfg.licensing || {};
+  document.querySelectorAll('[data-license-devices]').forEach((element) => { element.textContent = licensing.deviceLimit ?? '—'; });
+  document.querySelectorAll('[data-license-grace]').forEach((element) => { element.textContent = licensing.offlineGraceDays ?? '—'; });
+  document.querySelectorAll('[data-license-updates]').forEach((element) => { element.textContent = licensing.updateMonths ?? '—'; });
   document.querySelectorAll('[data-mail-subject]').forEach((element) => {
     element.href = `mailto:${cfg.developer?.email || ''}?subject=${encodeURIComponent(element.dataset.mailSubject)}`;
   });
