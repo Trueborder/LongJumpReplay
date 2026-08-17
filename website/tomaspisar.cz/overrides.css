@@ -318,3 +318,10 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 @media (prefers-contrast: more) {
   :root { --apple-border: var(--line); --apple-border-strong: var(--text); }
 }
+
+
+/* Stripe pricing table (unlayered: wins over @layer legacy) */
+#buy { scroll-margin-top: 96px; }
+.pricing-embed { padding: clamp(1rem, 2.5vw, 2rem); border: 1px solid var(--line); background: #fff; box-shadow: 12px 14px 0 color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.pricing-embed stripe-pricing-table { display: block; }
+@media (max-width: 650px) { .pricing-embed { padding: .75rem; box-shadow: none; } }
