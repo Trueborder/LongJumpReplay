@@ -3,32 +3,58 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Privacy information for LongJumpReplay free trial registration.">
+  <meta name="description" content="Privacy information for LongJumpReplay: no account, no telemetry, and what happens to your data when you buy a license.">
   <link rel="canonical" href="https://tomaspisar.cz/privacy/">
+  <meta property="og:title" content="Privacy — Tomáš Pisár">
+  <meta property="og:description" content="What LongJumpReplay does and does not collect, and how payment and licensing data is handled.">
+  <meta property="og:type" content="website">
   <title>Privacy — Tomáš Pisár</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/overrides.css">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('site-theme')||'dark'}catch(e){}</script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+  <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
   <header class="site-header">
     <a class="brand" href="/"><span class="brand-mark">TP</span><span>Tomáš Pisár<small>Software / Development</small></span></a>
-    <nav class="main-nav" aria-label="Primary navigation"><a href="/software/">Software</a><a href="/download/">Downloads</a><a href="/about/">About</a><a href="/contact/">Contact</a></nav>
+    <button class="menu-toggle" data-menu-toggle type="button">☰</button>
+    <nav class="main-nav">
+      <a href="/software/" data-ui="software">Software</a>
+      <a href="/download/" data-ui="downloads">Downloads</a>
+      <a href="/about/" data-ui="about">About</a>
+      <a href="/contact/" data-ui="contact">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-button" data-theme-toggle type="button">☼</button>
+      <button class="language-button" data-lang-toggle data-lang-label type="button">CZ</button>
+    </div>
   </header>
   <main id="main" class="section-shell content-section prose">
-    <p class="eyebrow">PRIVACY / LONGJUMPREPLAY TRIAL</p>
-    <h1>Trial registration privacy.</h1>
-    <p>The optional free evaluation requires an email address before the 72-hour trial starts. The address is stored with the trial registration, a hashed machine identifier, trial dates, export limit, and consent choices.</p>
-    <h2>Why this data is used</h2>
-    <p>The email is used for trial support, licensing communication, and—only when separately selected—product updates. The machine identifier prevents repeated trial registration on the same computer. Trial data is not sold.</p>
-    <h2>Retention and choices</h2>
-    <p>Trial records are retained only as long as needed for support, licensing administration, abuse prevention, and legal obligations. Marketing consent is separate and can be withdrawn by contacting <a class="text-link" href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a>.</p>
-    <h2>Technical operation</h2>
-    <p>The application receives a signed trial token from the trial service. Trusted time is obtained from WorldTimeAPI when available; the application continues from its last trusted local deadline when offline. The desktop application does not send usage telemetry.</p>
-    <p><a class="text-link" href="/download/ljr/">Return to LongJumpReplay downloads →</a></p>
+    <p class="eyebrow" data-en="PRIVACY / LONGJUMPREPLAY" data-cs="SOUKROMÍ / LONGJUMPREPLAY">PRIVACY / LONGJUMPREPLAY</p>
+    <h1 data-en="Privacy." data-cs="Ochrana soukromí.">Privacy.</h1>
+    <p data-en="LongJumpReplay is desktop software that runs on your own computer. It does not create an account, does not require an email address and sends no usage telemetry. The 72-hour trial and paid activation both work entirely offline." data-cs="LongJumpReplay je desktopový software, který běží na vašem vlastním počítači. Nevytváří účet, nevyžaduje e-mailovou adresu a neodesílá žádnou telemetrii o používání. 72hodinové testování i placená aktivace fungují zcela offline.">LongJumpReplay is desktop software that runs on your own computer. It does not create an account, does not require an email address and sends no usage telemetry. The 72-hour trial and paid activation both work entirely offline.</p>
+
+    <h2 data-en="Your recordings stay on your computer" data-cs="Vaše záznamy zůstávají ve vašem počítači">Your recordings stay on your computer</h2>
+    <p data-en="Video, attempt records, competition data, settings and logs are written to your user profile on the machine you run the application on. Nothing is uploaded and there is no cloud storage involved." data-cs="Video, záznamy pokusů, data závodů, nastavení a protokoly se zapisují do vašeho uživatelského profilu na počítači, na kterém aplikaci spouštíte. Nic se nikam nenahrává a nepoužívá se žádné cloudové úložiště.">Video, attempt records, competition data, settings and logs are written to your user profile on the machine you run the application on. Nothing is uploaded and there is no cloud storage involved.</p>
+
+    <h2 data-en="The machine code" data-cs="Kód počítače">The machine code</h2>
+    <p data-en="To activate a purchased license, the application calculates a machine code from your operating system, computer name and network adapter identifier. It is calculated locally and is never transmitted automatically. It leaves your computer only if you email it to me yourself in order to obtain a license key." data-cs="Pro aktivaci zakoupené licence si aplikace spočítá kód počítače z operačního systému, názvu počítače a identifikátoru síťové karty. Počítá se lokálně a nikdy se automaticky neodesílá. Váš počítač opustí jen tehdy, když mi ho sami pošlete e-mailem, abyste získali licenční klíč.">To activate a purchased license, the application calculates a machine code from your operating system, computer name and network adapter identifier. It is calculated locally and is never transmitted automatically. It leaves your computer only if you email it to me yourself in order to obtain a license key.</p>
+    <p data-en="The free trial is recorded on the computer it is started on, so that one computer cannot restart the trial repeatedly. That record stays on your computer as well." data-cs="Bezplatné testování se eviduje na počítači, na kterém ho spustíte, aby jeden počítač nemohl testování opakovaně restartovat. I tento záznam zůstává ve vašem počítači.">The free trial is recorded on the computer it is started on, so that one computer cannot restart the trial repeatedly. That record stays on your computer as well.</p>
+
+    <h2 data-en="Payment" data-cs="Platba">Payment</h2>
+    <p data-en="Payments are processed by Stripe, which acts as the payment processor and receives your card details directly. I never see your card number. From Stripe I receive your name, email address, billing country and the amount paid, which I keep as accounting records for as long as Czech law requires." data-cs="Platby zpracovává Stripe, který vystupuje jako zpracovatel plateb a údaje o kartě přijímá přímo. Číslo vaší karty nikdy nevidím. Od Stripu dostávám vaše jméno, e-mailovou adresu, zemi fakturace a zaplacenou částku a uchovávám je jako účetní doklady po dobu, kterou vyžadují české zákony.">Payments are processed by Stripe, which acts as the payment processor and receives your card details directly. I never see your card number. From Stripe I receive your name, email address, billing country and the amount paid, which I keep as accounting records for as long as Czech law requires.</p>
+
+    <h2 data-en="Email correspondence" data-cs="E-mailová korespondence">Email correspondence</h2>
+    <p data-en="Emails you send me, including machine codes and the license keys I issue, are kept so that I can provide support and issue replacement keys after a hardware change. They are not used for marketing and are not sold. Ask me and I will delete them." data-cs="E-maily, které mi pošlete, včetně kódů počítače a licenčních klíčů, které vystavím, uchovávám proto, abych mohl poskytovat podporu a vystavovat náhradní klíče po změně hardwaru. Nepoužívám je k marketingu a neprodávám je. Na požádání je smažu.">Emails you send me, including machine codes and the license keys I issue, are kept so that I can provide support and issue replacement keys after a hardware change. They are not used for marketing and are not sold. Ask me and I will delete them.</p>
+    <p data-en="For anything about your data, write to info@tomaspisar.cz." data-cs="S čímkoli ohledně vašich dat se obraťte na info@tomaspisar.cz.">For anything about your data, write to info@tomaspisar.cz.</p>
+
+    <p class="planned-inline"><span class="tag tag-planned" data-en="PLANNED" data-cs="PLÁNOVANÉ">PLANNED</span><span data-en="A planned licensing model would store an email address and a record of activated computers on a server. It is not built, and nothing described on this page changes until it is." data-cs="Plánovaný model licencování by na serveru ukládal e-mailovou adresu a záznam o aktivovaných počítačích. Není hotový a nic z toho, co je popsáno na této stránce, se do té doby nemění.">A planned licensing model would store an email address and a record of activated computers on a server. It is not built, and nothing described on this page changes until it is.</span></p>
+
+    <p><a class="text-link" href="/licensing/" data-en="How licensing works →" data-cs="Jak funguje licencování →">How licensing works →</a></p>
+    <p><a class="text-link" href="/download/ljr/" data-en="Return to LongJumpReplay downloads →" data-cs="Zpět ke stažení LongJumpReplay →">Return to LongJumpReplay downloads →</a></p>
   </main>
-  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span>Independent software development from the Czech Republic.</span><span>tomaspisar.cz</span></footer>
+  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><span>tomaspisar.cz</span></footer>
   <script src="/site.config.js"></script><script src="/script.js"></script>
 </body>
 </html>

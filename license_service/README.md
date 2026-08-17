@@ -55,13 +55,17 @@ Back it up first: losing it means rotating the key and shipping again.
 
 ## Stripe setup
 
-1. Create a **Payment Link** for LongJumpReplay (Payment Links support custom
-   fields; the embedded pricing table does not).
-2. Under **Options** choose **Add custom fields** and add a **Text** field:
+1. Open the existing LongJumpReplay **pricing table** (Product catalog →
+   Pricing tables → edit). Payment Links work too, but the site already embeds
+   a pricing table and both support custom fields.
+2. Under **Payment settings** choose **Add custom fields** and add a **Text**
+   field:
    - key `machine_code` (must match `LJR_MACHINE_FIELD_KEY`)
    - label `Machine code (shown in the app)`
    - mark it **required**
-3. Point the website Buy buttons at that payment link.
+3. Note the key Stripe assigns the field and set `LJR_MACHINE_FIELD_KEY` to
+   match it. The site already points its Buy buttons at the embedded table, so
+   nothing needs repointing.
 4. In Workbench → **Webhooks**, create an event destination for
    `checkout.session.completed` pointing at
    `https://<your-host>/v1/stripe/webhook`.
