@@ -183,9 +183,20 @@ Python side: `.venv\Scripts\python.exe -m pytest tests/test_authorization.py`.
 
 Nothing below has been run - it all needs Cloudflare and Stripe credentials.
 
-1. `npx wrangler d1 create longjumpreplay-licenses` and paste the printed
-   `database_id` into both `d1_databases` blocks in `wrangler.jsonc`.
-2. `npx wrangler d1 migrations apply longjumpreplay-licenses --remote`
+1. ~~Create the database~~ **Done.** `longjumpreplay-licenses`,
+   `afd54a54-bccb-494c-ac6d-377b00652c40`, primary region WEUR, already wired
+   into both `d1_databases` blocks in `wrangler.jsonc`.
+2. ~~Apply the schema~~ **Done.** All 8 tables and 11 indexes exist on the
+   remote database, which is empty. The unique constraints on
+   `customers.email`, `devices(license_id, machine_id)` and the
+   `stripe_events` primary key were each confirmed to reject a duplicate, and
+   the `licenses.type` CHECK to reject an unknown type.
+
+   Note that `wrangler.jsonc` points the default and production environments at
+   the same database. Local work uses `wrangler dev --local`, which has its own
+   SQLite file and never touches this one, but `wrangler dev` **without**
+   `--local` would read and write production data. Create a second D1 database
+   for a staging environment if that becomes a risk.
 3. `node scripts/generate-signing-key.mjs` and set the private half:
    `npx wrangler secret put AUTHORIZATION_PRIVATE_KEY`
    Put the printed public modulus into `AUTHORIZATION_PUBLIC_KEY_N` in
@@ -233,9 +244,13 @@ the site copy changed and should be re-read once the system is actually live.
 
 ## What is not done
 
-- **Not deployed.** No Cloudflare account resources exist yet; every ID in
-  `wrangler.jsonc` is a placeholder.
-- **No Stripe configuration inspected or changed.** Price IDs are empty.
+- **The Worker is not deployed.** The D1 database exists and the price IDs are
+  set, but nothing is running at `api.tomaspisar.cz`. DNS for that hostname
+  already resolves to Cloudflare, so only the Worker and its route are missing.
+- **No secrets are set.** All five are still absent, so even once deployed the
+  Worker would reject webhooks and could not sign or send anything.
+- **No Stripe webhook exists**, so a purchase creates no licence.
+- **No email provider**, so no verification code can be delivered.
 - **The desktop activation UI is not wired up.** `src/authorization.py` verifies
   authorizations, but `src/licensing.py`'s dialog still asks for an `LJR2` key
   and there is no code that calls the API. Until that is built, a customer

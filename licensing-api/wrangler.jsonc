@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "longjumpreplay-licenses",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "afd54a54-bccb-494c-ac6d-377b00652c40"
     }
   ],
 
@@ -59,7 +59,7 @@
         {
           "binding": "DB",
           "database_name": "longjumpreplay-licenses",
-          "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+          "database_id": "afd54a54-bccb-494c-ac6d-377b00652c40"
         }
       ],
       "routes": [
