@@ -32,8 +32,17 @@ echo Built admin-only license generator:
 echo   release\LongJumpReplay-License-Generator\LongJumpReplay-License-Generator.exe
 echo Keep the private key in the owner-only tools folder. The EXE must run with
 echo LONGJUMP_LICENSE_KEY_PATH set when it is moved outside this repository.
-exit /b 0
+set "EXITCODE=0"
+goto :done
 
 :fail
 echo License generator build failed.
-exit /b 1
+set "EXITCODE=1"
+goto :done
+
+:done
+if not "%LONGJUMP_NO_PAUSE%"=="1" (
+    echo.
+    pause
+)
+exit /b %EXITCODE%

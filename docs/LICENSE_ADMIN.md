@@ -5,6 +5,12 @@ checks for `tools/.license_private_key.json` before opening the generator. Enter
 machine code supplied by the customer, their name, and an internal license ID.
 Press **Generate key**, then use **Copy key** or **Save key…**.
 
+Both `scripts\run\RUN_LICENSE_GENERATOR.bat` and
+`scripts\build\BUILD_LICENSE_GENERATOR.bat` keep the console window open when they
+finish, so a missing key or a build error stays readable when the script is
+double-clicked from Explorer. Set `LONGJUMP_NO_PAUSE=1` to skip that pause when
+calling them from another script.
+
 Send only the generated `LJR2...` key to the customer. They paste it into the
 activation dialog in LongJumpReplay. The key is bound to that machine code.
 

@@ -8,24 +8,29 @@ if not exist "%LONGJUMP_LICENSE_KEY_PATH%" (
     echo Private signing key not found:
     echo   %LONGJUMP_LICENSE_KEY_PATH%
     echo This owner-only file is intentionally not stored in Git.
-    exit /b 1
+    echo Restore it from your offline backup, or point LONGJUMP_LICENSE_KEY_PATH
+    echo at its current location, then run this script again.
+    set "EXITCODE=1"
+    goto :done
 )
 
+set "PYTHON="
 where py >nul 2>&1
-if not errorlevel 1 (
-    py -3.12 tools\license_generator.py
-    exit /b %errorlevel%
+if not errorlevel 1 set "PYTHON=py -3.12"
+if not defined PYTHON if exist ".venv-build-9105\Scripts\python.exe" set "PYTHON=.venv-build-9105\Scripts\python.exe"
+if not defined PYTHON if exist ".venv\Scripts\python.exe" set "PYTHON=.venv\Scripts\python.exe"
+if not defined PYTHON set "PYTHON=python"
+
+%PYTHON% tools\license_generator.py
+set "EXITCODE=%errorlevel%"
+if not "%EXITCODE%"=="0" (
+    echo.
+    echo License generator exited with code %EXITCODE%.
 )
 
-if exist ".venv-build-9105\Scripts\python.exe" (
-    ".venv-build-9105\Scripts\python.exe" tools\license_generator.py
-    exit /b %errorlevel%
+:done
+if not "%LONGJUMP_NO_PAUSE%"=="1" (
+    echo.
+    pause
 )
-
-if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" tools\license_generator.py
-    exit /b %errorlevel%
-)
-
-python tools\license_generator.py
-exit /b %errorlevel%
+exit /b %EXITCODE%
