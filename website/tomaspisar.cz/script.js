@@ -17,7 +17,63 @@
 
   const cfg = window.SITE_CONFIG || {};
   const product = cfg.products?.longJumpReplay || {};
-  const storedLanguage = localStorage.getItem('site-language');
+
+  /* ---------------------------------------------------------------- cookies
+     Theme and language are stored in first-party cookies so the choice follows
+     the visitor across pages and survives a return visit.
+
+     Consent model: these are preference cookies, set only after the visitor
+     accepts. Declining is a real choice - preferences then live in memory for
+     the session only and nothing is written. The consent record itself is
+     stored either way, because remembering "no" is what stops the banner
+     reappearing on every page, and a site cannot ask for permission to
+     remember a refusal.
+
+     No analytics, advertising or third-party cookies are set anywhere, which is
+     why a single accept/decline pair is enough. */
+  const CONSENT_COOKIE = 'ljr-consent';
+  const CONSENT_MAX_AGE = 60 * 60 * 24 * 180;   // six months, then ask again
+  const PREF_MAX_AGE = 60 * 60 * 24 * 365;
+
+  const readCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-.]/g, '\\$&') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+  const writeCookie = (name, value, maxAge) => {
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
+  };
+  const deleteCookie = (name) => {
+    document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
+  };
+
+  let consent = readCookie(CONSENT_COOKIE);           // 'accepted' | 'declined' | null
+  const memoryPrefs = {};
+
+  const readPref = (name) => {
+    if (consent === 'accepted') {
+      const value = readCookie(name);
+      if (value !== null) return value;
+    }
+    if (name in memoryPrefs) return memoryPrefs[name];
+    // Anything a previous visit left in localStorage still counts as a stored
+    // preference, so an existing visitor's theme is not reset by this change.
+    try { return localStorage.getItem(name); } catch (e) { return null; }
+  };
+  const writePref = (name, value) => {
+    memoryPrefs[name] = value;
+    if (consent !== 'accepted') return;
+    writeCookie(name, value, PREF_MAX_AGE);
+    try { localStorage.setItem(name, value); } catch (e) { /* private mode */ }
+  };
+  const forgetPrefs = () => {
+    ['site-theme', 'site-language'].forEach((name) => {
+      deleteCookie(name);
+      try { localStorage.removeItem(name); } catch (e) { /* private mode */ }
+    });
+  };
+
+  const storedLanguage = readPref('site-language');
   let lang = storedLanguage === 'cs' ? 'cs' : 'en';
 
   document.querySelectorAll('.site-footer').forEach((footer) => {
@@ -87,7 +143,7 @@
   const setTheme = (theme) => {
     const safeTheme = theme === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = safeTheme;
-    localStorage.setItem('site-theme', safeTheme);
+    writePref('site-theme', safeTheme);
     document.querySelectorAll('[data-theme-toggle]').forEach((element) => {
       element.innerHTML = safeTheme === 'dark' ? ICONS.sun : ICONS.moon;
     });
@@ -150,7 +206,7 @@
 
   document.querySelectorAll('[data-lang-toggle]').forEach((element) => element.addEventListener('click', () => {
     lang = lang === 'en' ? 'cs' : 'en';
-    localStorage.setItem('site-language', lang);
+    writePref('site-language', lang);
     renderLanguage();
   }));
   document.querySelectorAll('[data-theme-toggle]').forEach((element) => element.addEventListener('click', () => {
@@ -246,6 +302,79 @@
     if (event.key === 'Escape') closeMenu();
   });
 
-  setTheme(localStorage.getItem('site-theme') || 'dark');
+  /* ------------------------------------------------------- consent banner
+     Built in JS rather than duplicated into eight hand-maintained HTML files.
+     It is added after the main content so it does not steal the first tab
+     stop, and it never blocks the page: nothing non-essential is stored until
+     a choice is made, so there is no reason to hold the visitor hostage. */
+  const CONSENT_COPY = {
+    en: {
+      text: 'This site uses cookies only to remember your theme and language. No analytics, no advertising, no third parties.',
+      accept: 'Accept',
+      decline: 'Decline',
+      more: 'Privacy',
+      label: 'Cookie choices'
+    },
+    cs: {
+      text: 'Tento web používá cookies pouze k zapamatování motivu a jazyka. Žádná analytika, žádná reklama, žádné třetí strany.',
+      accept: 'Přijmout',
+      decline: 'Odmítnout',
+      more: 'Soukromí',
+      label: 'Volby cookies'
+    }
+  };
+
+  const showConsentBanner = () => {
+    if (consent === 'accepted' || consent === 'declined') return;
+    const copy = CONSENT_COPY[lang] || CONSENT_COPY.en;
+
+    const banner = document.createElement('section');
+    banner.className = 'cookie-banner';
+    banner.setAttribute('role', 'region');
+    banner.setAttribute('aria-label', copy.label);
+
+    const text = document.createElement('p');
+    text.textContent = copy.text + ' ';
+    const more = document.createElement('a');
+    more.href = '/privacy/';
+    more.className = 'text-link';
+    more.textContent = copy.more + ' →';
+    text.append(more);
+
+    const actions = document.createElement('div');
+    actions.className = 'cookie-actions';
+
+    const decide = (choice) => {
+      consent = choice;
+      writeCookie(CONSENT_COOKIE, choice, CONSENT_MAX_AGE);
+      if (choice === 'accepted') {
+        // Persist whatever the visitor already chose this session.
+        writePref('site-theme', document.documentElement.dataset.theme || 'dark');
+        writePref('site-language', lang);
+      } else {
+        forgetPrefs();
+      }
+      banner.remove();
+    };
+
+    const decline = document.createElement('button');
+    decline.type = 'button';
+    decline.className = 'button button-outline';
+    decline.textContent = copy.decline;
+    decline.addEventListener('click', () => decide('declined'));
+
+    const accept = document.createElement('button');
+    accept.type = 'button';
+    accept.className = 'button button-primary';
+    accept.textContent = copy.accept;
+    accept.addEventListener('click', () => decide('accepted'));
+
+    actions.append(decline, accept);
+    banner.append(text, actions);
+    document.body.append(banner);
+  };
+
+  setTheme(readPref('site-theme') || 'dark');
   renderLanguage();
+  showConsentBanner();
 })();

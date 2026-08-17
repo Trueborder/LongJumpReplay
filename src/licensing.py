@@ -205,30 +205,73 @@ def _trial_copy(language: str) -> dict[str, str]:
     if language == "cs":
         return {
             "title": "Aktivace LongJumpReplay",
-            "intro": "Aktivujte placenou licenci, nebo spusťte bezplatné testování na 72 hodin.",
-            "machine": "Kód počítače",
-            "key": "Licenční klíč",
-            "activate": "Aktivovat licenci",
+            "intro": "Zadejte e-mailovou adresu, se kterou jste LongJumpReplay koupili. Pošleme na ni ověřovací kód.",
+            "email": "E-mailová adresa z nákupu",
+            "send": "Poslat ověřovací kód",
+            "code": "Ověřovací kód z e-mailu",
+            "activate": "Aktivovat tento počítač",
+            "code_sent": "Kód jsme poslali na {email}. Platí {minutes} minut. Zkontrolujte i složku se spamem.",
+            "activated": "Hotovo. Tento počítač je aktivovaný.",
+            "working": "Pracuji…",
             "start": "Spustit testování na 72 hodin",
             "continue": "Pokračovat v testování",
             "cancel": "Ukončit",
             "active": "Testování je aktivní do {expiry}. Zbývá exportů: {remaining}.",
+            "legacy": "Mám starší licenční klíč",
+            "legacy_title": "Aktivace licenčním klíčem",
+            "machine": "Kód počítače",
+            "key": "Licenční klíč",
+            "key_activate": "Aktivovat klíčem",
+            "back": "Zpět",
+            "need_email": "Zadejte prosím platnou e-mailovou adresu.",
+            "need_code": "Zadejte šestimístný kód z e-mailu.",
         }
     return {
         "title": "Activate LongJumpReplay",
-        "intro": "Activate a paid license, or start a free 72-hour evaluation.",
-        "machine": "Machine code",
-        "key": "License key",
-        "activate": "Activate license",
+        "intro": "Enter the email address you bought LongJumpReplay with. We will send a verification code to it.",
+        "email": "Purchase email address",
+        "send": "Send verification code",
+        "code": "Verification code from the email",
+        "activate": "Activate this computer",
+        "code_sent": "Code sent to {email}. It is valid for {minutes} minutes. Check your spam folder too.",
+        "activated": "Done. This computer is activated.",
+        "working": "Working…",
         "start": "Start 72-hour trial",
         "continue": "Continue trial",
         "cancel": "Exit",
         "active": "Trial active until {expiry}. Exports remaining: {remaining}.",
+        "legacy": "I have an older license key",
+        "legacy_title": "Activate with a license key",
+        "machine": "Machine code",
+        "key": "License key",
+        "key_activate": "Activate with key",
+        "back": "Back",
+        "need_email": "Please enter a valid email address.",
+        "need_code": "Enter the six-digit code from the email.",
     }
 
 
 def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
-    """Show paid activation or the free-trial choice before a frozen launch."""
+    """Show paid activation or the free-trial choice before a frozen launch.
+
+    Activation is email-first: the customer enters the address they bought with,
+    receives a code, and this computer is registered against their licence. A
+    previously issued machine-bound key still works, behind a secondary link, so
+    existing customers are not stranded.
+    """
+    from . import activation as activation_api
+    from .authorization import clear_authorization
+
+    # An already-activated computer starts straight away, offline, and quietly
+    # renews when it is past halfway through its authorization window.
+    authorized, _, _ = activation_api.current_authorization()
+    if authorized:
+        try:
+            activation_api.refresh_if_due()
+        except Exception:  # noqa: BLE001 - never block startup on the network
+            pass
+        return True
+
     paid_valid, _, _ = load_saved_license()
     if paid_valid:
         return True
@@ -245,31 +288,101 @@ def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
     body.pack(fill="both", expand=True)
     ttk.Label(body, text=copy["title"], style="Title.TLabel").pack(anchor="w")
     ttk.Label(body, text=copy["intro"], wraplength=560, justify="left").pack(anchor="w", pady=(8, 16))
-    ttk.Label(body, text=copy["machine"], style="Heading.TLabel").pack(anchor="w")
-    machine_entry = ttk.Entry(body, width=30)
-    machine_entry.insert(0, machine_code())
-    machine_entry.configure(state="readonly")
-    machine_entry.pack(anchor="w", pady=(4, 12))
+
     if status.active:
         expiry = datetime.fromtimestamp(status.expires_at or 0).astimezone().strftime("%Y-%m-%d %H:%M")
         ttk.Label(body, text=copy["active"].format(expiry=expiry, remaining=status.exports_remaining), wraplength=560, justify="left").pack(anchor="w", pady=(0, 12))
-    ttk.Label(body, text=copy["key"], style="Heading.TLabel").pack(anchor="w")
-    key_var = tk.StringVar()
-    ttk.Entry(body, textvariable=key_var, width=70).pack(fill="x", pady=(4, 10))
+
+    ttk.Label(body, text=copy["email"], style="Heading.TLabel").pack(anchor="w")
+    email_var = tk.StringVar()
+    email_entry = ttk.Entry(body, textvariable=email_var, width=54)
+    email_entry.pack(fill="x", pady=(4, 8))
+
+    code_frame = ttk.Frame(body)
+    ttk.Label(code_frame, text=copy["code"], style="Heading.TLabel").pack(anchor="w")
+    code_var = tk.StringVar()
+    code_entry = ttk.Entry(code_frame, textvariable=code_var, width=16)
+    code_entry.pack(anchor="w", pady=(4, 4))
+
     status_label = ttk.Label(body, text="", wraplength=560, justify="left")
     status_label.pack(anchor="w", pady=(10, 12))
     buttons = ttk.Frame(body)
     buttons.pack(fill="x")
 
-    def activate() -> None:
-        nonlocal accepted
-        valid, reason, _ = verify_license(key_var.get(), machine_code())
-        if not valid:
-            status_label.configure(text=Translator(language)(reason))
+    def busy(text: str) -> None:
+        status_label.configure(text=text)
+        dialog.update_idletasks()
+
+    def send_code() -> None:
+        email = email_var.get().strip()
+        if "@" not in email or "." not in email.split("@")[-1]:
+            status_label.configure(text=copy["need_email"])
             return
-        _save_license(key_var.get())
+        busy(copy["working"])
+        try:
+            minutes = activation_api.request_code(email)
+        except activation_api.ActivationError as error:
+            status_label.configure(text=str(error))
+            return
+        code_frame.pack(anchor="w", fill="x", before=status_label)
+        send_button.configure(text=copy["activate"], command=do_activate)
+        code_entry.focus_set()
+        status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
+
+    def do_activate() -> None:
+        nonlocal accepted
+        code = code_var.get().strip()
+        if not code.isdigit() or len(code) != 6:
+            status_label.configure(text=copy["need_code"])
+            return
+        busy(copy["working"])
+        try:
+            grant = activation_api.verify_code(email_var.get().strip(), code)
+            activation_api.activate(grant)
+        except activation_api.ActivationError as error:
+            status_label.configure(text=str(error))
+            return
+        status_label.configure(text=copy["activated"])
         accepted = True
         dialog.destroy()
+
+    def show_legacy() -> None:
+        """The previous machine-bound key flow, kept for existing customers."""
+        legacy = tk.Toplevel(dialog)
+        legacy.title(copy["legacy_title"])
+        legacy.resizable(False, False)
+        legacy.grab_set()
+        pane = ttk.Frame(legacy, padding=20)
+        pane.pack(fill="both", expand=True)
+        ttk.Label(pane, text=copy["machine"], style="Heading.TLabel").pack(anchor="w")
+        machine_entry = ttk.Entry(pane, width=30)
+        machine_entry.insert(0, machine_code())
+        machine_entry.configure(state="readonly")
+        machine_entry.pack(anchor="w", pady=(4, 12))
+        ttk.Label(pane, text=copy["key"], style="Heading.TLabel").pack(anchor="w")
+        key_var = tk.StringVar()
+        ttk.Entry(pane, textvariable=key_var, width=70).pack(fill="x", pady=(4, 10))
+        legacy_status = ttk.Label(pane, text="", wraplength=520, justify="left")
+        legacy_status.pack(anchor="w", pady=(6, 10))
+        row = ttk.Frame(pane)
+        row.pack(fill="x")
+
+        def use_key() -> None:
+            nonlocal accepted
+            valid, reason, _ = verify_license(key_var.get(), machine_code())
+            if not valid:
+                legacy_status.configure(text=Translator(language)(reason))
+                return
+            _save_license(key_var.get())
+            # A machine-bound key supersedes any stale server authorization.
+            clear_authorization()
+            accepted = True
+            legacy.destroy()
+            dialog.destroy()
+
+        ttk.Button(row, text=copy["back"], command=legacy.destroy).pack(side="right")
+        ttk.Button(row, text=copy["key_activate"], command=use_key, style="Accent.TButton").pack(side="right", padx=(0, 8))
+        legacy.bind("<Return>", lambda _event: use_key())
 
     def begin_trial() -> None:
         nonlocal accepted
@@ -297,12 +410,25 @@ def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
 
     ttk.Button(buttons, text=copy["cancel"], command=cancel).pack(side="right")
     if status.active:
-        ttk.Button(buttons, text=copy["continue"], command=continue_trial, style="Accent.TButton").pack(side="right", padx=(0, 8))
+        ttk.Button(buttons, text=copy["continue"], command=continue_trial).pack(side="right", padx=(0, 8))
     else:
-        ttk.Button(buttons, text=copy["start"], command=begin_trial, style="Accent.TButton").pack(side="right", padx=(0, 8))
-    ttk.Button(buttons, text=copy["activate"], command=activate).pack(side="right", padx=(0, 8))
+        ttk.Button(buttons, text=copy["start"], command=begin_trial).pack(side="right", padx=(0, 8))
+    # The primary action is email activation; the button becomes "Activate this
+    # computer" once a code has been sent.
+    send_button = ttk.Button(buttons, text=copy["send"], command=send_code, style="Accent.TButton")
+    send_button.pack(side="right", padx=(0, 8))
+    ttk.Button(buttons, text=copy["legacy"], command=show_legacy).pack(side="left")
     dialog.protocol("WM_DELETE_WINDOW", cancel)
-    dialog.bind("<Return>", lambda _event: activate())
+
+    def on_return(_event: object) -> None:
+        # Enter advances whichever step is on screen.
+        if code_frame.winfo_ismapped():
+            do_activate()
+        else:
+            send_code()
+
+    dialog.bind("<Return>", on_return)
+    email_entry.focus_set()
     dialog.update_idletasks()
     width, height = dialog.winfo_width(), dialog.winfo_height()
     screen_width, screen_height = dialog.winfo_screenwidth(), dialog.winfo_screenheight()

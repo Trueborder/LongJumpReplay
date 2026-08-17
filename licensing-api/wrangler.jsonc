@@ -30,8 +30,8 @@
     // Stripe price IDs, resolved to a license type by src/config.ts. Fill these
     // from the Stripe dashboard; unknown price IDs are rejected rather than
     // guessed, so a mis-typed value fails loudly instead of issuing a license.
-    "STRIPE_PRICE_LIFETIME": "",
-    "STRIPE_PRICE_SUBSCRIPTION": "",
+    "STRIPE_PRICE_LIFETIME": "price_1U5LRVRzuUbjN0GOz1g4eLth",
+    "STRIPE_PRICE_SUBSCRIPTION": "price_1U5NVeRzuUbjN0GO8DTXza5u",
     // Development only. The production env block below omits these, so the
     // tight defaults in src/config.ts apply there.
     "RATE_LIMIT_REQUEST_CODE": "500",
@@ -52,8 +52,8 @@
         "SUBSCRIPTION_GRACE_DAYS": "7",
         "MAIL_FROM": "info@tomaspisar.cz",
         "MAIL_FROM_NAME": "LongJumpReplay",
-        "STRIPE_PRICE_LIFETIME": "",
-        "STRIPE_PRICE_SUBSCRIPTION": ""
+        "STRIPE_PRICE_LIFETIME": "price_1U5LRVRzuUbjN0GOz1g4eLth",
+        "STRIPE_PRICE_SUBSCRIPTION": "price_1U5NVeRzuUbjN0GO8DTXza5u"
       },
       "d1_databases": [
         {

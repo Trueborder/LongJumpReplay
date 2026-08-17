@@ -6,5 +6,8 @@ window.SITE_CONFIG = {
   // through [data-license-devices], [data-license-grace] and
   // [data-license-updates], so changing a number here changes it site-wide.
   licensing: { deviceLimit: 2, offlineGraceDays: 30, updateMonths: 12 },
+  // Two ways to buy the same software. Both activate identically and both get
+  // the same device limit; they differ only in how they are paid for.
+  plans: { lifetime: { label: "Lifetime", labelCs: "Doživotní" }, monthly: { label: "Monthly", labelCs: "Měsíční", price: "379 Kč", period: "month", periodCs: "měsíc" } },
   products: { longJumpReplay: { key: "longjumpreplay", name: "LongJumpReplay", version: "3.1.0", versionShort: "3.1", price: "4 990 Kč", platform: "Windows", installerUrl: "https://files.tomaspisar.cz/LJR_setup.exe", trialHours: 72, trialExportLimit: 3, screenshots: ["/screenshots/main-screen.png", "/screenshots/recordings.png", "/screenshots/competition-board.png"] } }
 };

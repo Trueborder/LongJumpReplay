@@ -327,6 +327,26 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 @media (max-width: 650px) { .pricing-embed { padding: .75rem; box-shadow: none; } }
 
 
+/* Cookie consent. Sits above content but never covers the whole viewport -
+   nothing non-essential is stored before a choice is made, so there is no need
+   to block the page. */
+.cookie-banner { position: fixed; z-index: 60; right: clamp(.75rem, 3vw, 1.5rem); bottom: clamp(.75rem, 3vw, 1.5rem); left: auto; display: grid; gap: 1rem; width: min(460px, calc(100% - 1.5rem)); padding: 1.25rem 1.4rem; border: 1px solid var(--apple-border); border-left: 3px solid var(--cyan); border-radius: 18px; background: linear-gradient(145deg, color-mix(in srgb, var(--apple-surface) 96%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)); box-shadow: 0 18px 48px color-mix(in srgb, #000 28%, transparent); backdrop-filter: blur(18px) saturate(120%); }
+.cookie-banner p { margin: 0; max-width: 60ch; color: var(--muted); font-size: .88rem; line-height: 1.6; }
+.cookie-actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
+.cookie-actions .button { min-height: 42px; padding: .7rem 1.1rem; }
+@media (prefers-reduced-transparency: reduce) { .cookie-banner { background: var(--surface); backdrop-filter: none; } }
+@media (max-width: 650px) { .cookie-banner { right: .75rem; left: .75rem; width: auto; } .cookie-actions .button { flex: 1; } }
+
+/* Headings use line-height .94, which is shorter than the glyph box. At the
+   sizes used inside cards that clip their overflow, the descender of a "y" or
+   "j" fell outside the line box and was cut off - visible on "LongJumpReplay"
+   in Featured software. Enough leading to contain descenders, applied only
+   where a heading sits inside an overflow-hidden card so the tight setting of
+   multi-line headings elsewhere is untouched. */
+.product-card h2,
+.download-card h2,
+.site-card h3 { line-height: 1.04; padding-bottom: .06em; }
+
 /* Licensing and activation (unlayered: wins over @layer legacy) */
 #license { scroll-margin-top: 96px; }
 
