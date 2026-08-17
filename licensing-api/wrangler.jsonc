@@ -1,0 +1,73 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "longjumpreplay-licensing",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Created with:  wrangler d1 create longjumpreplay-licenses
+  // That command prints the database_id - paste it here. It is not a secret.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "longjumpreplay-licenses",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+    }
+  ],
+
+  // Non-secret configuration. Secrets are set with `wrangler secret put` and
+  // are listed in docs/LICENSE_SYSTEM.md - never put them in this file.
+  "vars": {
+    "ENVIRONMENT": "development",
+    "MAX_DEVICES": "2",
+    "VERIFICATION_CODE_TTL_MINUTES": "10",
+    "MAX_VERIFICATION_ATTEMPTS": "5",
+    "OFFLINE_VERIFICATION_WINDOW_DAYS": "30",
+    "AUTHORIZATION_TTL_DAYS": "30",
+    "SUBSCRIPTION_GRACE_DAYS": "7",
+    "MAIL_FROM": "info@tomaspisar.cz",
+    "MAIL_FROM_NAME": "LongJumpReplay",
+    // Stripe price IDs, resolved to a license type by src/config.ts. Fill these
+    // from the Stripe dashboard; unknown price IDs are rejected rather than
+    // guessed, so a mis-typed value fails loudly instead of issuing a license.
+    "STRIPE_PRICE_LIFETIME": "",
+    "STRIPE_PRICE_SUBSCRIPTION": "",
+    // Development only. The production env block below omits these, so the
+    // tight defaults in src/config.ts apply there.
+    "RATE_LIMIT_REQUEST_CODE": "500",
+    "RATE_LIMIT_VERIFY_CODE": "500",
+    "RATE_LIMIT_ACTIVATE": "500",
+    "RATE_LIMIT_VERIFY": "500"
+  },
+
+  "env": {
+    "production": {
+      "vars": {
+        "ENVIRONMENT": "production",
+        "MAX_DEVICES": "2",
+        "VERIFICATION_CODE_TTL_MINUTES": "10",
+        "MAX_VERIFICATION_ATTEMPTS": "5",
+        "OFFLINE_VERIFICATION_WINDOW_DAYS": "30",
+        "AUTHORIZATION_TTL_DAYS": "30",
+        "SUBSCRIPTION_GRACE_DAYS": "7",
+        "MAIL_FROM": "info@tomaspisar.cz",
+        "MAIL_FROM_NAME": "LongJumpReplay",
+        "STRIPE_PRICE_LIFETIME": "",
+        "STRIPE_PRICE_SUBSCRIPTION": ""
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "longjumpreplay-licenses",
+          "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+        }
+      ],
+      "routes": [
+        {
+          "pattern": "api.tomaspisar.cz/*",
+          "zone_name": "tomaspisar.cz"
+        }
+      ]
+    }
+  }
+}
