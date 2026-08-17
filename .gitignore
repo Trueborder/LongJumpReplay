@@ -5,7 +5,9 @@
 config.local.json
 **/.license_private_key.json
 **/.license_trial_private_key.json
+**/.license_service_private_key.json
 trial_service/data.json
+license_service/data.json
 *.secret
 *.secrets
 *.token
