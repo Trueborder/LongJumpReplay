@@ -29,8 +29,8 @@
      reappearing on every page, and a site cannot ask for permission to
      remember a refusal.
 
-     No analytics, advertising or third-party cookies are set anywhere, which is
-     why a single accept/decline pair is enough. */
+     No analytics or advertising cookies are used. Stripe's payment component
+     may set its own necessary cookies on the purchase page. */
   const CONSENT_COOKIE = 'ljr-consent';
   const CONSENT_MAX_AGE = 60 * 60 * 24 * 180;   // six months, then ask again
   const PREF_MAX_AGE = 60 * 60 * 24 * 365;
@@ -92,14 +92,26 @@
     en: {
       skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact', account: 'Account',
       theme: 'Switch theme', menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
-      footer: 'Independent software development from the Czech Republic.'
+      footer: 'Independent software development from the Czech Republic.', cookies: 'Cookie settings'
     },
     cs: {
       skip: 'Přejít na obsah', software: 'Software', downloads: 'Stažení', about: 'O mně', contact: 'Kontakt', account: 'Účet',
       theme: 'Přepnout motiv', menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
-      footer: 'Nezávislý vývoj softwaru z České republiky.'
+      footer: 'Nezávislý vývoj softwaru z České republiky.', cookies: 'Nastavení cookies'
     }
   };
+
+  document.querySelectorAll('.site-footer').forEach((footer) => {
+    if (footer.querySelector('[data-cookie-settings]')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cookie-settings-button';
+    button.dataset.cookieSettings = '';
+    button.dataset.ui = 'cookies';
+    button.textContent = 'Cookie settings';
+    button.addEventListener('click', () => showConsentBanner(true));
+    footer.append(button);
+  });
 
   const menu = document.querySelector('[data-menu-toggle]');
   const header = document.querySelector('.site-header');
@@ -315,7 +327,7 @@
       label: 'Cookie choices'
     },
     cs: {
-      text: 'Tento web používá cookies pouze k zapamatování motivu a jazyka. Žádná analytika, žádná reklama, žádné třetí strany.',
+      text: 'Tento web používá cookies pouze k zapamatování motivu a jazyka. Žádná analytika ani reklama.',
       accept: 'Přijmout',
       decline: 'Odmítnout',
       more: 'Soukromí',
@@ -323,8 +335,9 @@
     }
   };
 
-  const showConsentBanner = () => {
-    if (consent === 'accepted' || consent === 'declined') return;
+  const showConsentBanner = (force = false) => {
+    if (!force && (consent === 'accepted' || consent === 'declined')) return;
+    document.querySelector('.cookie-banner')?.remove();
     const copy = CONSENT_COPY[lang] || CONSENT_COPY.en;
 
     const banner = document.createElement('section');
@@ -335,7 +348,7 @@
     const text = document.createElement('p');
     text.textContent = copy.text + ' ';
     const more = document.createElement('a');
-    more.href = '/privacy/';
+    more.href = 'https://tomaspisar.cz/privacy/';
     more.className = 'text-link';
     more.textContent = copy.more + ' →';
     text.append(more);
@@ -371,6 +384,7 @@
     actions.append(decline, accept);
     banner.append(text, actions);
     document.body.append(banner);
+    if (force) decline.focus();
   };
 
   setTheme(readPref('site-theme') || 'dark');

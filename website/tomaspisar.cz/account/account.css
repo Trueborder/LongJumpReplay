@@ -20,6 +20,7 @@
 .account-panel input { width: 100%; min-height: 52px; margin-bottom: 1rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: 13px; background: color-mix(in srgb, var(--bg) 75%, transparent); color: var(--text); font: inherit; outline: none; }
 .account-panel input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cyan) 16%, transparent); }
 .button-full { width: 100%; }
+.button-full[disabled] { cursor: wait; opacity: .64; transform: none; }
 .status { min-height: 1.6em; margin: .9rem 0 0; color: var(--amber); }
 .form-note, .support-note, .muted { color: var(--muted); font-size: .84rem; }
 .form-note { margin: 1rem 0 0; line-height: 1.55; }

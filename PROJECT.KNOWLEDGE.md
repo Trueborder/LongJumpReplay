@@ -25,6 +25,11 @@
 - Version 3.2 embeds the production public signing modulus and adds a Licence
   & account panel in Settings linking to the portal. Do not print or commit the
   private signing key, webhook key, Stripe secret, Resend key, or pepper.
+- Website preferences use consent-gated first-party `site-theme` and
+  `site-language` cookies; `ljr-consent` remembers accept/decline and every
+  footer exposes Cookie settings so the choice can be changed. Portal auth uses
+  a 30-day `ljr-portal-session` cookie with HttpOnly, Secure, SameSite=Lax and
+  server-side hashed/revocable sessions. Private API responses are `no-store`.
 - The production API/assets deployment has been smoke-tested, but a complete
   purchase-to-email-to-activation rehearsal still belongs on isolated Stripe
   test mode. A working Python 3.12 x64 environment is required before the

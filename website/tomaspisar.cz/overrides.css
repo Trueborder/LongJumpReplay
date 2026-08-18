@@ -337,13 +337,14 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 @media (prefers-reduced-transparency: reduce) { .cookie-banner { background: var(--surface); backdrop-filter: none; } }
 @media (max-width: 650px) { .cookie-banner { right: .75rem; left: .75rem; width: auto; } .cookie-actions .button { flex: 1; } }
 
-/* Featured software: keep the product name and the screenshot in separate,
-   predictable boxes. The screenshot is intentionally cropped inside a fixed
-   16:10 frame so a large heading cannot push its lower glyphs underneath it. */
+/* Featured software: keep the product name and screenshot in separate,
+   predictable boxes. The complete screenshot stays inside a fixed 16:10
+   frame and can never cover the title. */
 .product-card > div:first-child { min-width: 0; }
-.product-card h2 { max-width: 100%; margin-top: 1rem; font-size: clamp(2.25rem, 4vw, 4.5rem); line-height: 1.05; overflow-wrap: anywhere; }
+.product-card { grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr); }
+.product-card h2 { max-width: 100%; margin-top: 1rem; font-size: clamp(1.9rem, 3.35vw, 3.7rem); line-height: 1.05; overflow-wrap: normal; word-break: normal; }
 .product-card .product-image { align-self: stretch; min-height: 220px; aspect-ratio: 16 / 10; }
-.product-card .product-image img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.product-card .product-image img { width: 100%; height: 100%; object-fit: contain; object-position: center; }
 
 /* The light theme needs a dark, filled CTA and a clearly legible outline;
    inherited light-theme cyan values were too close to the button text. */
@@ -354,6 +355,10 @@ html[data-theme="light"] .button-outline:hover { color: #075f55; background: #ff
 
 .discount-note { display: flex; align-items: baseline; flex-wrap: wrap; gap: .35rem .8rem; margin-top: 1.25rem; padding: 1rem 1.2rem; border-left: 3px solid var(--cyan); border-radius: 14px; background: color-mix(in srgb, var(--cyan) 8%, var(--surface)); color: var(--muted); font-size: .9rem; }
 .discount-note .text-link { white-space: nowrap; }
+
+.cookie-settings-button { min-height: 44px; padding: .55rem .2rem; border: 0; background: transparent; color: var(--muted); font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: underline; text-underline-offset: .24em; cursor: pointer; }
+.cookie-settings-button:hover { color: var(--cyan); }
+.cookie-settings-button:focus-visible { border-radius: 8px; outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 /* Headings use line-height .94, which is shorter than the glyph box. At the
    sizes used inside cards that clip their overflow, the descender of a "y" or

@@ -35,6 +35,11 @@
   const formatMoney = (amount, currency) => typeof amount === 'number' ? new Intl.NumberFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: (currency || 'czk').toUpperCase() }).format(amount / 100) : '—';
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
   const setStatus = (message, target = '#login-status') => { const element = $(target); if (element) element.textContent = message || ''; };
+  const setLoginBusy = (busy) => {
+    const button = $('#login-submit');
+    button.disabled = busy;
+    button.setAttribute('aria-busy', String(busy));
+  };
   const api = async (path, options = {}) => {
     const response = await fetch(`${API}${path}`, { ...options, credentials: 'include', headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } });
     const data = await response.json().catch(() => ({}));
@@ -46,19 +51,21 @@
   const requestCode = async () => {
     const email = $('#email').value.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail')); return; }
-    state.email = email; setStatus(t('sending'));
+    state.email = email; setStatus(t('sending')); setLoginBusy(true);
     try {
       await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
       state.codeSent = true; $('#code-field').hidden = false; $('#code').focus();
       $('#login-submit').textContent = state.lang === 'cs' ? 'Přihlásit' : 'Sign in'; setStatus(t('sent'));
     } catch (error) { setStatus(error.message); }
+    finally { setLoginBusy(false); }
   };
   const verifyCode = async () => {
     const code = $('#code').value.trim();
     if (!/^\d{6}$/.test(code)) { setStatus(state.lang === 'cs' ? 'Zadejte šestimístný kód.' : 'Enter the six-digit code.'); return; }
-    setStatus(t('checking'));
+    setStatus(t('checking')); setLoginBusy(true);
     try { await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) }); showAccount(true); setStatus(''); await loadAccount(); }
     catch (error) { setStatus(error.message); }
+    finally { setLoginBusy(false); }
   };
   $('#login-form').addEventListener('submit', (event) => { event.preventDefault(); state.codeSent ? verifyCode() : requestCode(); });
 
