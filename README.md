@@ -1,4 +1,4 @@
-# Long Jump Replay 3.1
+# Long Jump Replay 3.2
 
 ## Quick operator guide
 
@@ -77,7 +77,7 @@ The main header also contains a visible **Pause system** switch. Pausing release
 
 The timer is available in competition and judge-only modes and is never written into attempt metadata, evidence, or exports.
 
-## What is new in 3.1
+## What is new in 3.2
 
 - Remade judge-station interface with clearer workflow zones and larger primary actions.
 - Task-grouped, card-based Settings workspace with active navigation and clearer descriptions.
@@ -249,7 +249,7 @@ BUILD_CUSTOMER_RELEASE.bat
 
 This is the primary one-click release command. After source tests and frozen self-tests pass, it replaces the existing `release` folder and creates:
 
-- `LongJumpReplay-Setup-3.1.exe` and its SHA-256 checksum;
+- `LongJumpReplay-Setup-3.2.exe` and its SHA-256 checksum;
 - a deployable `website` folder containing the same installer download;
 - customer documentation and a recursive `SHA256SUMS.txt` manifest.
 
@@ -274,7 +274,7 @@ The builder:
 Output:
 
 ```text
-release\LongJumpReplay-3.1-Windows-x64.zip
+release\LongJumpReplay-3.2-Windows-x64.zip
 ```
 
 The recipient only extracts the ZIP and runs `LongJumpReplay.exe`.
@@ -301,7 +301,8 @@ The optional `scripts\build\BUILD_LICENSE_GENERATOR.bat` creates an admin-only G
 - static header menu throttling;
 - dark and light visual inspection.
 
-See `TEST_REPORT_3.1.md` for exact results.
+See `docs/CHANGELOG_3.2.md` for the 3.2 release scope and the generated test
+report for exact validation results.
 
 ## Continue development with Codex
 

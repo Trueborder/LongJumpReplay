@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
+import webbrowser
 from collections.abc import Callable
 
 from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset
@@ -62,6 +64,7 @@ class SettingsDialog(tk.Toplevel):
     """Scrollable category settings with a fixed action footer."""
 
     CATEGORY_DEFS = [
+        ("licence", "Licence & account", "Licence a účet"),
         ("general", "General", "Obecné"),
         ("appearance", "Language & appearance", "Jazyk a vzhled"),
         ("performance", "Performance", "Výkon"),
@@ -79,6 +82,7 @@ class SettingsDialog(tk.Toplevel):
         ("shuttle", "ShuttleXpress", "ShuttleXpress"),
     ]
     CATEGORY_GROUPS = [
+        ("account", "ACCOUNT", "ÚČET", ("licence",)),
         ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "appearance", "camera")),
         ("judging", "JUDGING WORKFLOW", "ROZHODOVÁNÍ", ("competition", "rounds", "decisions", "timer", "final")),
         ("replay", "REPLAY WORKSPACE", "PRACOVNÍ PLOCHA", ("board", "replay", "views", "assist")),
@@ -208,6 +212,7 @@ class SettingsDialog(tk.Toplevel):
 
         self.search_var.trace_add("write", lambda *_: self._filter_navigation())
         self._build_general(self._page_inners["general"])
+        self._build_licence(self._page_inners["licence"])
         self._build_appearance(self._page_inners["appearance"])
         self._build_performance(self._page_inners["performance"])
         self._build_camera(self._page_inners["camera"])
@@ -427,6 +432,62 @@ class SettingsDialog(tk.Toplevel):
         for column in range(5):
             box.columnconfigure(column, weight=1)
         return box
+
+    def _build_licence(self, f: ttk.Frame) -> None:
+        from . import activation as activation_api
+
+        ttk.Label(f, text=self._txt("Licence and customer account", "Licence a zákaznický účet"), style="Heading.TLabel").pack(anchor="w")
+        ttk.Label(
+            f,
+            text=self._txt(
+                "Email activation is managed by the LongJumpReplay customer portal. The app keeps working offline between its periodic checks.",
+                "Aktivaci e-mailem spravuje zákaznický portál LongJumpReplay. Aplikace mezi pravidelnými kontrolami funguje offline.",
+            ),
+            style="Muted.TLabel",
+            wraplength=700,
+            justify="left",
+        ).pack(anchor="w", pady=(6, 18))
+
+        valid, reason, payload = activation_api.current_authorization()
+        if payload:
+            license_type = str(payload.get("license_type") or "unknown")
+            expires_at = payload.get("expires_at")
+            expiry = datetime.fromtimestamp(int(expires_at)).astimezone().strftime("%Y-%m-%d %H:%M") if isinstance(expires_at, int) else "—"
+            status = self._txt("Active" if valid else f"Unavailable ({reason})", "Aktivní" if valid else f"Nedostupná ({reason})")
+            values = [
+                (self._txt("Licence type", "Typ licence"), self._txt("Lifetime" if license_type == "lifetime" else "Monthly subscription", "Doživotní" if license_type == "lifetime" else "Měsíční předplatné")),
+                (self._txt("Status", "Stav"), status),
+                (self._txt("Authorization valid until", "Autorizace platná do"), expiry),
+                (self._txt("Device limit", "Limit zařízení"), str(payload.get("max_devices") or "—")),
+            ]
+        else:
+            values = [(self._txt("Status", "Stav"), self._txt("Not activated", "Neaktivováno"))]
+
+        card = ttk.Frame(f, style="Panel.TFrame", padding=14)
+        card.pack(fill="x", pady=(0, 18))
+        for index, (label, value) in enumerate(values):
+            ttk.Label(card, text=label, style="Muted.TLabel").grid(row=index, column=0, sticky="w", padx=(0, 28), pady=4)
+            ttk.Label(card, text=value, style="ContextValue.TLabel").grid(row=index, column=1, sticky="w", pady=4)
+        card.columnconfigure(1, weight=1)
+
+        actions = ttk.Frame(f)
+        actions.pack(fill="x")
+        ttk.Button(
+            actions,
+            text=self._txt("Open customer portal", "Otevřít zákaznický portál"),
+            style="Accent.TButton",
+            command=lambda: webbrowser.open("https://account.tomaspisar.cz/"),
+        ).pack(side="left")
+        ttk.Label(
+            f,
+            text=self._txt(
+                "The portal shows subscription status, invoices, activated computers, device limits, billing management and support.",
+                "Portál zobrazí stav předplatného, faktury, aktivované počítače, limity zařízení, správu plateb a podporu.",
+            ),
+            style="Muted.TLabel",
+            wraplength=700,
+            justify="left",
+        ).pack(anchor="w", pady=(14, 0))
 
     def _build_general(self, f: ttk.Frame) -> None:
         r = self._title(f, "General", "Obecné", "Basic application behaviour.", "Základní chování aplikace.")

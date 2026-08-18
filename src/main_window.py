@@ -326,7 +326,7 @@ class MainWindow:
         self.help_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.help_menu.add_command(label=self._t("menu.controls"), command=self.show_controls)
         self.help_menu.add_separator()
-        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 3.1\nLive video review for long-jump take-off decisions."))
+        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 3.2\nLive video review for long-jump take-off decisions."))
         self._style_all_menus()
 
     def _style_all_menus(self) -> None:

@@ -23,6 +23,9 @@ export interface LicenseRow {
   stripe_subscription_id: string | null;
   stripe_price_id: string | null;
   current_period_end: number | null;
+  created_at: number;
+  updated_at: number;
+  last_stripe_sync: number | null;
 }
 
 export interface DeviceRow {
@@ -32,7 +35,18 @@ export interface DeviceRow {
   device_name: string | null;
   activated_at: number;
   last_verified_at: number | null;
+  deactivated_at: number | null;
   status: "active" | "deactivated";
+}
+
+export interface PortalSessionRow {
+  id: string;
+  customer_id: string;
+  token_hash: string;
+  created_at: number;
+  expires_at: number;
+  last_seen_at: number;
+  revoked_at: number | null;
 }
 
 export function now(): number {
@@ -60,6 +74,13 @@ export async function findCustomerByEmail(db: D1Database, email: string): Promis
   return db
     .prepare("SELECT id, email, stripe_customer_id FROM customers WHERE email = ?")
     .bind(normaliseEmail(email))
+    .first<CustomerRow>();
+}
+
+export async function findCustomerById(db: D1Database, customerId: string): Promise<CustomerRow | null> {
+  return db
+    .prepare("SELECT id, email, stripe_customer_id FROM customers WHERE id = ?")
+    .bind(customerId)
     .first<CustomerRow>();
 }
 
@@ -107,6 +128,27 @@ export async function findActivatableLicense(db: D1Database, email: string): Pro
     )
     .bind(normaliseEmail(email))
     .first<LicenseRow>();
+}
+
+export async function listLicensesForCustomer(db: D1Database, customerId: string): Promise<LicenseRow[]> {
+  const result = await db
+    .prepare("SELECT * FROM licenses WHERE customer_id = ? ORDER BY created_at DESC")
+    .bind(customerId)
+    .all<LicenseRow>();
+  return result.results ?? [];
+}
+
+export async function listDevicesForCustomer(db: D1Database, customerId: string): Promise<DeviceRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT d.* FROM devices d
+         JOIN licenses l ON l.id = d.license_id
+        WHERE l.customer_id = ?
+        ORDER BY d.status ASC, d.activated_at DESC`,
+    )
+    .bind(customerId)
+    .all<DeviceRow>();
+  return result.results ?? [];
 }
 
 export async function findLicenseById(db: D1Database, id: string): Promise<LicenseRow | null> {
@@ -236,6 +278,7 @@ export async function activateDevice(
     device_name: deviceName,
     activated_at: timestamp,
     last_verified_at: timestamp,
+    deactivated_at: null,
     status: "active",
   };
 }
@@ -248,6 +291,61 @@ export async function deactivateDevice(db: D1Database, licenseId: string, machin
     .bind(now(), licenseId, machineId)
     .run();
   return (result.meta.changes ?? 0) > 0;
+}
+
+export async function deactivateDeviceForCustomer(
+  db: D1Database,
+  customerId: string,
+  deviceId: string,
+): Promise<{ removed: boolean; licenseId: string | null }> {
+  const result = await db
+    .prepare(
+      `UPDATE devices SET status = 'deactivated', deactivated_at = ?
+         WHERE id = ? AND status = 'active'
+           AND license_id IN (SELECT id FROM licenses WHERE customer_id = ?)`,
+    )
+    .bind(now(), deviceId, customerId)
+    .run();
+  if ((result.meta.changes ?? 0) === 0) return { removed: false, licenseId: null };
+  const row = await db
+    .prepare("SELECT license_id FROM devices WHERE id = ?")
+    .bind(deviceId)
+    .first<{ license_id: string }>();
+  return { removed: true, licenseId: row?.license_id ?? null };
+}
+
+export async function createPortalSession(
+  db: D1Database,
+  customerId: string,
+  tokenHash: string,
+  expiresAt: number,
+): Promise<PortalSessionRow> {
+  const timestamp = now();
+  const id = randomId("portal");
+  await db
+    .prepare(
+      `INSERT INTO portal_sessions
+         (id, customer_id, token_hash, created_at, expires_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(id, customerId, tokenHash, timestamp, expiresAt, timestamp)
+    .run();
+  return { id, customer_id: customerId, token_hash: tokenHash, created_at: timestamp, expires_at: expiresAt, last_seen_at: timestamp, revoked_at: null };
+}
+
+export async function findPortalSession(db: D1Database, tokenHash: string): Promise<PortalSessionRow | null> {
+  return db
+    .prepare("SELECT * FROM portal_sessions WHERE token_hash = ? AND revoked_at IS NULL")
+    .bind(tokenHash)
+    .first<PortalSessionRow>();
+}
+
+export async function touchPortalSession(db: D1Database, sessionId: string): Promise<void> {
+  await db.prepare("UPDATE portal_sessions SET last_seen_at = ? WHERE id = ?").bind(now(), sessionId).run();
+}
+
+export async function revokePortalSession(db: D1Database, tokenHash: string): Promise<void> {
+  await db.prepare("UPDATE portal_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL").bind(now(), tokenHash).run();
 }
 
 export async function touchDevice(db: D1Database, deviceId: string): Promise<void> {

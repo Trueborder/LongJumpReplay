@@ -91,6 +91,8 @@ export interface StripeEvent {
 export interface StripeApi {
   getSubscription(id: string): Promise<Record<string, any>>;
   getCheckoutLineItems(sessionId: string): Promise<Record<string, any>[]>;
+  getInvoices(customerId: string): Promise<Record<string, any>[]>;
+  createBillingPortalSession(customerId: string, returnUrl: string): Promise<string>;
 }
 
 /**
@@ -110,11 +112,33 @@ export function stripeApi(secretKey: string): StripeApi {
     return (await response.json()) as Record<string, any>;
   }
 
+  async function postForm(path: string, values: Record<string, string>): Promise<Record<string, any>> {
+    const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(values),
+    });
+    if (!response.ok) throw new Error(`Stripe API ${path} failed with ${response.status}`);
+    return (await response.json()) as Record<string, any>;
+  }
+
   return {
     getSubscription: (id) => get(`subscriptions/${encodeURIComponent(id)}`),
     getCheckoutLineItems: async (sessionId) => {
       const data = await get(`checkout/sessions/${encodeURIComponent(sessionId)}/line_items?limit=10`);
       return Array.isArray(data.data) ? data.data : [];
+    },
+    getInvoices: async (customerId) => {
+      const data = await get(`invoices?customer=${encodeURIComponent(customerId)}&limit=10`);
+      return Array.isArray(data.data) ? data.data : [];
+    },
+    createBillingPortalSession: async (customerId, returnUrl) => {
+      const data = await postForm("billing_portal/sessions", { customer: customerId, return_url: returnUrl });
+      if (typeof data.url !== "string" || !data.url) throw new Error("Stripe did not return a billing portal URL");
+      return data.url;
     },
   };
 }

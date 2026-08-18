@@ -12,7 +12,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/overrides.css">
-  <script>try{document.documentElement.dataset.theme=localStorage.getItem('site-theme')||'dark'}catch(e){}</script>
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
 </head>
 <body>
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
@@ -24,7 +24,7 @@
       <a href="/download/" data-ui="downloads">Downloads</a>
       <a href="/about/" data-ui="about">About</a>
       <a href="/contact/" data-ui="contact">Contact</a>
-    </nav>
+    <a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="Účet">Account</a></nav>
     <div class="header-actions">
       <button class="icon-button" data-theme-toggle type="button">☼</button>
       <button class="language-button" data-lang-toggle data-lang-label type="button">CZ</button>
@@ -39,7 +39,7 @@
         <span data-en="Lifetime or monthly" data-cs="Doživotní nebo měsíční">Lifetime or monthly</span>
         <span>Up to <b data-license-devices>2</b> <span data-en="computers" data-cs="počítače">computers</span></span>
         <span data-en="Email activation" data-cs="Aktivace e-mailem">Email activation</span>
-        <span>Version <b data-product-version>3.1.0</b></span>
+        <span>Version <b data-product-version>3.2.0</b></span>
       </div>
       <div class="button-row">
         <a class="button button-primary" href="/software/longjumpreplay/#buy" data-en="Buy a license ↗" data-cs="Koupit licenci ↗">Buy a license ↗</a>
@@ -151,7 +151,7 @@
       <div class="prose">
         <p>Your license covers <b data-license-devices>2</b> <span data-en="activated computers at the same time. A typical setup is one office or club computer for preparing competitions, and one laptop taken to meets." data-cs="aktivované počítače současně. Typické nastavení je jeden kancelářský nebo klubový počítač na přípravu závodů a jeden notebook, který berete na závody.">activated computers at the same time. A typical setup is one office or club computer for preparing competitions, and one laptop taken to meets.</span></p>
         <p data-en="When you replace a machine, deactivate it so the slot is freed, then activate the replacement with the same email address. If you have already reached the device limit, activating another computer is refused until you free a slot." data-cs="Když počítač měníte, deaktivujte ho, aby se uvolnilo místo, a poté aktivujte náhradu stejnou e-mailovou adresou. Pokud jste už limit zařízení vyčerpali, aktivace dalšího počítače se odmítne, dokud místo neuvolníte.">When you replace a machine, deactivate it so the slot is freed, then activate the replacement with the same email address. If you have already reached the device limit, activating another computer is refused until you free a slot.</p>
-        <p class="notice" data-en="If the old computer is broken, lost, or already wiped, you cannot deactivate it yourself. Email me and I will free the slot for you." data-cs="Pokud je starý počítač rozbitý, ztracený nebo už smazaný, sami ho deaktivovat nemůžete. Napište mi a místo vám uvolním.">If the old computer is broken, lost, or already wiped, you cannot deactivate it yourself. Email me and I will free the slot for you.</p>
+         <p class="notice" data-en="If the old computer is broken, lost, or already wiped, sign in to the customer portal to review your devices. If you cannot access the purchase email, contact support." data-cs="Pokud je starý počítač rozbitý, ztracený nebo už smazaný, přihlaste se do zákaznického portálu a zkontrolujte zařízení. Pokud nemáte přístup k nákupnímu e-mailu, kontaktujte podporu.">If the old computer is broken, lost, or already wiped, sign in to the customer portal to review your devices. If you cannot access the purchase email, contact support.</p>
       </div>
     </section>
 
@@ -217,7 +217,7 @@
           <summary><span data-en="What happens if I buy a new computer?" data-cs="Co když si koupím nový počítač?">What happens if I buy a new computer?</span></summary>
           <div class="faq-answer">
             <p data-en="You keep your license. Deactivate the old computer to free its slot, then install LongJumpReplay on the new one and activate it with the same email address." data-cs="Licence vám zůstává. Deaktivujte starý počítač, aby se uvolnilo jeho místo, pak nainstalujte LongJumpReplay na nový a aktivujte ho stejnou e-mailovou adresou.">You keep your license. Deactivate the old computer to free its slot, then install LongJumpReplay on the new one and activate it with the same email address.</p>
-            <p data-en="If the old machine is broken, lost or already wiped, you cannot deactivate it yourself. Email me and I will free the slot." data-cs="Pokud je starý počítač rozbitý, ztracený nebo už smazaný, sami ho deaktivovat nemůžete. Napište mi a místo uvolním.">If the old machine is broken, lost or already wiped, you cannot deactivate it yourself. Email me and I will free the slot.</p>
+             <p data-en="If the old machine is broken, lost or already wiped, sign in to the customer portal to review your devices. If you cannot access the purchase email, contact support." data-cs="Pokud je starý počítač rozbitý, ztracený nebo už smazaný, přihlaste se do zákaznického portálu a zkontrolujte zařízení. Pokud nemáte přístup k nákupnímu e-mailu, kontaktujte podporu.">If the old machine is broken, lost or already wiped, sign in to the customer portal to review your devices. If you cannot access the purchase email, contact support.</p>
           </div>
         </details>
         <details class="faq-item">

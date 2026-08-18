@@ -1,8 +1,11 @@
 # LongJumpReplay licensing system
 
-Status: **the Worker, database, API and client verifier are built and tested
-locally. Nothing is deployed, and the desktop activation UI is not yet wired
-up.** See "What is not done" at the end before relying on any of this.
+Status: **the production Worker, D1 database, email activation API, customer
+portal, Stripe webhook and desktop licence panel are implemented.** The
+production API is live at `api.tomaspisar.cz` and the customer portal is live at
+`account.tomaspisar.cz`. A separate staging D1 database and Worker
+configuration are prepared; staging still needs test-mode secrets before it is
+useful for a full purchase test.
 
 ## Architecture
 
@@ -14,7 +17,7 @@ Cloudflare Worker  (licensing-api/)
       |
       v
 Cloudflare D1      (longjumpreplay-licenses)
-      |  customers / licenses / devices / verification_codes / events
+      |  customers / licenses / devices / verification_codes / portal_sessions
       v
 LongJumpReplay
       |  email -> verification code -> device activation
@@ -77,9 +80,11 @@ Set with `wrangler secret put <NAME>` from `licensing-api/`. Never in
 
 ## Database
 
-`licensing-api/migrations/0001_init.sql`. Tables: `customers`, `licenses`,
-`devices`, `verification_codes`, `activation_grants`, `stripe_events`,
-`rate_limits`, `events`.
+`licensing-api/migrations/0001_init.sql`, `0002_portal.sql`, and
+`0003_portal_login_without_license.sql`. Tables:
+`customers`, `licenses`, `devices`, `verification_codes`, `activation_grants`,
+`stripe_events`, `rate_limits`, `events`, `portal_login_codes`, and
+`portal_sessions`.
 
 Notable constraints:
 
@@ -131,6 +136,32 @@ email ownership as activation, because freeing a seat is a privileged action.
 ### `GET /health`
 Liveness only.
 
+### Customer portal
+
+The static portal is served at `https://account.tomaspisar.cz/`. It uses a
+separate email verification purpose and an HttpOnly session cookie; it never
+receives or stores card data.
+
+- `POST /api/portal/request-code` - request a portal OTP for any valid email.
+- `POST /api/portal/verify-code` - exchange the OTP for a portal session.
+- `GET /api/portal/account` - licence, device, invoice and billing status.
+- `POST /api/portal/billing` - create a Stripe Customer Portal session.
+- `POST /api/portal/devices/:id/deactivate` - free one device slot.
+- `POST /api/portal/logout` - revoke the current portal session.
+
+Portal access proves control of an email address and does not require a
+purchase. An account without a licence receives an empty account view with a
+link to buy LongJumpReplay. A later Stripe purchase made with the same
+normalised email is attached to that existing account automatically. Portal
+codes are stored separately from activation codes and cannot activate the
+desktop application.
+
+Both the activation flow and the portal use ten-minute email codes. A customer
+can activate up to two computers. Authorizations are signed for 30 days and
+the desktop app refreshes them online periodically; lifetime entitlement never
+expires, while a subscription receives seven days of grace after its paid
+period before verification stops.
+
 ## Authorization token
 
 `LJRA1.<base64url payload>.<base64url signature>`, RSASSA-PKCS1-v1_5 / SHA-256.
@@ -181,7 +212,8 @@ Python side: `.venv\Scripts\python.exe -m pytest tests/test_authorization.py`.
 
 ## Deployment
 
-Nothing below has been run - it all needs Cloudflare and Stripe credentials.
+The production deployment has been run and verified. The staging deployment
+is configured but intentionally has no credentials or live price IDs yet.
 
 1. ~~Create the database~~ **Done.** `longjumpreplay-licenses`,
    `afd54a54-bccb-494c-ac6d-377b00652c40`, primary region WEUR, already wired
@@ -192,21 +224,21 @@ Nothing below has been run - it all needs Cloudflare and Stripe credentials.
    `stripe_events` primary key were each confirmed to reject a duplicate, and
    the `licenses.type` CHECK to reject an unknown type.
 
-   Note that `wrangler.jsonc` points the default and production environments at
-   the same database. Local work uses `wrangler dev --local`, which has its own
-   SQLite file and never touches this one, but `wrangler dev` **without**
-   `--local` would read and write production data. Create a second D1 database
-   for a staging environment if that becomes a risk.
-3. `node scripts/generate-signing-key.mjs` and set the private half:
-   `npx wrangler secret put AUTHORIZATION_PRIVATE_KEY`
-   Put the printed public modulus into `AUTHORIZATION_PUBLIC_KEY_N` in
-   `src/authorization.py` and ship a build containing it.
-4. Set the other secrets: `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`,
-   `VERIFICATION_PEPPER`, `MAIL_API_KEY`.
-5. Fill `STRIPE_PRICE_LIFETIME` and `STRIPE_PRICE_SUBSCRIPTION`.
-6. `npx wrangler deploy --env production`
-7. Point a Stripe webhook at `https://api.tomaspisar.cz/api/stripe/webhook`.
-8. Test in Stripe **test mode** before switching live keys.
+   Note that the default local environment uses local SQLite when launched
+   with `wrangler dev --local`. Staging has its own D1 database:
+   `longjumpreplay-licenses-staging` (`6e80c8e7-b1da-4f60-9f76-bb3a0505d748`).
+3. Production uses the existing verified signing key and the five production
+   secrets. Secret values are intentionally not documented or exposed here.
+4. Production price IDs are the live lifetime and monthly prices in
+   `wrangler.jsonc`; the live Stripe webhook is
+   `https://api.tomaspisar.cz/api/stripe/webhook`.
+5. Production was deployed with the API route and the account portal route.
+   `/health`, webhook signature rejection, CORS, unauthenticated portal access,
+   and static portal delivery were checked after deployment.
+6. For a safe purchase rehearsal, create separate Stripe test-mode prices,
+   webhook secret, restricted test key, and Resend test sending key, then set
+   the staging secrets and deploy with `npx wrangler deploy --env staging`.
+   Never point test webhooks at the production database.
 
 ## Operations
 
@@ -242,22 +274,17 @@ computer names, locations, or anything about competitions and athletes.
 `website/tomaspisar.cz/privacy/index.html` describes this. It was updated when
 the site copy changed and should be re-read once the system is actually live.
 
-## What is not done
+## Remaining release gates
 
-- **The Worker is not deployed.** The D1 database exists and the price IDs are
-  set, but nothing is running at `api.tomaspisar.cz`. DNS for that hostname
-  already resolves to Cloudflare, so only the Worker and its route are missing.
-- **No secrets are set.** All five are still absent, so even once deployed the
-  Worker would reject webhooks and could not sign or send anything.
-- **No Stripe webhook exists**, so a purchase creates no licence.
-- **No email provider**, so no verification code can be delivered.
-- **The desktop activation UI is not wired up.** `src/authorization.py` verifies
-  authorizations, but `src/licensing.py`'s dialog still asks for an `LJR2` key
-  and there is no code that calls the API. Until that is built, a customer
-  cannot actually activate through this system.
-- **`AUTHORIZATION_PUBLIC_KEY_N` is `None`**, so the client fails closed.
-- **`license_service/`** is the older design (machine code at checkout, key
-  emailed by hand). It is superseded by this system but has not been removed,
-  because it is what would issue a licence today.
-- **No Terms of Service or refund policy** on the website, while live payments
-  are being taken.
+- A real Stripe purchase has not been run in this session because the agreed
+  validation path is a separate test-mode setup, not a live charge. Staging
+  needs test-mode Stripe prices, webhook secret, restricted test key, Resend
+  test sending key, pepper and signing key before that rehearsal can run.
+- The desktop 3.2 portable release is now built and self-tested at
+  `release/LongJumpReplay-3.2-Windows-x64.zip`; the public download location
+  still needs to be updated to point at the accepted release artifact.
+- The website still needs publishable Terms, seller identity, withdrawal and
+  refund information. Those facts must come from the seller; they must not be
+  invented in source code. The privacy page also deserves a final legal review.
+- `license_service/` is the older machine-code/key design. It remains for
+  legacy compatibility but is not part of the new customer purchase flow.

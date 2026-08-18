@@ -12,7 +12,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/overrides.css">
-  <script>try{document.documentElement.dataset.theme=localStorage.getItem('site-theme')||'dark'}catch(e){}</script>
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
 </head>
 <body>
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
@@ -24,7 +24,7 @@
       <a href="/download/" data-ui="downloads">Downloads</a>
       <a href="/about/" data-ui="about">About</a>
       <a href="/contact/" data-ui="contact">Contact</a>
-    </nav>
+    <a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="Účet">Account</a></nav>
     <div class="header-actions">
       <button class="icon-button" data-theme-toggle type="button">☼</button>
       <button class="language-button" data-lang-toggle data-lang-label type="button">CZ</button>
@@ -46,7 +46,7 @@
 
     <h2 data-en="Cookies on this website" data-cs="Cookies na tomto webu">Cookies on this website</h2>
     <p data-en="This website sets two preference cookies, and only after you accept them: one remembers whether you chose the dark or light theme, the other whether you are reading in English or Czech. A third cookie records your answer to the cookie question itself, so you are not asked again on every page." data-cs="Tento web nastavuje dvě předvolbové cookies, a to až poté, co je přijmete: jedna si pamatuje, zda jste zvolili tmavý nebo světlý motiv, druhá, zda čtete anglicky nebo česky. Třetí cookie zaznamenává vaši odpověď na samotnou otázku ohledně cookies, abyste nebyli dotazováni na každé stránce.">This website sets two preference cookies, and only after you accept them: one remembers whether you chose the dark or light theme, the other whether you are reading in English or Czech. A third cookie records your answer to the cookie question itself, so you are not asked again on every page.</p>
-    <p data-en="If you decline, nothing is stored and your theme and language choices last only until you close the tab. There are no analytics cookies, no advertising cookies and no third-party cookies anywhere on this site, which is why there is nothing more to configure. Clearing your browser cookies for tomaspisar.cz undoes all of it." data-cs="Pokud odmítnete, neuloží se nic a volba motivu a jazyka vydrží jen do zavření karty. Na tomto webu nejsou žádné analytické cookies, žádné reklamní cookies ani žádné cookies třetích stran, proto není co dalšího nastavovat. Smazáním cookies pro tomaspisar.cz ve vašem prohlížeči se vše vrátí zpět.">If you decline, nothing is stored and your theme and language choices last only until you close the tab. There are no analytics cookies, no advertising cookies and no third-party cookies anywhere on this site, which is why there is nothing more to configure. Clearing your browser cookies for tomaspisar.cz undoes all of it.</p>
+    <p data-en="If you decline, the optional theme and language choices last only until you close the tab. There are no analytics or advertising cookies. The LongJumpReplay purchase page loads Stripe's payment component so checkout can work; Stripe may set cookies needed for that payment flow. The account portal uses one essential, server-side session cookie that is HttpOnly, Secure and SameSite=Lax; JavaScript cannot read it. Clearing your browser cookies for tomaspisar.cz and account.tomaspisar.cz signs you out and removes the saved preferences." data-cs="Pokud odmítnete, neuloží se nic a volba motivu a jazyka vydrží jen do zavření karty. Na tomto webu nejsou žádné analytické cookies, žádné reklamní cookies ani žádné cookies třetích stran, proto není co dalšího nastavovat. Smazáním cookies pro tomaspisar.cz ve vašem prohlížeči se vše vrátí zpět.">If you decline, nothing is stored and your theme and language choices last only until you close the tab. There are no analytics cookies, no advertising cookies and no third-party cookies anywhere on this site, which is why there is nothing more to configure. Clearing your browser cookies for tomaspisar.cz undoes all of it.</p>
 
     <h2 data-en="Payment" data-cs="Platba">Payment</h2>
     <p data-en="Payments are processed by Stripe, which acts as the payment processor and receives your card details directly. I never see your card number. From Stripe I receive your name, email address, billing country and the amount paid, which I keep as accounting records for as long as Czech law requires." data-cs="Platby zpracovává Stripe, který vystupuje jako zpracovatel plateb a údaje o kartě přijímá přímo. Číslo vaší karty nikdy nevidím. Od Stripu dostávám vaše jméno, e-mailovou adresu, zemi fakturace a zaplacenou částku a uchovávám je jako účetní doklady po dobu, kterou vyžadují české zákony.">Payments are processed by Stripe, which acts as the payment processor and receives your card details directly. I never see your card number. From Stripe I receive your name, email address, billing country and the amount paid, which I keep as accounting records for as long as Czech law requires.</p>

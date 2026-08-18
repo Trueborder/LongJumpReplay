@@ -1,0 +1,10 @@
+{
+  "$schema": "../licensing-api/node_modules/wrangler/config-schema.json",
+  "name": "longjumpreplay",
+  "main": "main-site-worker.ts",
+  "compatibility_date": "2026-08-18",
+  "assets": {
+    "directory": "./tomaspisar.cz",
+    "binding": "ASSETS"
+  }
+}

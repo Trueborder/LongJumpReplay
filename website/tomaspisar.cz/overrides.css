@@ -337,6 +337,24 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 @media (prefers-reduced-transparency: reduce) { .cookie-banner { background: var(--surface); backdrop-filter: none; } }
 @media (max-width: 650px) { .cookie-banner { right: .75rem; left: .75rem; width: auto; } .cookie-actions .button { flex: 1; } }
 
+/* Featured software: keep the product name and the screenshot in separate,
+   predictable boxes. The screenshot is intentionally cropped inside a fixed
+   16:10 frame so a large heading cannot push its lower glyphs underneath it. */
+.product-card > div:first-child { min-width: 0; }
+.product-card h2 { max-width: 100%; margin-top: 1rem; font-size: clamp(2.25rem, 4vw, 4.5rem); line-height: 1.05; overflow-wrap: anywhere; }
+.product-card .product-image { align-self: stretch; min-height: 220px; aspect-ratio: 16 / 10; }
+.product-card .product-image img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+
+/* The light theme needs a dark, filled CTA and a clearly legible outline;
+   inherited light-theme cyan values were too close to the button text. */
+html[data-theme="light"] .button-primary { color: #fff; background: #086b5f; }
+html[data-theme="light"] .button-primary:hover { color: #fff; background: #844d08; }
+html[data-theme="light"] .button-outline { color: #18272b; background: rgba(255, 255, 255, .58); border-color: #718286; }
+html[data-theme="light"] .button-outline:hover { color: #075f55; background: #fff; border-color: #075f55; }
+
+.discount-note { display: flex; align-items: baseline; flex-wrap: wrap; gap: .35rem .8rem; margin-top: 1.25rem; padding: 1rem 1.2rem; border-left: 3px solid var(--cyan); border-radius: 14px; background: color-mix(in srgb, var(--cyan) 8%, var(--surface)); color: var(--muted); font-size: .9rem; }
+.discount-note .text-link { white-space: nowrap; }
+
 /* Headings use line-height .94, which is shorter than the glyph box. At the
    sizes used inside cards that clip their overflow, the descender of a "y" or
    "j" fell outside the line box and was cut off - visible on "LongJumpReplay"

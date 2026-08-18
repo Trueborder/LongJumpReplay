@@ -6,6 +6,7 @@
 
 export interface Env {
   DB: D1Database;
+  ASSETS: Fetcher;
 
   ENVIRONMENT: string;
   MAX_DEVICES: string;
@@ -16,6 +17,8 @@ export interface Env {
   SUBSCRIPTION_GRACE_DAYS: string;
   MAIL_FROM: string;
   MAIL_FROM_NAME: string;
+  PORTAL_ORIGIN: string;
+  PORTAL_SESSION_TTL_DAYS: string;
   STRIPE_PRICE_LIFETIME: string;
   STRIPE_PRICE_SUBSCRIPTION: string;
 
@@ -44,6 +47,7 @@ export interface Settings {
   offlineWindowSeconds: number;
   authorizationTtlSeconds: number;
   subscriptionGraceSeconds: number;
+  portalSessionTtlSeconds: number;
 }
 
 function int(value: string | undefined, fallback: number): number {
@@ -59,6 +63,7 @@ export function settings(env: Env): Settings {
     offlineWindowSeconds: int(env.OFFLINE_VERIFICATION_WINDOW_DAYS, 30) * 86400,
     authorizationTtlSeconds: int(env.AUTHORIZATION_TTL_DAYS, 30) * 86400,
     subscriptionGraceSeconds: int(env.SUBSCRIPTION_GRACE_DAYS, 7) * 86400,
+    portalSessionTtlSeconds: int(env.PORTAL_SESSION_TTL_DAYS, 30) * 86400,
   };
 }
 

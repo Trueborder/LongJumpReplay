@@ -34,7 +34,7 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert "ModernLight" in str(style.layout("TCheckbutton"))
     assert "ModernLight.neutral.Button.background" not in str(style.layout("TButton"))
     assert set(dialog._pages) == {
-        "general", "appearance", "performance", "camera", "board", "competition",
+        "licence", "general", "appearance", "performance", "camera", "board", "competition",
         "rounds", "decisions", "timer", "final", "replay", "views", "assist",
         "hotkeys", "shuttle",
     }
@@ -50,7 +50,7 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert dialog._vars["store_nth"].get() == 2
     assert dialog._vars["buffer_memory"].get() == 1024
     assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
-    assert set(dialog._nav_group_labels) == {"essentials", "judging", "replay", "system"}
+    assert set(dialog._nav_group_labels) == {"account", "essentials", "judging", "replay", "system"}
     assert dialog._nav_buttons["general"].cget("style") == "SettingsNav.TButton"
     assert dialog._nav_buttons["general"].winfo_reqheight() <= 36
     assert dialog.nav_scrollbar.winfo_manager() == "grid"

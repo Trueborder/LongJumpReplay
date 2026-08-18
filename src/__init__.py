@@ -1,3 +1,3 @@
-"""Long Jump Replay 3.1."""
+"""Long Jump Replay 3.2."""
 
-__version__ = "3.1.0"
+__version__ = "3.2.0"

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Manage your LongJumpReplay licence, devices and billing.">
+  <meta name="theme-color" content="#0b1013">
+  <title>LongJumpReplay account — Tomáš Pisár</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="https://tomaspisar.cz/styles.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/overrides.css">
+  <link rel="stylesheet" href="account.css">
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
+</head>
+<body class="account-page">
+  <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="https://tomaspisar.cz/">
+      <span class="brand-mark">TP</span>
+      <span>Tomáš Pisár<small>Software / Development</small></span>
+    </a>
+    <button class="menu-toggle" data-menu-toggle type="button" aria-label="Open menu">☰</button>
+    <nav class="main-nav" aria-label="Primary navigation">
+      <a href="https://tomaspisar.cz/software/" data-ui="software">Software</a>
+      <a href="https://tomaspisar.cz/download/" data-ui="downloads">Downloads</a>
+      <a href="https://tomaspisar.cz/about/" data-ui="about">About</a>
+      <a href="https://tomaspisar.cz/contact/" data-ui="contact">Contact</a>
+      <a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="Účet" aria-current="page">Account</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-button" data-theme-toggle type="button" aria-label="Switch theme">☼</button>
+      <button class="language-button" data-lang-toggle data-lang-label type="button" aria-label="Switch to Czech">CZ</button>
+      <button class="account-logout-button button button-outline" id="logout-button" type="button" hidden data-en="Sign out" data-cs="Odhlásit">Sign out</button>
+    </div>
+  </header>
+
+  <main id="main" class="account-shell">
+    <section id="login-view" class="account-login content-section">
+      <div class="account-login-grid">
+        <div class="account-intro">
+          <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / ACCOUNT" data-cs="LONGJUMPREPLAY / ÚČET">LONGJUMPREPLAY / ACCOUNT</span></p>
+          <h1 data-en="Your licence, in one place." data-cs="Vaše licence na jednom místě.">Your licence, in one place.</h1>
+          <p class="hero-lede" data-en="Sign in with the email address used at checkout. We will send a one-time code; no password is needed." data-cs="Přihlaste se e-mailovou adresou použitou při nákupu. Pošleme vám jednorázový kód; heslo není potřeba.">Sign in with the email address used at checkout. We will send a one-time code; no password is needed.</p>
+          <div class="account-trust-list" aria-label="Account benefits">
+            <span data-en="Licence status" data-cs="Stav licence">Licence status</span>
+            <span data-en="Activated computers" data-cs="Aktivované počítače">Activated computers</span>
+            <span data-en="Payment history" data-cs="Historie plateb">Payment history</span>
+          </div>
+        </div>
+        <div class="account-panel">
+          <form id="login-form" novalidate>
+            <label for="email" data-en="Purchase email" data-cs="E-mail z nákupu">Purchase email</label>
+            <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+            <div id="code-field" hidden>
+              <label for="code" data-en="One-time code" data-cs="Jednorázový kód">One-time code</label>
+              <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
+            </div>
+            <button class="button button-primary button-full" id="login-submit" type="submit" data-en="Email me a code" data-cs="Poslat kód e-mailem">Email me a code</button>
+          </form>
+          <p id="login-status" class="status" role="status" aria-live="polite"></p>
+          <p id="login-help" class="form-note" data-en="Anyone can sign in with an email address. Purchases made with the same address appear here automatically." data-cs="Přihlásit se může kdokoli pomocí e-mailové adresy. Nákupy provedené se stejnou adresou se zde zobrazí automaticky.">Anyone can sign in with an email address. Purchases made with the same address appear here automatically.</p>
+          <p class="support-note"><span data-en="Need help?" data-cs="Potřebujete pomoc?">Need help?</span> <a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="account-view" class="account-view content-section" hidden>
+      <div class="account-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / ACCOUNT" data-cs="LONGJUMPREPLAY / ÚČET">LONGJUMPREPLAY / ACCOUNT</span></p>
+          <h1 data-en="Account overview." data-cs="Přehled účtu.">Account overview.</h1>
+          <p id="customer-email" class="muted"></p>
+        </div>
+        <button id="billing-button" class="button button-primary" type="button" data-en="Manage billing" data-cs="Spravovat platby">Manage billing</button>
+      </div>
+      <p id="account-status" class="status" role="status" aria-live="polite"></p>
+      <section id="no-licence-state" class="no-licence-state" hidden>
+        <p class="eyebrow" data-en="NO LICENCE YET" data-cs="ZATÍM BEZ LICENCE">NO LICENCE YET</p>
+        <h2 data-en="No licence purchased for this account." data-cs="Pro tento účet zatím nebyla zakoupena licence.">No licence purchased for this account.</h2>
+        <p data-en="Buy LongJumpReplay with this email address and the licence will appear here automatically after payment." data-cs="Kupte LongJumpReplay s touto e-mailovou adresou a licence se zde po zaplacení zobrazí automaticky.">Buy LongJumpReplay with this email address and the licence will appear here automatically after payment.</p>
+        <a class="button button-primary" href="https://tomaspisar.cz/software/longjumpreplay/#buy" data-en="Buy a licence ↗" data-cs="Koupit licenci ↗">Buy a licence ↗</a>
+      </section>
+      <div id="licence-cards" class="card-grid account-card-grid"></div>
+      <section class="account-section licensed-only">
+        <div class="section-heading-row"><div><p class="eyebrow" data-en="DEVICES" data-cs="ZAŘÍZENÍ">DEVICES</p><h2 data-en="Activated computers." data-cs="Aktivované počítače.">Activated computers.</h2></div><span id="device-count" class="count-badge"></span></div>
+        <div id="devices" class="table-card"></div>
+      </section>
+      <section class="account-section licensed-only">
+        <div class="section-heading-row"><div><p class="eyebrow" data-en="BILLING" data-cs="PLATBY">BILLING</p><h2 data-en="Payment history." data-cs="Historie plateb.">Payment history.</h2></div></div>
+        <div id="invoices" class="table-card"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><a href="https://tomaspisar.cz/privacy/" data-en="Privacy" data-cs="Soukromí">Privacy</a><a href="mailto:info@tomaspisar.cz" data-en="Support" data-cs="Podpora">Support</a></footer>
+  <script src="https://tomaspisar.cz/site.config.js"></script>
+  <script src="https://tomaspisar.cz/script.js"></script>
+  <script src="account.js"></script>
+</body>
+</html>

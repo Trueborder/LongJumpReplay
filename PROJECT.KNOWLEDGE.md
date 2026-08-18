@@ -1,5 +1,35 @@
 # Long Jump Replay — Project Knowledge
 
+## Email licensing and customer portal (2026-08-18)
+
+- The authoritative licensing implementation is under `licensing-api/`. The
+  production Worker is live at `https://api.tomaspisar.cz`; its live Stripe
+  webhook is `/api/stripe/webhook`, and the account portal is served at
+  `https://account.tomaspisar.cz/`.
+- Production D1 is `longjumpreplay-licenses` (`afd54a54-bccb-494c-ac6d-377b00652c40`).
+  Staging has a separate D1 database, `longjumpreplay-licenses-staging`
+  (`6e80c8e7-b1da-4f60-9f76-bb3a0505d748`), configured for
+  `api-staging.tomaspisar.cz` but awaiting separate test-mode secrets and
+  prices before deployment.
+- The customer flow is Stripe purchase -> webhook licence creation -> email
+  OTP activation -> device-bound signed authorization. Anyone can sign in to
+  the portal by email OTP before purchasing; an unlicensed account sees a buy
+  prompt, and a later purchase with the same normalized email appears
+  automatically. Portal codes are separate from activation codes. The portal
+  uses an HttpOnly session cookie, lists licence/devices/invoices, supports
+  device deactivation, and opens Stripe Customer Portal.
+- Commercial rules are fixed: maximum two devices; lifetime entitlement never
+  expires; both lifetime and subscription authorizations refresh every 30 days;
+  the app can work offline for 30 days; subscriptions receive seven days of
+  grace after the paid period.
+- Version 3.2 embeds the production public signing modulus and adds a Licence
+  & account panel in Settings linking to the portal. Do not print or commit the
+  private signing key, webhook key, Stripe secret, Resend key, or pepper.
+- The production API/assets deployment has been smoke-tested, but a complete
+  purchase-to-email-to-activation rehearsal still belongs on isolated Stripe
+  test mode. A working Python 3.12 x64 environment is required before the
+  desktop EXE can be rebuilt and release-validated.
+
 ## Specialized adjudication architecture (2026-08-13)
 
 - LongJumpReplay is a board-video adjudication appliance, not a replacement for AK2 or a complete athletics office. The primary workflow remains Capture -> Freeze -> frame inspection -> Valid/Foul/Review -> evidence -> next athlete; rankings, qualification/final administration, and official publishing are secondary and must stay modular.
@@ -88,7 +118,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 3.1
+- **Current source version:** 3.2
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk
@@ -605,9 +635,7 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 
 ### MSI sales distribution
 
-- `BUILD_CUSTOMER_RELEASE.bat` is the primary complete customer-release entry point. It runs tests and source/frozen self-tests before replacing the exact `release` directory, then creates the 3.1 setup EXE and checksums, customer documentation, and a deployable `release\website` containing the same installer. The capture-refill GUI timing test runs in its own fresh pytest process while every other test runs together; no test is skipped. Because the setup EXE requests administrator rights before processing arguments, unattended verification inspects its PyInstaller archive for the tested `payload\LongJumpReplay.exe` instead of launching the setup and triggering UAC. The loose application payload, private signing key, and owner-only license generator must remain outside that folder. Pass `--no-pause` for automation.
-- The public sales website distributes the self-contained `LongJumpReplay-Setup-3.1.exe`, not the loose EXE or portable ZIP.
-- The public sales website now distributes `LongJumpReplay-Setup-3.1.exe`, a self-contained administrator-elevated installer. The MSI remains an optional authoring path, not the public download.
+- `BUILD_RELEASE.bat` is the supported 3.2 portable release entry point. It runs source and GUI tests plus source/frozen self-tests before refreshing the exact `release` directory. The public sales installer path remains a separate packaging/deployment concern; do not distribute the loose private signing key or owner-only tools.
 - The MSI is a per-machine WiX package installed under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
 - Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
@@ -630,7 +658,7 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 ### Portable release
 
 - `scripts/build/BUILD_PORTABLE.bat`
-- output: `release\LongJumpReplay-3.1-Windows-x64.zip`
+- output: `release\LongJumpReplay-3.2-Windows-x64.zip`
 
 ### Single EXE
 
@@ -761,7 +789,7 @@ Highest-value future work, in rough order:
 
 - `BUILD_CUSTOMER_RELEASE.bat` is the one-click customer release command and the only entry point intended to assemble the complete public `release` folder. Existing content in that exact folder is replaced only after source checks and installer assembly succeed.
 - `scripts/build/BUILD_RELEASE.bat` invokes `scripts/build/BUILD_PORTABLE.bat --folder-only`, validates the tested payload, and adds `LICENSE.txt`. Its only distributable output is the loose `release/LongJumpReplay` application folder; it must not create `ProductFinal`, a ZIP, or a checksum sidecar. Pass `--no-pause` for automation.
-- `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates `release\LongJumpReplay-3.1.exe`, and writes its SHA-256 sidecar.
+- `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates the current release executable, and writes its SHA-256 sidecar.
 - The loose `release/LongJumpReplay` payload includes `LongJumpReplay.exe`, the complete `_internal` runtime tree, `README.txt`, `LICENSE.txt`, and the frozen self-test report.
 - The payload can be copied beneath `C:\Program Files\LongJumpReplay`, but the application still uses `%LOCALAPPDATA%\LongJumpReplay` for writable per-user configuration, license data, cache, exports/evidence, runtime logs, and crash logs. Program Files is therefore not the only storage location; do not remove the AppData directory after installation.
 

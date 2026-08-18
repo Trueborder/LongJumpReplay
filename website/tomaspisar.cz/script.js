@@ -56,20 +56,19 @@
       if (value !== null) return value;
     }
     if (name in memoryPrefs) return memoryPrefs[name];
-    // Anything a previous visit left in localStorage still counts as a stored
-    // preference, so an existing visitor's theme is not reset by this change.
-    try { return localStorage.getItem(name); } catch (e) { return null; }
+    // A declined preference must remain session-only. Do not fall back to
+    // browser storage: it would silently persist an optional preference after
+    // the visitor has declined it.
+    return null;
   };
   const writePref = (name, value) => {
     memoryPrefs[name] = value;
     if (consent !== 'accepted') return;
     writeCookie(name, value, PREF_MAX_AGE);
-    try { localStorage.setItem(name, value); } catch (e) { /* private mode */ }
   };
   const forgetPrefs = () => {
     ['site-theme', 'site-language'].forEach((name) => {
       deleteCookie(name);
-      try { localStorage.removeItem(name); } catch (e) { /* private mode */ }
     });
   };
 
@@ -91,12 +90,12 @@
 
   const ui = {
     en: {
-      skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact',
+      skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact', account: 'Account',
       theme: 'Switch theme', menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
       footer: 'Independent software development from the Czech Republic.'
     },
     cs: {
-      skip: 'Přejít na obsah', software: 'Software', downloads: 'Stažení', about: 'O mně', contact: 'Kontakt',
+      skip: 'Přejít na obsah', software: 'Software', downloads: 'Stažení', about: 'O mně', contact: 'Kontakt', account: 'Účet',
       theme: 'Přepnout motiv', menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
       footer: 'Nezávislý vývoj softwaru z České republiky.'
     }
@@ -309,7 +308,7 @@
      a choice is made, so there is no reason to hold the visitor hostage. */
   const CONSENT_COPY = {
     en: {
-      text: 'This site uses cookies only to remember your theme and language. No analytics, no advertising, no third parties.',
+      text: 'This site uses cookies only to remember your theme and language. No analytics or advertising cookies.',
       accept: 'Accept',
       decline: 'Decline',
       more: 'Privacy',

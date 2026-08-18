@@ -14,16 +14,20 @@ export interface Mailer {
   send(to: string, subject: string, text: string): Promise<void>;
 }
 
-function body(code: string, ttlMinutes: number): string {
+function body(code: string, ttlMinutes: number, purpose: "activation" | "portal"): string {
+  const heading = purpose === "portal" ? "LongJumpReplay customer portal" : "LongJumpReplay activation";
+  const destination = purpose === "portal"
+    ? "the LongJumpReplay customer portal"
+    : "the LongJumpReplay activation window";
   return [
-    "LongJumpReplay activation",
+    heading,
     "",
     `Your verification code is: ${code}`,
     "",
     `The code is valid for ${ttlMinutes} minutes and can be used once.`,
     "",
     "You are receiving this because someone entered this email address in the",
-    "LongJumpReplay activation window. If that was not you, no action is needed",
+    `${destination}. If that was not you, no action is needed`,
     "and nothing has been activated.",
     "",
     "Never share this code. It is only ever typed into the LongJumpReplay",
@@ -84,6 +88,10 @@ export async function sendVerificationCode(
   to: string,
   code: string,
   ttlMinutes: number,
+  purpose: "activation" | "portal" = "activation",
 ): Promise<void> {
-  await mailer(env).send(to, "Your LongJumpReplay verification code", body(code, ttlMinutes));
+  const subject = purpose === "portal"
+    ? "Your LongJumpReplay customer portal code"
+    : "Your LongJumpReplay verification code";
+  await mailer(env).send(to, subject, body(code, ttlMinutes, purpose));
 }

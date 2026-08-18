@@ -1,26 +1,24 @@
 # Website licensing copy and backend integration
 
-## Status: the website describes a system that is not built
+## Status: the licensing system is deployed
 
 `website/tomaspisar.cz` describes email-based activation, a two-computer device
 limit, periodic online verification, a 30-day offline grace period, and a
-12-month updates and support period. **None of this is implemented.** As of the
-current release:
+12-month updates and support period. The activation, device and verification
+claims are now implemented by the deployed Worker and 3.2 desktop client:
 
-| Website says | Application actually does |
+| Website says | Current implementation |
 | --- | --- |
-| Email-based activation, verification code | Paste an `LJR2…` key. `src/licensing.py` never asks for, sends or validates an email |
-| Up to 2 activated computers | Exactly 1. No seat count or activation registry exists |
-| Periodic online verification | `src/licensing.py` imports no networking. Verified once, at startup, offline |
-| Offline for up to 30 days | No online check exists, so offline use is unlimited |
-| Updates and support for 12 months | Nothing records when a customer bought |
-| Deactivate a computer, activate another | No deactivation exists. Moving machines means a new key issued by hand |
-| License status Active/Inactive/Expired/Suspended | No status field exists. An issued key cannot be revoked |
+| Email-based activation, verification code | Worker OTP flow creates a one-use activation grant |
+| Up to 2 activated computers | D1 device registry enforces two active seats |
+| Periodic online verification | The client refreshes a signed authorization every 30 days |
+| Offline for up to 30 days | The client works offline until its authorization expires |
+| Deactivate a computer, activate another | Desktop activation and the customer portal can deactivate a device |
+| License status Active/Inactive/Expired/Suspended | Stripe webhooks synchronize status and verification honours it |
+| Updates and support for 12 months | Still a release/support policy, not a D1 entitlement field |
 
-A buyer paying today receives a manually issued key locked to one computer,
-which works offline forever. Close this gap before the copy is deployed, or
-treat the deployed site as a description of the intended product rather than
-the shipped one.
+A full Stripe test-mode purchase rehearsal remains a release validation gate;
+the production endpoint and live webhook are already deployed.
 
 ## Where the numbers live
 
@@ -58,45 +56,44 @@ LongJumpReplay -> Cloudflare Worker API -> license verification
                                         -> local/offline authorization
 ```
 
-Nothing in this repo implements the Worker or D1. `license_service/` is a
-different design: a WSGI service that signs a machine-bound key after a Stripe
-`checkout.session.completed` webhook and emails it. It has no device registry,
-no email verification, no status field and no deactivation, so it does not
-satisfy the model the website describes.
+`licensing-api/` implements the Worker/D1 design. `license_service/` is a
+different, legacy WSGI service that signs a machine-bound key after a Stripe
+`checkout.session.completed` webhook and emails it; it is not used by the new
+purchase or activation flow.
 
 ## Where the frontend would connect
 
-The website is static and calls no API today, which is deliberate — no fake
-endpoints were added. When the backend exists:
+The marketing website remains static. The separate customer portal at
+`account.tomaspisar.cz` lets any email address authenticate by OTP. Before a
+purchase it shows an empty account with a purchase link; a licence bought with
+the same normalized address appears automatically:
 
 - **Purchase**: unchanged. Stripe already collects the email address the
   licence is created against. Point the webhook at the Worker.
-- **Activation, verification, device add/remove**: these happen in the desktop
-  application, not on the website. The site only explains them.
-- **Device management page**: no UI exists and none was stubbed. `/licensing/`
-  currently tells customers to email for a slot to be freed. If a self-service
-  page is built, replace that sentence and link to it from `#devices`.
+- **Activation and periodic verification**: these happen in the desktop
+  application.
+- **Account management**: the portal lists licence status, invoices and
+  activated computers, can deactivate a device, and opens Stripe Customer
+  Portal for billing management.
 
-## What the application needs before the copy is true
+## Implemented application contract
 
-1. Email verification: request a code for a purchased address, and verify it.
-2. A device registry keyed by licence, enforcing `deviceLimit`, with an
-   explicit deactivate.
-3. A periodic verification call that refreshes a signed local authorization,
-   plus expiry of that authorization after `offlineGraceDays`, with a clear
-   in-app prompt rather than a silent failure.
-4. A licence status the server can set, and that the app honours.
-5. An updates entitlement recorded per customer, if the 12-month claim is to
-   mean anything technically rather than as a goodwill promise.
-
-Until 1–3 exist, the app cannot behave as described no matter what the backend
-does, because `src/licensing.py` has no network path at all.
+1. Email verification creates a one-use activation grant.
+2. The Worker enforces the two-device registry and supports deactivation.
+3. The desktop refreshes a signed authorization periodically and fails clearly
+   when its 30-day offline window is exhausted.
+4. Server licence status and subscription grace are enforced at refresh time.
+5. The customer portal provides billing and device self-service; update
+   entitlement remains a separate release-policy decision.
 
 ## Also outstanding
 
-There is still no Terms of Service or refund policy on the site, while it takes
-live card payments from EU consumers. Missing: seller identification (name,
-address, IČO, VAT status), delivery timing, the 14-day right of withdrawal, and
-the ČOI as the out-of-court dispute body. `privacy/index.html` now describes
-server-side storage of email addresses and device activations, which is a
-processing description that should be reviewed once the backend is real.
+The technical licensing flow is now implemented: Stripe creates the licence,
+the customer activates by email, and `account.tomaspisar.cz` provides OTP
+login, device management, invoices and Stripe billing management. The legal
+release gate remains separate: publishable Terms, seller identification
+(name, address, IČO, VAT status), delivery timing, the 14-day withdrawal and
+refund information, and the ČOI out-of-court dispute body must be supplied and
+reviewed before treating the public checkout as legally complete.
+`privacy/index.html` describes server-side storage of email addresses and
+device activations and should receive the same final review.
