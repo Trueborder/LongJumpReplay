@@ -24,6 +24,12 @@
   unless a subscription or lifetime licence exists at that point. A customer
   can therefore request a code before checkout and complete activation after
   checkout without weakening the device or plan checks.
+- The desktop code-entry step has explicit Back and Activate controls; Back
+  clears the pending code and returns focus to the email field without closing
+  the activation dialog. Dashboard device cards show the local activation time
+  as well as the date. Transactional verification emails ship as branded HTML
+  plus plain text, with cyan `APP ACTIVATION` and amber
+  `CUSTOMER PORTAL LOGIN` purpose labels so the requested action is obvious.
 - The portal has separate canonical routes: `/login` for passwordless email
   sign-in and `/dashboard` for the authenticated account. The Worker redirects
   `/` according to session state, prevents authenticated users returning to the

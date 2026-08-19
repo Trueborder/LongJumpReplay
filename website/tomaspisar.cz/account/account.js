@@ -37,6 +37,7 @@
   const t = (key) => copy[state.lang][key] || copy.en[key] || key;
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
   const formatDate = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium' }).format(new Date(seconds * 1000)) : '—';
+  const formatDateTime = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(seconds * 1000)) : '—';
   const formatMoney = (amount, currency) => typeof amount === 'number' ? new Intl.NumberFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: (currency || 'czk').toUpperCase() }).format(amount / 100) : '—';
   const setStatus = (message, selector = '#account-status') => { const element = $(selector); if (element) element.textContent = message || ''; };
   const api = async (path, options = {}) => {
@@ -115,7 +116,7 @@
       return `<article class="device-card">
         <div class="device-icon" aria-hidden="true">▰</div>
         <div><div class="device-heading"><h3>${escapeHtml(device.device_name || 'LongJumpReplay computer')}</h3><span class="badge ${active ? '' : 'warn'}">${active ? t('statusActive') : t('statusDeactivated')}</span></div>
-        <p>${t('activated')}: <strong>${formatDate(device.activated_at)}</strong> · ${t('lastSync')}: <strong>${formatDate(device.last_verified_at)}</strong></p>
+        <p>${t('activated')}: <strong>${formatDateTime(device.activated_at)}</strong> · ${t('lastSync')}: <strong>${formatDate(device.last_verified_at)}</strong></p>
         ${nextCheck ? `<p>${state.lang === 'cs' ? 'Online ověření do' : 'Online verification by'} <strong>${formatDate(nextCheck)}</strong></p>` : ''}</div>
         ${active ? `<button class="small-button" type="button" data-deactivate="${escapeHtml(device.id)}">${t('deactivate')}</button>` : ''}
       </article>`;

@@ -305,6 +305,8 @@ def ensure_license_or_trial(
     code_var = tk.StringVar()
     code_entry = ttk.Entry(code_frame, textvariable=code_var, width=16)
     code_entry.pack(anchor="w", pady=(4, 4))
+    code_actions = ttk.Frame(code_frame)
+    code_actions.pack(fill="x", pady=(8, 0))
 
     status_label = ttk.Label(body, text="", wraplength=560, justify="left")
     status_label.pack(anchor="w", pady=(10, 12))
@@ -328,9 +330,17 @@ def ensure_license_or_trial(
             status_label.configure(text=message)
             return
         code_frame.pack(anchor="w", fill="x", before=status_label)
-        send_button.configure(text=copy["activate"], command=do_activate)
+        send_button.pack_forget()
         code_entry.focus_set()
         status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
+
+    def back_to_email() -> None:
+        code_var.set("")
+        code_frame.pack_forget()
+        status_label.configure(text="")
+        if not send_button.winfo_manager():
+            send_button.pack(side="right", padx=(0, 8))
+        email_entry.focus_set()
 
     def do_activate() -> None:
         nonlocal accepted
@@ -412,13 +422,17 @@ def ensure_license_or_trial(
     def cancel() -> None:
         dialog.destroy()
 
+    ttk.Button(code_actions, text=copy["back"], command=back_to_email).pack(side="left")
+    ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Accent.TButton").pack(side="right")
+
     ttk.Button(buttons, text=copy["cancel"], command=cancel).pack(side="right")
     if status.active:
         ttk.Button(buttons, text=copy["continue"], command=continue_trial).pack(side="right", padx=(0, 8))
     else:
         ttk.Button(buttons, text=copy["start"], command=begin_trial).pack(side="right", padx=(0, 8))
-    # The primary action is email activation; the button becomes "Activate this
-    # computer" once a code has been sent.
+    # The email step owns the Send action. Once the code arrives, the code
+    # section exposes explicit Back and Activate controls instead of silently
+    # repurposing the button at the bottom of the dialog.
     send_button = ttk.Button(buttons, text=copy["send"], command=send_code, style="Accent.TButton")
     send_button.pack(side="right", padx=(0, 8))
     ttk.Button(buttons, text=copy["legacy"], command=show_legacy).pack(side="left")

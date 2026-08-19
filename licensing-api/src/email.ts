@@ -11,15 +11,32 @@
 import type { Env } from "./config";
 
 export interface Mailer {
-  send(to: string, subject: string, text: string): Promise<void>;
+  send(to: string, message: VerificationEmail): Promise<void>;
 }
 
-function body(code: string, ttlMinutes: number, purpose: "activation" | "portal"): string {
-  const heading = purpose === "portal" ? "LongJumpReplay customer portal" : "LongJumpReplay activation";
+export interface VerificationEmail {
+  subject: string;
+  text: string;
+  html: string;
+}
+
+export function verificationEmail(
+  code: string,
+  ttlMinutes: number,
+  purpose: "activation" | "portal",
+): VerificationEmail {
+  const portal = purpose === "portal";
+  const purposeLabel = portal ? "CUSTOMER PORTAL LOGIN" : "APP ACTIVATION";
+  const heading = portal ? "Sign in to your account" : "Activate LongJumpReplay";
+  const subject = portal
+    ? "[LongJumpReplay] Customer portal login code"
+    : "[LongJumpReplay] App activation code";
+  const accent = portal ? "#F3B84B" : "#62D7C9";
   const destination = purpose === "portal"
     ? "the LongJumpReplay customer portal"
     : "the LongJumpReplay activation window";
-  return [
+  const text = [
+    `LONGJUMPREPLAY — ${purposeLabel}`,
     heading,
     "",
     `Your verification code is: ${code}`,
@@ -36,6 +53,35 @@ function body(code: string, ttlMinutes: number, purpose: "activation" | "portal"
     "Tomas Pisar",
     "https://tomaspisar.cz",
   ].join("\n");
+
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${subject}</title></head>
+<body style="margin:0;padding:0;background:#081012;color:#F4F1EA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#081012;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#111B1F;border:1px solid #2B3A40;border-radius:20px;overflow:hidden;">
+        <tr><td style="height:5px;background:${accent};font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr><td style="padding:34px 34px 18px;">
+          <div style="font:700 12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:1.5px;color:${accent};">${purposeLabel}</div>
+          <h1 style="margin:13px 0 10px;font-size:30px;line-height:1.12;letter-spacing:-0.6px;color:#F4F1EA;">${heading}</h1>
+          <p style="margin:0;color:#AAB7BC;font-size:16px;line-height:1.6;">Enter this one-time code in ${destination}.</p>
+        </td></tr>
+        <tr><td style="padding:8px 34px 24px;">
+          <div style="background:#081012;border:1px solid ${accent};border-radius:14px;padding:22px;text-align:center;">
+            <div style="margin-bottom:8px;font:700 11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:1.4px;color:#7F9097;">VERIFICATION CODE</div>
+            <div style="font:800 36px/1.15 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:8px;color:${accent};">${code}</div>
+          </div>
+        </td></tr>
+        <tr><td style="padding:0 34px 34px;">
+          <p style="margin:0 0 14px;color:#D4DCDF;font-size:15px;line-height:1.6;">The code is valid for <strong>${ttlMinutes} minutes</strong> and can be used once.</p>
+          <p style="margin:0 0 22px;color:#89999F;font-size:13px;line-height:1.6;">If you did not request this code, no action is needed. Nothing has been activated or signed in.</p>
+          <div style="padding-top:18px;border-top:1px solid #2B3A40;color:#89999F;font-size:12px;line-height:1.6;">Never share this code. Type it only into LongJumpReplay or account.tomaspisar.cz.<br><strong style="color:#D4DCDF;">Tomáš Pisár</strong> · tomaspisar.cz</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+  return { subject, text, html };
 }
 
 /**
@@ -44,7 +90,7 @@ function body(code: string, ttlMinutes: number, purpose: "activation" | "portal"
  */
 function resendMailer(env: Env): Mailer {
   return {
-    async send(to, subject, text) {
+    async send(to, message) {
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -54,8 +100,9 @@ function resendMailer(env: Env): Mailer {
         body: JSON.stringify({
           from: `${env.MAIL_FROM_NAME} <${env.MAIL_FROM}>`,
           to: [to],
-          subject,
-          text,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
         }),
       });
       if (!response.ok) {
@@ -90,8 +137,5 @@ export async function sendVerificationCode(
   ttlMinutes: number,
   purpose: "activation" | "portal" = "activation",
 ): Promise<void> {
-  const subject = purpose === "portal"
-    ? "Your LongJumpReplay customer portal code"
-    : "Your LongJumpReplay verification code";
-  await mailer(env).send(to, subject, body(code, ttlMinutes, purpose));
+  await mailer(env).send(to, verificationEmail(code, ttlMinutes, purpose));
 }

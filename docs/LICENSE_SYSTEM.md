@@ -117,6 +117,10 @@ have an active licence. That allows the desktop flow to verify the address and
 give an accurate no-licence result instead of claiming that an undelivered code
 was sent. An email-only activation code is scoped separately from portal login
 codes and cannot activate a device unless a licence exists when it is verified.
+Verification mail includes both a styled HTML body and a plain-text fallback.
+App activation uses the cyan Evidence Desk accent and an `APP ACTIVATION`
+heading; portal login uses amber and `CUSTOMER PORTAL LOGIN`. The purpose also
+appears in the subject line so it remains clear when HTML is unavailable.
 `{email}` -> `{sent: true, expires_in_minutes}`.
 Always the same response whether or not a licence exists, so the endpoint cannot
 be used to discover who has bought the software.
