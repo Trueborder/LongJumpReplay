@@ -63,8 +63,9 @@ purchase or activation flow.
 
 ## Where the frontend would connect
 
-The marketing website remains static. The separate customer portal at
-`account.tomaspisar.cz` lets any email address authenticate by OTP. Before a
+The marketing website remains static. The separate customer portal uses
+`account.tomaspisar.cz/login` for OTP authentication and
+`account.tomaspisar.cz/dashboard` for account management. Before a
 purchase it shows an empty account with a purchase link; a licence bought with
 the same normalized address appears automatically:
 
@@ -80,8 +81,9 @@ the same normalized address appears automatically:
 
 1. Email verification creates a one-use activation grant.
 2. The Worker enforces the two-device registry and supports deactivation.
-3. The desktop refreshes a signed authorization periodically and fails clearly
-   when its 30-day offline window is exhausted.
+3. The frozen desktop app checks the device and plan at every startup, refreshes
+   its signed authorization when online, and fails clearly when its 30-day
+   offline window is exhausted.
 4. Server licence status and subscription grace are enforced at refresh time.
 5. The customer portal provides billing and device self-service; update
    entitlement remains a separate release-policy decision.

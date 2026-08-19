@@ -17,11 +17,12 @@ import platform
 import sys
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .authorization import (
+    clear_authorization,
     load_authorization,
     save_authorization,
     should_refresh,
@@ -29,7 +30,9 @@ from .authorization import (
 )
 
 API_BASE = os.environ.get("LJR_LICENSE_API_URL", "https://api.tomaspisar.cz").rstrip("/")
+PORTAL_LOGIN_URL = os.environ.get("LJR_ACCOUNT_PORTAL_URL", "https://account.tomaspisar.cz/login")
 REQUEST_TIMEOUT = 15
+EXPLICIT_REJECTION_CODES = {"no_license", "device_not_active", "license_inactive"}
 
 
 def _windows_machine_guid() -> str | None:
@@ -159,6 +162,17 @@ class ActivationResult:
     authorization: str
 
 
+@dataclass(frozen=True)
+class StartupAuthorizationCheck:
+    state: Literal["verified", "cached", "missing", "rejected"]
+    reason: str
+    payload: dict[str, object] | None
+
+    @property
+    def allowed(self) -> bool:
+        return self.state in {"verified", "cached"}
+
+
 def activate(grant: str, opener: Callable[..., Any] = urlopen) -> ActivationResult:
     """Activate this computer and store the returned authorization."""
     data = _post(
@@ -214,6 +228,35 @@ def current_authorization() -> tuple[bool, str, dict[str, object] | None]:
     if not token:
         return False, "authorization.missing", None
     return verify_authorization(token, device_id())
+
+
+def check_startup_authorization(
+    opener: Callable[..., Any] = urlopen,
+) -> StartupAuthorizationCheck:
+    """Validate online every launch while retaining the signed offline window."""
+    valid, reason, payload = current_authorization()
+    if not valid or not payload:
+        state: Literal["missing", "rejected"] = "missing" if reason == "authorization.missing" else "rejected"
+        return StartupAuthorizationCheck(state, reason, payload)
+
+    license_id = payload.get("license_id")
+    if not isinstance(license_id, str) or not license_id:
+        clear_authorization()
+        return StartupAuthorizationCheck("rejected", "authorization.invalid_format", payload)
+
+    try:
+        refreshed = refresh(license_id, opener)
+    except ActivationError as error:
+        if error.code in EXPLICIT_REJECTION_CODES:
+            clear_authorization()
+            return StartupAuthorizationCheck("rejected", error.code, payload)
+        return StartupAuthorizationCheck("cached", error.code, payload)
+
+    if refreshed:
+        refreshed_valid, refreshed_reason, refreshed_payload = current_authorization()
+        if refreshed_valid and refreshed_payload:
+            return StartupAuthorizationCheck("verified", refreshed_reason, refreshed_payload)
+    return StartupAuthorizationCheck("cached", "authorization.refresh_failed", payload)
 
 
 def refresh_if_due(opener: Callable[..., Any] = urlopen) -> None:

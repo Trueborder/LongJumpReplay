@@ -195,3 +195,60 @@ def test_refresh_if_due_does_nothing_when_not_due(monkeypatch):
     monkeypatch.setattr(activation, "refresh", lambda *a, **k: called.append(1))
     activation.refresh_if_due()
     assert called == []
+
+
+def test_startup_check_verifies_online_on_every_launch(monkeypatch):
+    payload = {"license_id": "lic_1", "issued_at": 1, "expires_at": 10**12}
+    calls: list[str] = []
+    monkeypatch.setattr(activation, "current_authorization", lambda: (True, "authorization.accepted", payload))
+    monkeypatch.setattr(activation, "refresh", lambda license_id, opener: calls.append(license_id) or True)
+
+    result = activation.check_startup_authorization(opener=object())
+
+    assert result.state == "verified"
+    assert result.allowed
+    assert calls == ["lic_1"]
+
+
+def test_startup_check_uses_valid_signed_authorization_when_offline(monkeypatch):
+    payload = {"license_id": "lic_1", "issued_at": 1, "expires_at": 10**12}
+    monkeypatch.setattr(activation, "current_authorization", lambda: (True, "authorization.accepted", payload))
+
+    def offline(*_args, **_kwargs):
+        raise ActivationError("offline", "offline")
+
+    monkeypatch.setattr(activation, "refresh", offline)
+    result = activation.check_startup_authorization()
+    assert result.state == "cached"
+    assert result.allowed
+
+
+@pytest.mark.parametrize("code", ["no_license", "device_not_active", "license_inactive"])
+def test_startup_check_blocks_explicit_server_rejection(monkeypatch, code):
+    payload = {"license_id": "lic_1", "issued_at": 1, "expires_at": 10**12}
+    cleared: list[bool] = []
+    monkeypatch.setattr(activation, "current_authorization", lambda: (True, "authorization.accepted", payload))
+    monkeypatch.setattr(activation, "clear_authorization", lambda: cleared.append(True))
+
+    def rejected(*_args, **_kwargs):
+        raise ActivationError("rejected", code)
+
+    monkeypatch.setattr(activation, "refresh", rejected)
+    result = activation.check_startup_authorization()
+    assert result.state == "rejected"
+    assert not result.allowed
+    assert cleared == [True]
+
+
+def test_startup_check_does_not_contact_server_without_authorization(monkeypatch):
+    calls: list[bool] = []
+    monkeypatch.setattr(activation, "current_authorization", lambda: (False, "authorization.missing", None))
+    monkeypatch.setattr(activation, "refresh", lambda *_args, **_kwargs: calls.append(True))
+    result = activation.check_startup_authorization()
+    assert result.state == "missing"
+    assert not result.allowed
+    assert calls == []
+
+
+def test_customer_portal_url_opens_the_dedicated_login_route():
+    assert activation.PORTAL_LOGIN_URL == "https://account.tomaspisar.cz/login"

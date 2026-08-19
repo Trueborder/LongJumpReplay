@@ -251,7 +251,11 @@ def _trial_copy(language: str) -> dict[str, str]:
     }
 
 
-def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
+def ensure_license_or_trial(
+    root: tk.Tk,
+    language: str,
+    startup_check: object | None = None,
+) -> bool:
     """Show paid activation or the free-trial choice before a frozen launch.
 
     Activation is email-first: the customer enters the address they bought with,
@@ -262,14 +266,10 @@ def ensure_license_or_trial(root: tk.Tk, language: str) -> bool:
     from . import activation as activation_api
     from .authorization import clear_authorization
 
-    # An already-activated computer starts straight away, offline, and quietly
-    # renews when it is past halfway through its authorization window.
-    authorized, _, _ = activation_api.current_authorization()
-    if authorized:
-        try:
-            activation_api.refresh_if_due()
-        except Exception:  # noqa: BLE001 - never block startup on the network
-            pass
+    # Normal startup supplies the visible every-launch check. Direct callers
+    # use the same policy so a valid plan is never skipped silently.
+    check = startup_check or activation_api.check_startup_authorization()
+    if isinstance(check, activation_api.StartupAuthorizationCheck) and check.allowed:
         return True
 
     paid_valid, _, _ = load_saved_license()

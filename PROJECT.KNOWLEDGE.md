@@ -18,6 +18,12 @@
   automatically. Portal codes are separate from activation codes. The portal
   uses an HttpOnly session cookie, lists licence/devices/invoices, supports
   device deactivation, and opens Stripe Customer Portal.
+- The portal has separate canonical routes: `/login` for passwordless email
+  sign-in and `/dashboard` for the authenticated account. The Worker redirects
+  `/` according to session state, prevents authenticated users returning to the
+  login screen, and protects dashboard HTML with no-store responses. Dashboard
+  categories cover overview, plan, computers, billing, downloads, support, and
+  session security; Settings opens the dedicated login route.
 - Commercial rules are fixed: maximum two devices; lifetime entitlement never
   expires; both lifetime and subscription authorizations refresh every 30 days;
   the app can work offline for 30 days; subscriptions receive seven days of
@@ -25,6 +31,13 @@
 - Version 3.2 embeds the production public signing modulus and adds a Licence
   & account panel in Settings linking to the portal. Do not print or commit the
   private signing key, webhook key, Stripe secret, Resend key, or pepper.
+- Every frozen customer launch displays the licence check in the startup splash
+  and asks the API to confirm that the device and plan are active. A successful
+  check refreshes the signed 30-day authorization. Temporary connectivity,
+  rate-limit, or server failures may use a still-valid signed authorization so
+  an offline venue remains usable; explicit inactive-licence, missing-licence,
+  or deactivated-device responses clear it and require activation. Tk updates
+  remain on the main thread while the bounded network check runs in a worker.
 - Website preferences use consent-gated first-party `site-theme` and
   `site-language` cookies; `ljr-consent` remembers accept/decline and every
   footer exposes Cookie settings so the choice can be changed. Portal auth uses

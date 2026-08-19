@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Manage your LongJumpReplay licence, computers and billing.">
+  <meta name="theme-color" content="#0b1013">
+  <meta name="robots" content="noindex">
+  <link rel="canonical" href="https://account.tomaspisar.cz/dashboard">
+  <title>Dashboard — LongJumpReplay account</title>
+  <link rel="icon" type="image/svg+xml" href="https://tomaspisar.cz/assets/favicon.svg">
+  <link rel="stylesheet" href="https://tomaspisar.cz/styles.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/overrides.css">
+  <link rel="stylesheet" href="/account.css">
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
+</head>
+<body class="account-page portal-dashboard-page" data-portal-page="dashboard">
+  <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="https://tomaspisar.cz/"><span class="brand-mark">TP</span><span>Tomáš Pisár<small>Software / Development</small></span></a>
+    <button class="menu-toggle" data-menu-toggle type="button" aria-label="Open menu">☰</button>
+    <nav class="main-nav" aria-label="Primary navigation">
+      <a href="https://tomaspisar.cz/software/" data-ui="software">Software</a>
+      <a href="https://tomaspisar.cz/download/" data-ui="downloads">Downloads</a>
+      <a href="https://tomaspisar.cz/about/" data-ui="about">About</a>
+      <a href="https://tomaspisar.cz/contact/" data-ui="contact">Contact</a>
+      <a href="/dashboard" data-ui="account" data-en="Account" data-cs="Účet" aria-current="page">Account</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-button" data-theme-toggle type="button" aria-label="Switch theme">☼</button>
+      <button class="language-button" data-lang-toggle data-lang-label type="button" aria-label="Switch to Czech">CZ</button>
+      <button class="account-logout-button button button-outline" id="logout-button" type="button" data-en="Sign out" data-cs="Odhlásit">Sign out</button>
+    </div>
+  </header>
+
+  <main id="main" class="account-shell dashboard-shell">
+    <section class="dashboard-hero" aria-labelledby="dashboard-title">
+      <div>
+        <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / CUSTOMER DASHBOARD" data-cs="LONGJUMPREPLAY / ZÁKAZNICKÝ PŘEHLED">LONGJUMPREPLAY / CUSTOMER DASHBOARD</span></p>
+        <h1 id="dashboard-title" data-en="Everything your licence needs." data-cs="Vše, co vaše licence potřebuje.">Everything your licence needs.</h1>
+        <p class="dashboard-email"><span data-en="Signed in as" data-cs="Přihlášeni jako">Signed in as</span> <strong id="customer-email">—</strong></p>
+      </div>
+      <div class="hero-actions dashboard-actions">
+        <a class="button button-primary" href="https://files.tomaspisar.cz/LJR_setup.exe" data-en="Download latest app ↗" data-cs="Stáhnout nejnovější aplikaci ↗">Download latest app ↗</a>
+        <button id="billing-button" class="button button-outline" type="button" data-en="Manage billing" data-cs="Spravovat platby">Manage billing</button>
+      </div>
+    </section>
+
+    <p id="account-status" class="status" role="status" aria-live="polite"></p>
+    <div id="dashboard-loading" class="dashboard-loading" role="status"><span></span><span data-en="Loading your account…" data-cs="Načítám váš účet…">Loading your account…</span></div>
+
+    <div id="dashboard-content" class="dashboard-layout" hidden>
+      <aside class="dashboard-nav" aria-label="Dashboard categories">
+        <p data-en="YOUR ACCOUNT" data-cs="VÁŠ ÚČET">YOUR ACCOUNT</p>
+        <a href="#overview" data-en="Overview" data-cs="Přehled">Overview</a>
+        <a href="#licence" data-en="Licence" data-cs="Licence">Licence</a>
+        <a href="#devices" data-en="Computers" data-cs="Počítače">Computers</a>
+        <a href="#billing" data-en="Billing" data-cs="Platby">Billing</a>
+        <a href="#help" data-en="Help & security" data-cs="Pomoc a zabezpečení">Help & security</a>
+      </aside>
+
+      <div class="dashboard-sections">
+        <section id="overview" class="dashboard-section" aria-labelledby="overview-title">
+          <div class="category-heading"><p class="eyebrow" data-en="OVERVIEW" data-cs="PŘEHLED">OVERVIEW</p><h2 id="overview-title" data-en="Account at a glance." data-cs="Účet na první pohled.">Account at a glance.</h2></div>
+          <div class="summary-grid">
+            <article class="summary-card"><span data-en="Licence" data-cs="Licence">Licence</span><strong id="summary-licence">—</strong><small id="summary-licence-note">—</small></article>
+            <article class="summary-card"><span data-en="Computer slots" data-cs="Místa pro počítače">Computer slots</span><strong id="summary-devices">—</strong><small data-en="Active / available" data-cs="Aktivní / dostupná">Active / available</small></article>
+            <article class="summary-card"><span data-en="Plan date" data-cs="Datum plánu">Plan date</span><strong id="summary-plan-date">—</strong><small id="summary-plan-note">—</small></article>
+            <article class="summary-card"><span data-en="Next online check" data-cs="Další online kontrola">Next online check</span><strong id="summary-verification">—</strong><small data-en="Per activated computer" data-cs="Pro každý aktivovaný počítač">Per activated computer</small></article>
+          </div>
+        </section>
+
+        <section id="licence" class="dashboard-section" aria-labelledby="licence-title">
+          <div class="category-heading"><p class="eyebrow" data-en="LICENCE" data-cs="LICENCE">LICENCE</p><h2 id="licence-title" data-en="Plan and access." data-cs="Plán a přístup.">Plan and access.</h2></div>
+          <section id="no-licence-state" class="no-licence-state" hidden>
+            <p class="eyebrow" data-en="NO LICENCE YET" data-cs="ZATÍM BEZ LICENCE">NO LICENCE YET</p>
+            <h3 data-en="No licence purchased for this account." data-cs="Pro tento účet zatím nebyla zakoupena licence.">No licence purchased for this account.</h3>
+            <p data-en="Buy with this email address and the licence will appear here automatically after payment." data-cs="Nakupte s touto e-mailovou adresou a licence se zde po zaplacení zobrazí automaticky.">Buy with this email address and the licence will appear here automatically after payment.</p>
+            <a class="button button-primary" href="https://tomaspisar.cz/software/longjumpreplay/#buy" data-en="Buy a licence ↗" data-cs="Koupit licenci ↗">Buy a licence ↗</a>
+          </section>
+          <div id="licence-cards" class="account-card-grid"></div>
+        </section>
+
+        <section id="devices" class="dashboard-section licensed-only" aria-labelledby="devices-title">
+          <div class="category-heading category-heading-row"><div><p class="eyebrow" data-en="COMPUTERS" data-cs="POČÍTAČE">COMPUTERS</p><h2 id="devices-title" data-en="Activated devices." data-cs="Aktivovaná zařízení.">Activated devices.</h2></div><span id="device-count" class="count-badge"></span></div>
+          <p class="section-note" data-en="Deactivate a computer you no longer use to free a slot for another Windows station." data-cs="Deaktivujte počítač, který už nepoužíváte, a uvolněte místo pro další stanoviště Windows.">Deactivate a computer you no longer use to free a slot for another Windows station.</p>
+          <div id="devices-list" class="device-grid"></div>
+        </section>
+
+        <section id="billing" class="dashboard-section licensed-only" aria-labelledby="billing-title">
+          <div class="category-heading"><p class="eyebrow" data-en="BILLING" data-cs="PLATBY">BILLING</p><h2 id="billing-title" data-en="Payments and invoices." data-cs="Platby a faktury.">Payments and invoices.</h2></div>
+          <div id="invoices" class="table-card"></div>
+        </section>
+
+        <section id="help" class="dashboard-section" aria-labelledby="help-title">
+          <div class="category-heading"><p class="eyebrow" data-en="HELP & SECURITY" data-cs="POMOC A ZABEZPEČENÍ">HELP & SECURITY</p><h2 id="help-title" data-en="Useful next steps." data-cs="Užitečné další kroky.">Useful next steps.</h2></div>
+          <div class="help-grid">
+            <article><span aria-hidden="true">↓</span><h3 data-en="Install the app" data-cs="Nainstalovat aplikaci">Install the app</h3><p data-en="Download the latest Windows installer and activate with this account email." data-cs="Stáhněte nejnovější instalátor pro Windows a aktivujte pomocí e-mailu tohoto účtu.">Download the latest Windows installer and activate with this account email.</p><a href="https://files.tomaspisar.cz/LJR_setup.exe" data-en="Download ↗" data-cs="Stáhnout ↗">Download ↗</a></article>
+            <article><span aria-hidden="true">?</span><h3 data-en="Get support" data-cs="Získat podporu">Get support</h3><p data-en="Ask about activation, transferring a computer, invoices, or event setup." data-cs="Zeptejte se na aktivaci, přesun počítače, faktury nebo nastavení závodu.">Ask about activation, transferring a computer, invoices, or event setup.</p><a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></article>
+            <article><span aria-hidden="true">◇</span><h3 data-en="Account security" data-cs="Zabezpečení účtu">Account security</h3><p><span data-en="Passwordless session valid until" data-cs="Relace bez hesla platná do">Passwordless session valid until</span> <strong id="session-expiry">—</strong>. <span data-en="Signing out revokes it immediately." data-cs="Odhlášení ji okamžitě zneplatní.">Signing out revokes it immediately.</span></p><button id="security-logout-button" class="text-button" type="button" data-en="Sign out on this browser" data-cs="Odhlásit tento prohlížeč">Sign out on this browser</button></article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><a href="https://tomaspisar.cz/privacy/" data-en="Privacy" data-cs="Soukromí">Privacy</a><a href="mailto:info@tomaspisar.cz" data-en="Support" data-cs="Podpora">Support</a></footer>
+  <script src="https://tomaspisar.cz/site.config.js"></script>
+  <script src="https://tomaspisar.cz/script.js"></script>
+  <script src="/account.js"></script>
+</body>
+</html>

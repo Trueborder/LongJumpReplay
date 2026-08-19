@@ -58,6 +58,7 @@ import {
   verifySignature,
 } from "./stripe";
 import type { StripeEvent } from "./stripe";
+import { portalPageRoute } from "./portal-routing";
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
@@ -129,6 +130,35 @@ function portalToken(request: Request): string | null {
     if (name === PORTAL_SESSION_COOKIE) return decodeURIComponent(value.join("="));
   }
   return null;
+}
+
+function portalRedirect(request: Request, location: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      "Cache-Control": "no-store",
+      Location: new URL(location, request.url).toString(),
+    },
+  });
+}
+
+async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  if (!["/", "/login", "/login/", "/dashboard", "/dashboard/"].includes(path)) return null;
+
+  const route = portalPageRoute(path, Boolean(await authenticatedPortal(request, env)));
+  if (!route) return null;
+  if (route.kind === "redirect") return portalRedirect(request, route.location);
+
+  const assetUrl = new URL(route.assetPath, request.url);
+  const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
+  const headers = new Headers(assetResponse.headers);
+  headers.set("Cache-Control", "no-store");
+  return new Response(assetResponse.body, {
+    status: assetResponse.status,
+    statusText: assetResponse.statusText,
+    headers,
+  });
 }
 
 /* ------------------------------------------------------------------ Stripe */
@@ -578,7 +608,7 @@ async function verify(request: Request, env: Env): Promise<Response> {
     if (status === "active" && now() > deadline) status = "expired";
   }
   if (status !== "active") {
-    return json({ valid: false, status, message: "This licence is no longer active." }, 403);
+    return fail("license_inactive", "This licence is no longer active.", 403);
   }
 
   await touchDevice(env.DB, device.id);
@@ -704,7 +734,7 @@ async function portalBilling(request: Request, env: Env): Promise<Response> {
   }
   const url = await stripeApi(env.STRIPE_SECRET_KEY).createBillingPortalSession(
     auth.customer.stripe_customer_id,
-    env.PORTAL_ORIGIN,
+    new URL("/dashboard", env.PORTAL_ORIGIN).toString(),
   );
   await logEvent(env.DB, "billing_portal_opened", null, { customer: auth.customer.id });
   return json({ url });
@@ -742,6 +772,8 @@ export default {
 
     try {
       if (url.hostname === "account.tomaspisar.cz") {
+        const page = await portalPage(request, env, url.pathname);
+        if (page) return page;
         return env.ASSETS.fetch(request);
       }
       if (request.method === "OPTIONS" && path.startsWith("/api/portal/")) {

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Sign in to your LongJumpReplay customer account.">
+  <meta name="theme-color" content="#0b1013">
+  <meta name="robots" content="noindex">
+  <link rel="canonical" href="https://account.tomaspisar.cz/login">
+  <title>Sign in — LongJumpReplay account</title>
+  <link rel="icon" type="image/svg+xml" href="https://tomaspisar.cz/assets/favicon.svg">
+  <link rel="stylesheet" href="https://tomaspisar.cz/styles.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/overrides.css">
+  <link rel="stylesheet" href="/account.css">
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
+</head>
+<body class="account-page portal-login-page" data-portal-page="login">
+  <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="https://tomaspisar.cz/">
+      <span class="brand-mark">TP</span>
+      <span>Tomáš Pisár<small>Software / Development</small></span>
+    </a>
+    <button class="menu-toggle" data-menu-toggle type="button" aria-label="Open menu">☰</button>
+    <nav class="main-nav" aria-label="Primary navigation">
+      <a href="https://tomaspisar.cz/software/" data-ui="software">Software</a>
+      <a href="https://tomaspisar.cz/download/" data-ui="downloads">Downloads</a>
+      <a href="https://tomaspisar.cz/about/" data-ui="about">About</a>
+      <a href="https://tomaspisar.cz/contact/" data-ui="contact">Contact</a>
+      <a href="/login" data-ui="account" data-en="Account" data-cs="Účet" aria-current="page">Account</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-button" data-theme-toggle type="button" aria-label="Switch theme">☼</button>
+      <button class="language-button" data-lang-toggle data-lang-label type="button" aria-label="Switch to Czech">CZ</button>
+    </div>
+  </header>
+
+  <main id="main" class="account-shell">
+    <section class="account-login content-section" aria-labelledby="login-title">
+      <div class="account-login-grid">
+        <div class="account-intro">
+          <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / CUSTOMER ACCOUNT" data-cs="LONGJUMPREPLAY / ZÁKAZNICKÝ ÚČET">LONGJUMPREPLAY / CUSTOMER ACCOUNT</span></p>
+          <h1 id="login-title" data-en="Your licence, ready when you are." data-cs="Vaše licence, kdykoli ji potřebujete.">Your licence, ready when you are.</h1>
+          <p class="hero-lede" data-en="Use your email address and a one-time code. There is no password to remember, and you can sign in even before buying a licence." data-cs="Použijte svou e-mailovou adresu a jednorázový kód. Nemusíte si pamatovat heslo a přihlásit se můžete i před zakoupením licence.">Use your email address and a one-time code. There is no password to remember, and you can sign in even before buying a licence.</p>
+          <div class="login-sequence" aria-label="Sign-in process">
+            <span><b>01</b><span data-en="Enter email" data-cs="Zadejte e-mail">Enter email</span></span>
+            <i aria-hidden="true">→</i>
+            <span><b>02</b><span data-en="Receive code" data-cs="Přijměte kód">Receive code</span></span>
+            <i aria-hidden="true">→</i>
+            <span><b>03</b><span data-en="Open dashboard" data-cs="Otevřete přehled">Open dashboard</span></span>
+          </div>
+        </div>
+
+        <div class="account-panel" aria-labelledby="form-title">
+          <div class="panel-heading">
+            <span class="panel-icon" aria-hidden="true">↳</span>
+            <div><p class="eyebrow" data-en="SECURE SIGN IN" data-cs="BEZPEČNÉ PŘIHLÁŠENÍ">SECURE SIGN IN</p><h2 id="form-title" data-en="Open your account" data-cs="Otevřete svůj účet">Open your account</h2></div>
+          </div>
+          <form id="login-form" novalidate>
+            <label for="email" data-en="Account email" data-cs="E-mail účtu">Account email</label>
+            <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+            <div id="code-field" hidden>
+              <label for="code" data-en="Six-digit code" data-cs="Šestimístný kód">Six-digit code</label>
+              <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
+            </div>
+            <button class="button button-primary button-full" id="login-submit" type="submit" data-en="Email me a code" data-cs="Poslat kód e-mailem">Email me a code</button>
+          </form>
+          <p id="login-status" class="status" role="status" aria-live="polite"></p>
+          <p class="form-note" data-en="Codes expire after 10 minutes. The address does not need to have a purchase yet." data-cs="Platnost kódu je 10 minut. Na této adrese zatím nemusí být žádný nákup.">Codes expire after 10 minutes. The address does not need to have a purchase yet.</p>
+          <p class="support-note"><span data-en="Having trouble?" data-cs="Máte potíže?">Having trouble?</span> <a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><a href="https://tomaspisar.cz/privacy/" data-en="Privacy" data-cs="Soukromí">Privacy</a><a href="mailto:info@tomaspisar.cz" data-en="Support" data-cs="Podpora">Support</a></footer>
+  <script src="https://tomaspisar.cz/site.config.js"></script>
+  <script src="https://tomaspisar.cz/script.js"></script>
+  <script src="/account.js"></script>
+</body>
+</html>

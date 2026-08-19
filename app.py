@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import queue
 import random
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 
 from src.attempts import AttemptManager
+from src.activation import StartupAuthorizationCheck, check_startup_authorization
 from src.capture import CaptureEngine
 from src.config import load_config
 from src.main_window import MainWindow
@@ -194,6 +196,54 @@ def _startup_splash(root: tk.Tk, language: str = "en") -> tuple[tk.Toplevel, tk.
     return splash, status, progress, action
 
 
+def _check_license_with_splash(
+    root: tk.Tk,
+    splash: tk.Toplevel,
+    status: tk.Label,
+    progress: ttk.Progressbar,
+    action: tk.Label,
+    language: str,
+) -> StartupAuthorizationCheck:
+    """Run the network check off the Tk thread while keeping startup responsive."""
+    results: queue.Queue[StartupAuthorizationCheck] = queue.Queue(maxsize=1)
+
+    def check() -> None:
+        try:
+            results.put(check_startup_authorization())
+        except Exception:  # noqa: BLE001 - an unexpected check failure must fail closed
+            results.put(StartupAuthorizationCheck("rejected", "startup_check_failed", None))
+
+    worker = threading.Thread(target=check, name="license-startup-check", daemon=True)
+    worker.start()
+    started = time.monotonic()
+    is_cs = language == "cs"
+    status.configure(text="Ověřuji licenci…" if is_cs else "Checking licence…")
+    action.configure(text="Kontroluji zařízení a platnost plánu" if is_cs else "Confirming this device and plan status")
+    progress.configure(value=6.0)
+
+    while worker.is_alive():
+        elapsed = time.monotonic() - started
+        progress.configure(value=min(24.0, 6.0 + (elapsed / 15.0) * 18.0))
+        splash.update_idletasks()
+        root.update()
+        time.sleep(0.025)
+    worker.join(timeout=0.1)
+    result = results.get_nowait()
+
+    if result.state == "verified":
+        status.configure(text="Licence ověřena" if is_cs else "Licence verified")
+        action.configure(text="Zařízení aktivní  ·  plán platný" if is_cs else "Device active  ·  plan valid")
+    elif result.state == "cached":
+        status.configure(text="Offline licence přijata" if is_cs else "Offline licence accepted")
+        action.configure(text="Server není dostupný  ·  místní autorizace je platná" if is_cs else "Server unavailable  ·  signed authorization is valid")
+    else:
+        status.configure(text="Je nutná aktivace" if is_cs else "Activation required")
+        action.configure(text="Otevřu bezpečnou aktivaci e-mailem" if is_cs else "Opening secure email activation")
+    progress.configure(value=28.0)
+    splash.update_idletasks()
+    return result
+
+
 def main() -> int:
     args = parse_args()
     config_path = prepare_config_path(args.config)
@@ -234,12 +284,37 @@ def main() -> int:
         if args.windowed: config.display.fullscreen = False
         root = tk.Tk()
         root.withdraw()
-        if getattr(sys, "frozen", False) and not ensure_license_or_trial(root, config.general.language):
-            root.destroy()
-            return 2
         splash, splash_status, splash_progress, splash_action = _startup_splash(root, config.general.language)
         try:
             is_cs = config.general.language == "cs"
+            if getattr(sys, "frozen", False):
+                startup_check = _check_license_with_splash(
+                    root,
+                    splash,
+                    splash_status,
+                    splash_progress,
+                    splash_action,
+                    config.general.language,
+                )
+                if not startup_check.allowed:
+                    try:
+                        splash.attributes("-topmost", False)
+                    except tk.TclError:
+                        pass
+                    splash.withdraw()
+                    if not ensure_license_or_trial(root, config.general.language, startup_check):
+                        root.destroy()
+                        return 2
+                    splash.deiconify()
+                    try:
+                        splash.attributes("-topmost", True)
+                    except tk.TclError:
+                        pass
+                    splash_status.configure(text="Aktivace dokončena" if is_cs else "Activation complete")
+                    splash_action.configure(text="Tento počítač je připraven" if is_cs else "This computer is ready")
+                    splash_progress.configure(value=30.0)
+                    splash.update_idletasks()
+
             actions = (
                 ("Načítám vizuální systém…", "Loading visual system…"),
                 ("Připravuji přehrávání…", "Preparing replay engine…"),
@@ -251,7 +326,7 @@ def main() -> int:
             while True:
                 elapsed = time.perf_counter() - preparation_started
                 ratio = min(1.0, elapsed / preparation_seconds)
-                splash_progress.configure(value=ratio * 80.0)
+                splash_progress.configure(value=30.0 + ratio * 52.0)
                 index = min(len(actions) - 1, int(ratio * len(actions)))
                 splash_action.configure(text=actions[index][0 if is_cs else 1])
                 splash_status.configure(text="Připravuji stanoviště…" if is_cs else "Preparing judge station…")
@@ -260,7 +335,7 @@ def main() -> int:
                     break
                 time.sleep(0.025)
 
-            splash_progress.configure(value=80.0)
+            splash_progress.configure(value=86.0)
             splash_action.configure(text="Dokončuji spuštění…" if is_cs else "Starting the judge station…")
             splash.update_idletasks()
             MainWindow(

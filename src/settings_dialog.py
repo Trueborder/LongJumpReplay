@@ -476,7 +476,7 @@ class SettingsDialog(tk.Toplevel):
             actions,
             text=self._txt("Open customer portal", "Otevřít zákaznický portál"),
             style="Accent.TButton",
-            command=lambda: webbrowser.open("https://account.tomaspisar.cz/"),
+            command=lambda: webbrowser.open(activation_api.PORTAL_LOGIN_URL),
         ).pack(side="left")
         ttk.Label(
             f,

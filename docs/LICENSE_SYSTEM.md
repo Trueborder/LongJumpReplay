@@ -138,9 +138,11 @@ Liveness only.
 
 ### Customer portal
 
-The static portal is served at `https://account.tomaspisar.cz/`. It uses a
-separate email verification purpose and an HttpOnly session cookie; it never
-receives or stores card data.
+The portal uses `https://account.tomaspisar.cz/login` for passwordless email
+sign-in and `https://account.tomaspisar.cz/dashboard` for the authenticated
+account. The Worker redirects the account root according to session state. It
+uses a separate email verification purpose and an HttpOnly session cookie; it
+never receives or stores card data.
 
 - `POST /api/portal/request-code` - request a portal OTP for any valid email.
 - `POST /api/portal/verify-code` - exchange the OTP for a portal session.
@@ -158,8 +160,11 @@ desktop application.
 
 Both the activation flow and the portal use ten-minute email codes. A customer
 can activate up to two computers. Authorizations are signed for 30 days and
-the desktop app refreshes them online periodically; lifetime entitlement never
-expires, while a subscription receives seven days of grace after its paid
+the desktop app checks them online at every frozen-app startup and refreshes the
+authorization when successful. A still-valid signed authorization preserves
+offline use during temporary connectivity or server failures. Explicit licence
+or device rejection blocks startup and requires activation. Lifetime entitlement
+never expires, while a subscription receives seven days of grace after its paid
 period before verification stops.
 
 ## Authorization token

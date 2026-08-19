@@ -6,7 +6,8 @@
   "observability": { "enabled": true },
   "assets": {
     "directory": "../website/tomaspisar.cz/account",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": true
   },
 
   // Created with:  wrangler d1 create longjumpreplay-licenses
