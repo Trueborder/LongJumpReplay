@@ -313,6 +313,16 @@ def ensure_license_or_trial(
     buttons = ttk.Frame(body)
     buttons.pack(fill="x")
 
+    def fit_dialog_to_content() -> None:
+        """Resize after switching steps so newly packed controls cannot be clipped."""
+        dialog.update_idletasks()
+        width = max(dialog.winfo_width(), dialog.winfo_reqwidth())
+        height = dialog.winfo_reqheight()
+        screen_width, screen_height = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+
     def busy(text: str) -> None:
         status_label.configure(text=text)
         dialog.update_idletasks()
@@ -333,6 +343,7 @@ def ensure_license_or_trial(
         send_button.pack_forget()
         code_entry.focus_set()
         status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
+        fit_dialog_to_content()
 
     def back_to_email() -> None:
         code_var.set("")
@@ -341,6 +352,7 @@ def ensure_license_or_trial(
         if not send_button.winfo_manager():
             send_button.pack(side="right", padx=(0, 8))
         email_entry.focus_set()
+        fit_dialog_to_content()
 
     def do_activate() -> None:
         nonlocal accepted
@@ -447,10 +459,7 @@ def ensure_license_or_trial(
 
     dialog.bind("<Return>", on_return)
     email_entry.focus_set()
-    dialog.update_idletasks()
-    width, height = dialog.winfo_width(), dialog.winfo_height()
-    screen_width, screen_height = dialog.winfo_screenwidth(), dialog.winfo_screenheight()
-    dialog.geometry(f"{width}x{height}+{max(0, (screen_width - width) // 2)}+{max(0, (screen_height - height) // 2)}")
+    fit_dialog_to_content()
     dialog.deiconify(); dialog.lift(); dialog.focus_force()
     root.wait_window(dialog)
     return accepted

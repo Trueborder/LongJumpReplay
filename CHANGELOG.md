@@ -1,5 +1,9 @@
 # LongJumpReplay changelog
 
+## 3.3.1 - 2026-08-19
+
+- Keeps the Back and Activate actions fully visible when the email activation dialog advances to verification-code entry.
+
 ## 3.3.0 - 2026-08-19
 
 - Adds secure in-application update checks during startup without delaying the judge station.
