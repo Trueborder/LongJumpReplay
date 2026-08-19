@@ -1,5 +1,9 @@
 # LongJumpReplay changelog
 
+## 3.3.2 - 2026-08-19
+
+- Automatically filters the activation verification-code field to six ASCII digits when typing or pasting.
+
 ## 3.3.1 - 2026-08-19
 
 - Keeps the Back and Activate actions fully visible when the email activation dialog advances to verification-code entry.

@@ -29,7 +29,9 @@
   the activation dialog. The dialog recalculates its requested height when the
   code step opens or closes, so these actions remain fully visible instead of
   being clipped by the email step's initial fixed geometry. Dashboard device
-  cards show the local activation time as well as the date. Transactional verification emails ship as branded HTML
+  cards show the local activation time as well as the date. The verification
+  code field filters typing and paste input to at most six ASCII digits.
+  Transactional verification emails ship as branded HTML
   plus plain text, with cyan `APP ACTIVATION` and amber
   `CUSTOMER PORTAL LOGIN` purpose labels so the requested action is obvious.
 - The portal has separate canonical routes: `/login` for passwordless email
@@ -157,7 +159,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 3.3.1
+- **Current source version:** 3.3.2
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk

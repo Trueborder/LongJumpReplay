@@ -38,6 +38,10 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         initial_height = dialog.winfo_height()
         send.invoke()
         dialog.update_idletasks()
+        entries = [widget for widget in _descendants(dialog) if isinstance(widget, ttk.Entry)]
+        code_entry = next(widget for widget in entries if widget is not email)
+        code_entry.insert(0, "12a 34-56789")
+        observed["code_formatted"] = code_entry.get()
 
         buttons = {
             widget.cget("text"): widget
@@ -75,6 +79,7 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         "send_hidden": True,
         "dialog_expanded": True,
         "actions_inside_dialog": True,
+        "code_formatted": "123456",
         "send_restored": True,
         "email_focus_target": True,
     }

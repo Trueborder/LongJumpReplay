@@ -253,6 +253,11 @@ def _trial_copy(language: str) -> dict[str, str]:
     }
 
 
+def format_verification_code_input(value: str) -> str:
+    """Keep pasted or typed activation codes to six ASCII digits."""
+    return "".join(character for character in value if character in "0123456789")[:6]
+
+
 def ensure_license_or_trial(
     root: tk.Tk,
     language: str,
@@ -305,6 +310,13 @@ def ensure_license_or_trial(
     code_var = tk.StringVar()
     code_entry = ttk.Entry(code_frame, textvariable=code_var, width=16)
     code_entry.pack(anchor="w", pady=(4, 4))
+
+    def format_code_input(*_args: object) -> None:
+        formatted = format_verification_code_input(code_var.get())
+        if formatted != code_var.get():
+            code_var.set(formatted)
+
+    code_var.trace_add("write", format_code_input)
     code_actions = ttk.Frame(code_frame)
     code_actions.pack(fill="x", pady=(8, 0))
 

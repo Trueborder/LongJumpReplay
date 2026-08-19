@@ -5,7 +5,12 @@ import json
 import pytest
 
 import src.licensing as licensing
-from src.licensing import machine_code, verify_license
+from src.licensing import format_verification_code_input, machine_code, verify_license
+
+
+def test_verification_code_input_keeps_six_ascii_digits() -> None:
+    assert format_verification_code_input("12a 34-56789") == "123456"
+    assert format_verification_code_input("１２٣45") == "45"
 from tools.license_admin import create_license
 
 
