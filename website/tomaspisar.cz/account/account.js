@@ -1,5 +1,6 @@
 (() => {
   const API = 'https://api.tomaspisar.cz';
+  const { deriveDashboardEntitlement } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
   const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null };
   const $ = (selector) => document.querySelector(selector);
@@ -146,14 +147,10 @@
     state.account = data;
     const licences = data.licenses || [];
     const devices = data.devices || [];
-    const activeLicences = licences.filter((licence) => licence.status === 'active');
-    const activeLicenceIds = new Set(activeLicences.map((licence) => licence.id));
-    const activeDevices = devices.filter((device) => device.status === 'active' && activeLicenceIds.has(device.license_id));
-    const totalSlots = activeLicences.reduce((sum, licence) => sum + licence.max_devices, 0);
-    const primary = activeLicences[0] || licences[0];
+    const {
+      activeLicenceIds, activeDevices, totalSlots, primary, hasAnyLicence, hasActiveLicence,
+    } = deriveDashboardEntitlement(licences, devices);
     const nextVerification = activeDevices.map((device) => device.last_verified_at || device.activated_at || 0).filter(Boolean).sort((a, b) => a - b)[0];
-    const hasAnyLicence = licences.length > 0;
-    const hasActiveLicence = activeLicences.length > 0;
 
     $('#customer-email').textContent = data.customer?.email || '—';
     $('#summary-licence').textContent = hasActiveLicence
