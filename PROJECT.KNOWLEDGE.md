@@ -40,6 +40,11 @@
   login screen, and protects dashboard HTML with no-store responses. Dashboard
   categories cover overview, plan, computers, billing, downloads, support, and
   session security; Settings opens the dedicated login route.
+- Portal entitlement display is based on active licence rows, not merely on
+  purchase history. A canceled/refunded subscription remains visible as an
+  inactive historical licence, while the overview shows no active licence,
+  offers repurchase, reports zero available seats, and does not count devices
+  belonging to the inactive plan as active.
 - Commercial rules are fixed: maximum two devices; lifetime entitlement never
   expires; both lifetime and subscription authorizations refresh every 30 days;
   the app can work offline for 30 days; subscriptions receive seven days of

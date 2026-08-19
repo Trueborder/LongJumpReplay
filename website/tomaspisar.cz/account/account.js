@@ -14,6 +14,11 @@
       devices: 'computers', purchased: 'Purchased', activated: 'Activated', paidThrough: 'Paid through', lastSync: 'Last server sync',
       invoice: 'Invoice', amount: 'Amount', date: 'Date', status: 'Status', available: 'available',
       lifetimeNote: 'No renewal required', subscriptionNote: 'Renews while active', notPurchased: 'Not purchased',
+      subscriptionEnded: 'Subscription ended', noActiveLicence: 'No active licence',
+      noLicenceEyebrow: 'NO LICENCE YET', noLicenceTitle: 'No licence purchased for this account.',
+      noLicenceCopy: 'Buy with this email address and the licence will appear here automatically after payment.',
+      inactiveLicenceEyebrow: 'NO ACTIVE LICENCE', inactiveLicenceTitle: 'No active licence for this account.',
+      inactiveLicenceCopy: 'Your previous plan is inactive. Purchase again with this email address to restore access.',
       notApplicable: 'Not applicable', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.'
     },
     cs: {
@@ -26,6 +31,11 @@
       devices: 'počítače', purchased: 'Zakoupeno', activated: 'Aktivováno', paidThrough: 'Zaplaceno do', lastSync: 'Poslední synchronizace',
       invoice: 'Faktura', amount: 'Částka', date: 'Datum', status: 'Stav', available: 'volná',
       lifetimeNote: 'Bez nutnosti obnovení', subscriptionNote: 'Obnovuje se, dokud je aktivní', notPurchased: 'Nezakoupeno',
+      subscriptionEnded: 'Předplatné skončilo', noActiveLicence: 'Žádná aktivní licence',
+      noLicenceEyebrow: 'ZATÍM BEZ LICENCE', noLicenceTitle: 'Pro tento účet zatím nebyla zakoupena licence.',
+      noLicenceCopy: 'Nakupte s touto e-mailovou adresou a licence se zde po zaplacení zobrazí automaticky.',
+      inactiveLicenceEyebrow: 'ŽÁDNÁ AKTIVNÍ LICENCE', inactiveLicenceTitle: 'Pro tento účet není aktivní žádná licence.',
+      inactiveLicenceCopy: 'Předchozí plán je neaktivní. Pro obnovení přístupu nakupte znovu se stejnou e-mailovou adresou.',
       notApplicable: 'Nevztahuje se', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.'
     }
   };
@@ -96,22 +106,27 @@
   };
 
   const renderLicenceCards = (licences) => {
-    $('#licence-cards').innerHTML = licences.map((licence) => `
+    $('#licence-cards').innerHTML = licences.map((licence) => {
+      const active = licence.status === 'active';
+      const activeDevices = active ? (licence.active_devices || 0) : 0;
+      const availableSlots = active ? licence.max_devices : 0;
+      return `
       <article class="licence-card">
-        <div class="licence-card-heading"><span class="badge ${licence.status === 'active' ? '' : 'warn'}">${licence.status === 'active' ? t('statusActive') : t('statusInactive')}</span><span class="licence-id">LongJumpReplay</span></div>
+        <div class="licence-card-heading"><span class="badge ${active ? '' : 'warn'}">${active ? t('statusActive') : t('statusInactive')}</span><span class="licence-id">LongJumpReplay</span></div>
         <h3>${licence.type === 'subscription' ? t('subscription') : t('lifetime')}</h3>
         <dl>
-          <div><dt>${t('devices')}</dt><dd>${licence.active_devices || 0} / ${licence.max_devices}</dd></div>
+          <div><dt>${t('devices')}</dt><dd>${activeDevices} / ${availableSlots}</dd></div>
           <div><dt>${t('purchased')}</dt><dd>${formatDate(licence.created_at)}</dd></div>
           ${licence.current_period_end ? `<div><dt>${t('paidThrough')}</dt><dd>${formatDate(licence.current_period_end)}</dd></div>` : ''}
           <div><dt>${t('lastSync')}</dt><dd>${formatDate(licence.last_stripe_sync)}</dd></div>
         </dl>
-      </article>`).join('');
+      </article>`;
+    }).join('');
   };
 
-  const renderDevices = (devices) => {
+  const renderDevices = (devices, activeLicenceIds) => {
     $('#devices-list').innerHTML = devices.length ? devices.map((device) => {
-      const active = device.status === 'active';
+      const active = device.status === 'active' && activeLicenceIds.has(device.license_id);
       const nextCheck = active && device.last_verified_at ? device.last_verified_at + (30 * 86400) : null;
       return `<article class="device-card">
         <div class="device-icon" aria-hidden="true">▰</div>
@@ -131,28 +146,38 @@
     state.account = data;
     const licences = data.licenses || [];
     const devices = data.devices || [];
-    const activeDevices = devices.filter((device) => device.status === 'active');
-    const totalSlots = licences.reduce((sum, licence) => sum + licence.max_devices, 0);
-    const primary = licences.find((licence) => licence.status === 'active') || licences[0];
+    const activeLicences = licences.filter((licence) => licence.status === 'active');
+    const activeLicenceIds = new Set(activeLicences.map((licence) => licence.id));
+    const activeDevices = devices.filter((device) => device.status === 'active' && activeLicenceIds.has(device.license_id));
+    const totalSlots = activeLicences.reduce((sum, licence) => sum + licence.max_devices, 0);
+    const primary = activeLicences[0] || licences[0];
     const nextVerification = activeDevices.map((device) => device.last_verified_at || device.activated_at || 0).filter(Boolean).sort((a, b) => a - b)[0];
+    const hasAnyLicence = licences.length > 0;
+    const hasActiveLicence = activeLicences.length > 0;
 
     $('#customer-email').textContent = data.customer?.email || '—';
-    $('#summary-licence').textContent = primary ? (primary.type === 'subscription' ? t('subscription') : t('lifetime')) : t('notPurchased');
+    $('#summary-licence').textContent = hasActiveLicence
+      ? (primary.type === 'subscription' ? t('subscription') : t('lifetime'))
+      : t('noActiveLicence');
     $('#summary-licence-note').textContent = primary ? (primary.status === 'active' ? t('statusActive') : t('statusInactive')) : (state.lang === 'cs' ? 'Připraveno k nákupu' : 'Ready when you purchase');
     $('#summary-devices').textContent = `${activeDevices.length} / ${totalSlots}`;
-    $('#summary-plan-date').textContent = primary ? formatDate(primary.current_period_end || primary.created_at) : '—';
-    $('#summary-plan-note').textContent = primary ? (primary.type === 'subscription' ? t('subscriptionNote') : t('lifetimeNote')) : t('notApplicable');
+    $('#summary-plan-date').textContent = primary?.current_period_end ? formatDate(primary.current_period_end) : (primary?.type === 'lifetime' ? formatDate(primary.created_at) : '—');
+    $('#summary-plan-note').textContent = primary
+      ? (primary.type === 'subscription' ? (primary.status === 'active' ? t('subscriptionNote') : t('subscriptionEnded')) : t('lifetimeNote'))
+      : t('notApplicable');
     $('#summary-verification').textContent = nextVerification ? formatDate(nextVerification + (30 * 86400)) : t('verificationReady');
     $('#session-expiry').textContent = formatDate(data.session_expires_at);
 
-    const hasLicence = licences.length > 0;
-    $('#no-licence-state').hidden = hasLicence;
-    $('#licence-cards').hidden = !hasLicence;
-    document.querySelectorAll('.licensed-only').forEach((section) => { section.hidden = !hasLicence; });
+    $('#no-licence-state').hidden = hasActiveLicence;
+    $('#no-licence-eyebrow').textContent = t(hasAnyLicence ? 'inactiveLicenceEyebrow' : 'noLicenceEyebrow');
+    $('#no-licence-title').textContent = t(hasAnyLicence ? 'inactiveLicenceTitle' : 'noLicenceTitle');
+    $('#no-licence-copy').textContent = t(hasAnyLicence ? 'inactiveLicenceCopy' : 'noLicenceCopy');
+    $('#licence-cards').hidden = !hasAnyLicence;
+    document.querySelectorAll('.licensed-only').forEach((section) => { section.hidden = !hasAnyLicence; });
     $('#billing-button').hidden = !data.billing?.customer_portal_available;
     $('#device-count').textContent = `${activeDevices.length} ${state.lang === 'cs' ? 'aktivní' : 'active'} · ${Math.max(0, totalSlots - activeDevices.length)} ${t('available')}`;
     renderLicenceCards(licences);
-    renderDevices(devices);
+    renderDevices(devices, activeLicenceIds);
     renderInvoices(data.invoices || []);
     $('#dashboard-loading').hidden = true;
     $('#dashboard-content').hidden = false;
