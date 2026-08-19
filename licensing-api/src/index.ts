@@ -312,7 +312,39 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 
 type VerificationPurpose = "activation" | "portal";
 
-async function requestCode(request: Request, env: Env, purpose: VerificationPurpose = "activation"): Promise<Response> {
+async function createEmailOnlyCode(
+  env: Env,
+  email: string,
+  purpose: VerificationPurpose,
+): Promise<string> {
+  const customer = await upsertCustomer(env.DB, email, null);
+  await env.DB.prepare(
+    "UPDATE portal_login_codes SET used_at = ? WHERE customer_id = ? AND purpose = ? AND used_at IS NULL",
+  )
+    .bind(now(), customer.id, purpose)
+    .run();
+
+  const code = generateVerificationCode();
+  const timestamp = now();
+  await env.DB.prepare(
+    `INSERT INTO portal_login_codes
+       (id, customer_id, email, purpose, code_hash, created_at, expires_at, attempt_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+  )
+    .bind(
+      randomId("pc"),
+      customer.id,
+      email,
+      purpose,
+      await hashCode(env.VERIFICATION_PEPPER, code),
+      timestamp,
+      timestamp + settings(env).verificationCodeTtlSeconds,
+    )
+    .run();
+  return code;
+}
+
+export async function requestCode(request: Request, env: Env, purpose: VerificationPurpose = "activation"): Promise<Response> {
   const cfg = settings(env);
   const data = await readJson(request);
   const email = normaliseEmail(str(data.email));
@@ -334,31 +366,8 @@ async function requestCode(request: Request, env: Env, purpose: VerificationPurp
     // Portal access proves ownership of an email address, not ownership of a
     // licence. A later Stripe purchase using the same normalized address is
     // attached to this customer by upsertCustomer.
-    const customer = await upsertCustomer(env.DB, email, null);
-    await env.DB.prepare(
-      "UPDATE portal_login_codes SET used_at = ? WHERE customer_id = ? AND used_at IS NULL",
-    )
-      .bind(now(), customer.id)
-      .run();
-
-    const code = generateVerificationCode();
-    const timestamp = now();
-    await env.DB.prepare(
-      `INSERT INTO portal_login_codes
-         (id, customer_id, email, code_hash, created_at, expires_at, attempt_count)
-       VALUES (?, ?, ?, ?, ?, ?, 0)`,
-    )
-      .bind(
-        randomId("pc"),
-        customer.id,
-        email,
-        await hashCode(env.VERIFICATION_PEPPER, code),
-        timestamp,
-        timestamp + cfg.verificationCodeTtlSeconds,
-      )
-      .run();
-
     try {
+      const code = await createEmailOnlyCode(env, email, purpose);
       await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), purpose);
       await logEvent(env.DB, "portal_login_requested", null, { result: "sent" });
     } catch {
@@ -373,7 +382,14 @@ async function requestCode(request: Request, env: Env, purpose: VerificationPurp
   // Activation stays indistinguishable for licensed and unlicensed addresses,
   // so this endpoint cannot reveal who has bought the software.
   if (!license) {
-    await logEvent(env.DB, "verification_requested", null, { result: "no license" });
+    try {
+      const code = await createEmailOnlyCode(env, email, purpose);
+      await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), purpose);
+      await logEvent(env.DB, "verification_requested", null, { result: "sent before purchase" });
+    } catch {
+      await logEvent(env.DB, "verification_requested", null, { result: "send failed" });
+      return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
+    }
     return generic;
   }
 
@@ -411,7 +427,7 @@ async function requestCode(request: Request, env: Env, purpose: VerificationPurp
   return generic;
 }
 
-async function verifyCode(request: Request, env: Env, purpose: VerificationPurpose = "activation"): Promise<Response> {
+export async function verifyCode(request: Request, env: Env, purpose: VerificationPurpose = "activation"): Promise<Response> {
   const cfg = settings(env);
   const data = await readJson(request);
   const email = normaliseEmail(str(data.email));
@@ -426,10 +442,10 @@ async function verifyCode(request: Request, env: Env, purpose: VerificationPurpo
   if (purpose === "portal") {
     const row = await env.DB.prepare(
       `SELECT * FROM portal_login_codes
-        WHERE email = ? AND used_at IS NULL
+        WHERE email = ? AND purpose = ? AND used_at IS NULL
         ORDER BY created_at DESC LIMIT 1`,
     )
-      .bind(email)
+      .bind(email, purpose)
       .first<{
         id: string;
         customer_id: string;
@@ -481,7 +497,57 @@ async function verifyCode(request: Request, env: Env, purpose: VerificationPurpo
       attempt_count: number;
     }>();
 
-  if (!row) return fail("invalid_code", "That code is not valid. Request a new one.");
+  if (!row) {
+    const emailOnly = await env.DB.prepare(
+      `SELECT * FROM portal_login_codes
+        WHERE email = ? AND purpose = 'activation' AND used_at IS NULL
+        ORDER BY created_at DESC LIMIT 1`,
+    )
+      .bind(email)
+      .first<{
+        id: string;
+        code_hash: string;
+        expires_at: number;
+        attempt_count: number;
+      }>();
+
+    if (!emailOnly) return fail("invalid_code", "That code is not valid. Request a new one.");
+    if (emailOnly.expires_at < now()) return fail("code_expired", "That code has expired. Request a new one.");
+    if (emailOnly.attempt_count >= cfg.maxVerificationAttempts) {
+      return fail("too_many_attempts", "Too many incorrect attempts. Request a new code.", 429);
+    }
+
+    await env.DB.prepare("UPDATE portal_login_codes SET attempt_count = attempt_count + 1 WHERE id = ?")
+      .bind(emailOnly.id)
+      .run();
+    const candidate = await hashCode(env.VERIFICATION_PEPPER, code);
+    if (!timingSafeEqual(candidate, emailOnly.code_hash)) {
+      await logEvent(env.DB, "verification_failed", null, { result: "email only" });
+      return fail("invalid_code", "That code is not correct.");
+    }
+
+    await env.DB.prepare("UPDATE portal_login_codes SET used_at = ? WHERE id = ?")
+      .bind(now(), emailOnly.id)
+      .run();
+    const currentLicense = await findActivatableLicense(env.DB, email);
+    if (!currentLicense) {
+      await logEvent(env.DB, "verification_success", null, { result: "no active license" });
+      return fail(
+        "no_license",
+        "Email verified, but no active subscription or lifetime licence was found for this account.",
+        403,
+      );
+    }
+
+    const grant = generateToken();
+    await env.DB.prepare(
+      "INSERT INTO activation_grants (id, license_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+    )
+      .bind(randomId("grant"), currentLicense.id, await sha256(grant), now(), now() + 600)
+      .run();
+    await logEvent(env.DB, "verification_success", currentLicense.id, { result: "purchased after code request" });
+    return json({ verified: true, activation_grant: grant, expires_in_seconds: 600 });
+  }
   if (row.expires_at < now()) return fail("code_expired", "That code has expired. Request a new one.");
   if (row.attempt_count >= cfg.maxVerificationAttempts) {
     return fail("too_many_attempts", "Too many incorrect attempts. Request a new code.", 429);

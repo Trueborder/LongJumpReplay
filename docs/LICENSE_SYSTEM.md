@@ -111,13 +111,22 @@ Handled events: `checkout.session.completed`, `customer.subscription.created`,
 `invoice.payment_failed`.
 
 ### `POST /api/license/request-code`
+
+The Worker sends the email code even when the normalized address does not yet
+have an active licence. That allows the desktop flow to verify the address and
+give an accurate no-licence result instead of claiming that an undelivered code
+was sent. An email-only activation code is scoped separately from portal login
+codes and cannot activate a device unless a licence exists when it is verified.
 `{email}` -> `{sent: true, expires_in_minutes}`.
 Always the same response whether or not a licence exists, so the endpoint cannot
 be used to discover who has bought the software.
 
 ### `POST /api/license/verify-code`
 `{email, code}` -> `{verified: true, activation_grant, expires_in_seconds}`.
-The grant is single-use and lives 10 minutes.
+The grant is single-use and lives 10 minutes. A valid email-only code returns
+`403 no_license` when the account still has no active licence; if checkout was
+completed after requesting the code, verification uses the new licence and
+returns the normal activation grant.
 
 ### `POST /api/license/activate`
 `{activation_grant, machine_id, device_name?}` -> `{activated, license_type,

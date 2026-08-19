@@ -225,6 +225,7 @@ def _trial_copy(language: str) -> dict[str, str]:
             "back": "Zpět",
             "need_email": "Zadejte prosím platnou e-mailovou adresu.",
             "need_code": "Zadejte šestimístný kód z e-mailu.",
+            "no_active_license": "E-mail byl ověřen, ale k tomuto účtu není přiřazeno aktivní předplatné ani doživotní licence.",
         }
     return {
         "title": "Activate LongJumpReplay",
@@ -248,6 +249,7 @@ def _trial_copy(language: str) -> dict[str, str]:
         "back": "Back",
         "need_email": "Please enter a valid email address.",
         "need_code": "Enter the six-digit code from the email.",
+        "no_active_license": "Email verified, but this account has no active subscription or lifetime licence.",
     }
 
 
@@ -322,7 +324,8 @@ def ensure_license_or_trial(
         try:
             minutes = activation_api.request_code(email)
         except activation_api.ActivationError as error:
-            status_label.configure(text=str(error))
+            message = copy["no_active_license"] if error.code in {"no_license", "license_inactive"} else str(error)
+            status_label.configure(text=message)
             return
         code_frame.pack(anchor="w", fill="x", before=status_label)
         send_button.configure(text=copy["activate"], command=do_activate)
@@ -340,7 +343,8 @@ def ensure_license_or_trial(
             grant = activation_api.verify_code(email_var.get().strip(), code)
             activation_api.activate(grant)
         except activation_api.ActivationError as error:
-            status_label.configure(text=str(error))
+            message = copy["no_active_license"] if error.code in {"no_license", "license_inactive"} else str(error)
+            status_label.configure(text=message)
             return
         status_label.configure(text=copy["activated"])
         accepted = True

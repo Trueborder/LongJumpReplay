@@ -18,6 +18,12 @@
   automatically. Portal codes are separate from activation codes. The portal
   uses an HttpOnly session cookie, lists licence/devices/invoices, supports
   device deactivation, and opens Stripe Customer Portal.
+- Desktop activation sends an email code even before an active licence exists.
+  These email-only challenges remain purpose-scoped away from portal login;
+  after email verification, the app gives a localized no-active-licence result
+  unless a subscription or lifetime licence exists at that point. A customer
+  can therefore request a code before checkout and complete activation after
+  checkout without weakening the device or plan checks.
 - The portal has separate canonical routes: `/login` for passwordless email
   sign-in and `/dashboard` for the authenticated account. The Worker redirects
   `/` according to session state, prevents authenticated users returning to the
