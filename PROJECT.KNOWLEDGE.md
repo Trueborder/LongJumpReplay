@@ -40,7 +40,7 @@
   expires; both lifetime and subscription authorizations refresh every 30 days;
   the app can work offline for 30 days; subscriptions receive seven days of
   grace after the paid period.
-- Version 3.2 embeds the production public signing modulus and adds a Licence
+- Version 3.3 embeds the production licensing public signing modulus and adds a Licence
   & account panel in Settings linking to the portal. Do not print or commit the
   private signing key, webhook key, Stripe secret, Resend key, or pepper.
 - Every frozen customer launch displays the licence check in the startup splash
@@ -59,6 +59,13 @@
   purchase-to-email-to-activation rehearsal still belongs on isolated Stripe
   test mode. A working Python 3.12 x64 environment is required before the
   desktop EXE can be rebuilt and release-validated.
+- Version 3.3 adds an optional signed-update channel. Startup checks
+  `https://files.tomaspisar.cz/latest.json` in a bounded worker while the splash
+  remains non-blocking. The updater accepts only the stable LongJumpReplay
+  product, an exact HTTPS versioned installer path, a valid RSA manifest
+  signature, and matching byte length and SHA-256. Install, Skip this version,
+  and Ask later are available; only the exact skipped version is suppressed.
+  Update state is stored under `%LOCALAPPDATA%\LongJumpReplay`.
 
 ## Specialized adjudication architecture (2026-08-13)
 
@@ -148,7 +155,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 3.2
+- **Current source version:** 3.3.0
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk
@@ -663,10 +670,10 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 
 - The project owner has authorized Codex to make all in-scope LongJumpReplay edits and install required build tools without repeated approval prompts.
 
-### MSI sales distribution
+### Customer installer and updates
 
-- `BUILD_RELEASE.bat` is the supported 3.2 portable release entry point. It runs source and GUI tests plus source/frozen self-tests before refreshing the exact `release` directory. The public sales installer path remains a separate packaging/deployment concern; do not distribute the loose private signing key or owner-only tools.
-- The MSI is a per-machine WiX package installed under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
+- `scripts\build\BUILD_RELEASE.bat` is the supported 3.3 portable payload entry point. It runs source and GUI tests plus source/frozen self-tests before refreshing the exact `release` directory.
+- `scripts\build\BUILD_INSTALLER.bat` compiles `packaging\LongJumpReplay.iss` with Inno Setup. It preserves the 3.1 AppId and installs under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
 - Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
 - License administration uses `tools\license_admin.py`; the customer supplies the machine code shown on first launch and receives a signed key by email.
@@ -688,19 +695,19 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 ### Portable release
 
 - `scripts/build/BUILD_PORTABLE.bat`
-- output: `release\LongJumpReplay-3.2-Windows-x64.zip`
+- output: `release\LongJumpReplay-3.3.0-Windows-x64.zip`
 
 ### Single EXE
 
 - `BUILD_SINGLE_EXE.bat`
 - supported, but not the recommended distribution format.
 
-### Native self-extracting installer
+### Inno Setup installer and R2 publication
 
-- `BUILD_INSTALLER.bat` is the one-click installer entry point. It rebuilds the portable payload, reads the current version from `src/__init__.py`, embeds a versioned ZIP and `installer/installer.ps1` with Windows IExpress, and writes `release/LongJumpReplay-Setup-<major.minor>.exe` plus its SHA-256 sidecar.
-- `installer/installer.ps1` is the deployment code inside the self-extracting EXE. It elevates through UAC, validates the ZIP manifest and archive paths, stages the application, replaces the Program Files installation with rollback protection, and creates the all-users desktop shortcut.
-- `BUILD_CUSTOMER_RELEASE.bat` calls the native installer builder before staging documentation and the deployable website. The old Python/PyInstaller setup wrapper is no longer part of the installer path.
-- IExpress is a built-in Windows component required on the build machine; the installer itself has no Python runtime dependency.
+- `scripts\build\BUILD_INSTALLER.bat` is the one-click installer entry point. It rebuilds the tested portable payload, derives the version from `src/__init__.py`, generates Windows file metadata, and writes `release\LongJumpReplay-Setup-<semantic-version>.exe` plus its SHA-256 sidecar.
+- `scripts\release\PUBLISH_RELEASE.bat` signs `latest.json`, verifies it locally, uploads and downloads immutable versioned R2 objects for hash verification, updates `LJR_setup.exe`, then publishes `latest.json` last. `ROLLBACK_RELEASE.bat <version>` restores an already verified archived release.
+- `packaging\.update-signing-private.pem` is ignored and must be backed up offline. `src\update_public_key.py` is the corresponding embedded public key. This update key is separate from the authorization signing key.
+- The website reads the signed channel metadata for its displayed version and versioned installer URL, while retaining `LJR_setup.exe` as a no-script fallback. See `docs\RELEASING.md`.
 
 ### GitHub Actions
 
@@ -817,9 +824,9 @@ Highest-value future work, in rough order:
 
 ## 20. Build entry points
 
-- `BUILD_CUSTOMER_RELEASE.bat` is the one-click customer release command and the only entry point intended to assemble the complete public `release` folder. Existing content in that exact folder is replaced only after source checks and installer assembly succeed.
+- `scripts\build\BUILD_INSTALLER.bat` is the one-click customer installer command. Existing content in the exact `release` folder is replaced only after source and GUI checks plus source/frozen self-tests succeed.
 - `scripts/build/BUILD_RELEASE.bat` invokes `scripts/build/BUILD_PORTABLE.bat --folder-only`, validates the tested payload, and adds `LICENSE.txt`. Its only distributable output is the loose `release/LongJumpReplay` application folder; it must not create `ProductFinal`, a ZIP, or a checksum sidecar. Pass `--no-pause` for automation.
-- `CREATE_SINGLE_EXE.bat` is the one-click Python/PyInstaller build entry point. It prefers the project virtual environment, falls back to Python 3.12 discovery, runs the source and frozen self-tests, creates the current release executable, and writes its SHA-256 sidecar.
+- `scripts\release\PUBLISH_RELEASE.bat` is the production publication entry point. It publishes immutable versioned R2 objects, verifies downloaded bytes, refreshes the stable alias, and exposes the signed manifest last.
 - The loose `release/LongJumpReplay` payload includes `LongJumpReplay.exe`, the complete `_internal` runtime tree, `README.txt`, `LICENSE.txt`, and the frozen self-test report.
 - The payload can be copied beneath `C:\Program Files\LongJumpReplay`, but the application still uses `%LOCALAPPDATA%\LongJumpReplay` for writable per-user configuration, license data, cache, exports/evidence, runtime logs, and crash logs. Program Files is therefore not the only storage location; do not remove the AppData directory after installation.
 

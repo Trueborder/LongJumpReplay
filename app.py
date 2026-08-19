@@ -14,6 +14,7 @@ from tkinter import ttk
 
 from PIL import Image, ImageTk
 
+from src import VERSION_SHORT
 from src.attempts import AttemptManager
 from src.activation import StartupAuthorizationCheck, check_startup_authorization
 from src.capture import CaptureEngine
@@ -25,6 +26,7 @@ from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_
 from src.ring_buffer import TimeRingBuffer
 from src.runtime_diagnostics import configure_runtime_logging, log_event
 from src.theme import ThemeManager, show_themed_info
+from src.updater import UpdateCheckTask, start_update_check
 
 
 def parse_args() -> argparse.Namespace:
@@ -174,7 +176,7 @@ def _startup_splash(root: tk.Tk, language: str = "en") -> tuple[tk.Toplevel, tk.
     canvas.create_rectangle(0, 0, 430, height, fill="#08111d", outline="")
     canvas.create_rectangle(0, height - 3, width, height, fill="#4f8cff", outline="")
     canvas.create_rectangle(40, 52, 112, 56, fill="#4f8cff", outline="")
-    tk.Label(canvas, text="LJR  /  3.2", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=72)
+    tk.Label(canvas, text=f"LJR  /  {VERSION_SHORT}", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=72)
     canvas.create_text(38, 98, text="LONG JUMP", anchor="nw", fill="#f4f7fb", font=("Segoe UI Semibold", 29))
     canvas.create_text(38, 148, text="REPLAY", anchor="nw", fill="#4f8cff", font=("Segoe UI Semibold", 29))
     subtitle = "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ" if language == "cs" else "FOUL REVIEW STATION"
@@ -285,9 +287,13 @@ def main() -> int:
         root = tk.Tk()
         root.withdraw()
         splash, splash_status, splash_progress, splash_action = _startup_splash(root, config.general.language)
+        update_task: UpdateCheckTask | None = None
         try:
             is_cs = config.general.language == "cs"
             if getattr(sys, "frozen", False):
+                update_task = start_update_check()
+                splash_action.configure(text="Kontroluji aktualizace…" if is_cs else "Checking for updates…")
+                splash.update_idletasks()
                 startup_check = _check_license_with_splash(
                     root,
                     splash,
@@ -314,6 +320,20 @@ def main() -> int:
                     splash_action.configure(text="Tento počítač je připraven" if is_cs else "This computer is ready")
                     splash_progress.configure(value=30.0)
                     splash.update_idletasks()
+
+                update_result = update_task.result()
+                if update_result and update_result.status == "available" and update_result.release:
+                    splash_action.configure(
+                        text=(
+                            f"Aktualizace {update_result.release.version} je připravena"
+                            if is_cs else f"Update {update_result.release.version} is ready"
+                        )
+                    )
+                elif update_result is None:
+                    splash_action.configure(
+                        text="Kontrola aktualizací pokračuje na pozadí" if is_cs else "Update check continuing in background"
+                    )
+                splash.update_idletasks()
 
             actions = (
                 ("Načítám vizuální systém…", "Loading visual system…"),
@@ -344,6 +364,7 @@ def main() -> int:
                 config_path,
                 persistent_camera_source_type=persistent_camera_source,
                 startup_camera_index=args.startup_camera_index,
+                startup_update_task=update_task,
             )
             splash_status.configure(text="Připraveno" if is_cs else "Ready")
             splash_action.configure(text="Hotovo  ·  otevírám stanoviště" if is_cs else "Ready  ·  opening judge station")

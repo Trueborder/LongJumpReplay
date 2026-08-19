@@ -14,6 +14,8 @@ license_service/data.json
 *.key
 *.p12
 *.pfx
+packaging/.update-signing-private.pem
+packaging/windows_version_info.txt
 
 # Local developer environments and generated build output
 .venv/
@@ -30,6 +32,8 @@ build/
 dist/
 dist-single/
 release/
+!scripts/release/
+!scripts/release/**
 native/**/bin/
 native/**/obj/
 __pycache__/

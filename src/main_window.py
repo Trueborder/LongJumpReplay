@@ -29,6 +29,7 @@ from .adjudication import (
     parse_distance_centimetres,
     parse_wind_metres_per_second,
 )
+from . import VERSION_SHORT, __version__
 from .attempts import AttemptManager
 from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
 from .capture import CaptureEngine, OpenCVCameraSource
@@ -53,6 +54,14 @@ from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed
 from .timeline import ProfessionalTimeline
 from .trial import record_successful_export, trial_exports_remaining, trial_is_active
 from .video_canvas import VideoCanvas
+from .update_ui import UpdateDialog
+from .updater import (
+    UpdateCheckResult,
+    UpdateCheckTask,
+    UpdateError,
+    schedule_installer_after_exit,
+    start_update_check,
+)
 
 
 def camera_waiting_messages(
@@ -88,6 +97,7 @@ class MainWindow:
         config_path: Path,
         persistent_camera_source_type: str | None = None,
         startup_camera_index: int | None = None,
+        startup_update_task: UpdateCheckTask | None = None,
     ) -> None:
         self.root = root
         self.config = config
@@ -176,6 +186,9 @@ class MainWindow:
         self._measurement_popup_save_button: ttk.Button | None = None
         self._telemetry = RuntimeTelemetry()
         self._logger = logging.getLogger("long_jump_replay")
+        self._startup_update_task = startup_update_task
+        self._manual_update_task: UpdateCheckTask | None = None
+        self._update_dialog: UpdateDialog | None = None
 
         self._build_variables()
         self._build_menu()
@@ -200,6 +213,8 @@ class MainWindow:
         self._schedule_tick()
         if not self.config.general.onboarding_completed:
             self.root.after(350, self.show_onboarding)
+        if self._startup_update_task is not None:
+            self.root.after(700, lambda: self._poll_update_task(self._startup_update_task, manual=False))
 
     # ------------------------------------------------------------------ UI
     def _restore_startup_view(self) -> None:
@@ -326,8 +341,63 @@ class MainWindow:
         self.help_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.help_menu.add_command(label=self._t("menu.controls"), command=self.show_controls)
         self.help_menu.add_separator()
-        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), "Long Jump Replay 3.2\nLive video review for long-jump take-off decisions."))
+        self.help_menu.add_command(label=self._t("menu.check_updates"), command=self.check_for_updates)
+        self.help_menu.add_separator()
+        self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), f"Long Jump Replay {__version__}\nLive video review for long-jump take-off decisions."))
         self._style_all_menus()
+
+    def check_for_updates(self) -> None:
+        if self._manual_update_task is not None and not self._manual_update_task.done:
+            self._show_message(self._t("update.checking"), 4)
+            return
+        self._show_message(self._t("update.checking"), 8)
+        self._manual_update_task = start_update_check(respect_skip=False)
+        self.root.after(80, lambda: self._poll_update_task(self._manual_update_task, manual=True))
+
+    def _poll_update_task(self, task: UpdateCheckTask | None, *, manual: bool) -> None:
+        if task is None or self._closing:
+            return
+        result = task.result()
+        if result is None:
+            self.root.after(120, lambda: self._poll_update_task(task, manual=manual))
+            return
+        if manual and task is self._manual_update_task:
+            self._manual_update_task = None
+        self._handle_update_result(result, manual=manual)
+
+    def _handle_update_result(self, result: UpdateCheckResult, *, manual: bool) -> None:
+        if result.status == "available" and result.release:
+            if self._update_dialog is not None and self._update_dialog.window.winfo_exists():
+                self._update_dialog.window.lift()
+                return
+            self._update_dialog = UpdateDialog(
+                self.root,
+                result.release,
+                self.config.general.language,
+                self._install_downloaded_update,
+            )
+            return
+        if not manual:
+            if result.status == "error":
+                self._logger.info("update_check_failed error=%s", result.message)
+            return
+        if result.status == "current":
+            show_themed_info(
+                self.root,
+                self._t("update.title"),
+                self._t("update.current", version=VERSION_SHORT),
+            )
+        elif result.status == "error":
+            show_themed_info(self.root, self._t("update.title"), result.message)
+
+    def _install_downloaded_update(self, installer: Path) -> None:
+        try:
+            schedule_installer_after_exit(installer)
+        except UpdateError as error:
+            show_themed_info(self.root, self._t("update.title"), str(error))
+            return
+        self._show_message(self._t("update.closing"), 8)
+        self.close()
 
     def _style_all_menus(self) -> None:
         for name in ("file_menu", "view_menu", "layout_menu", "theme_menu", "help_menu", "special_result_menu"):

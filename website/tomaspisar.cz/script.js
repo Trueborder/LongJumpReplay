@@ -204,6 +204,31 @@
   document.querySelectorAll('[data-product-price]').forEach((element) => { element.textContent = product.price || '—'; });
   document.querySelectorAll('[data-installer-url]').forEach((element) => { element.href = product.installerUrl || '#'; });
 
+  const applyPublishedRelease = (manifest) => {
+    const release = manifest?.schema === 1 ? manifest.payload : null;
+    if (!release || release.product !== 'longjumpreplay' || release.channel !== 'stable') return;
+    if (!/^\d+\.\d+\.\d+$/.test(release.version || '')) return;
+    try {
+      const installer = new URL(release.installer_url);
+      const expected = `/releases/${release.version}/LongJumpReplay-Setup-${release.version}.exe`;
+      if (installer.protocol !== 'https:' || installer.hostname !== 'files.tomaspisar.cz' || installer.pathname !== expected) return;
+      document.querySelectorAll('[data-product-version]').forEach((element) => { element.textContent = release.version; });
+      document.querySelectorAll('[data-installer-url]').forEach((element) => { element.href = installer.href; });
+    } catch (_) {
+      // Keep the configured fallback when release metadata is unavailable.
+    }
+  };
+
+  if (product.releaseManifestUrl) {
+    fetch(product.releaseManifestUrl, { cache: 'no-store', mode: 'cors' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`release manifest ${response.status}`);
+        return response.json();
+      })
+      .then(applyPublishedRelease)
+      .catch(() => {});
+  }
+
   // Licensing figures live in one place so a change to the backend's real
   // limits is a single edit in site.config.js. These write textContent, so
   // never put data-en/data-cs on the same element - use a nested element.

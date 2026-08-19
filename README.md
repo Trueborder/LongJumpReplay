@@ -1,4 +1,4 @@
-# Long Jump Replay 3.2
+# Long Jump Replay 3.3
 
 ## Quick operator guide
 
@@ -77,7 +77,14 @@ The main header also contains a visible **Pause system** switch. Pausing release
 
 The timer is available in competition and judge-only modes and is never written into attempt metadata, evidence, or exports.
 
-## What is new in 3.2
+## What is new in 3.3
+
+- Signed automatic update checks run during startup without delaying the application.
+- Update prompts offer Install, Skip this version, and Ask later.
+- Downloads are verified by signed manifest, exact size, and SHA-256 before installation.
+- The customer installer now supports clean installation and in-place upgrades through Inno Setup.
+
+## What was new in 3.2
 
 - Remade judge-station interface with clearer workflow zones and larger primary actions.
 - Task-grouped, card-based Settings workspace with active navigation and clearer descriptions.
@@ -241,19 +248,20 @@ Exported MP4 files and evidence images are not deleted.
 
 ## Build a portable Windows application
 
-For the complete customer-facing release, run:
+For the complete customer-facing installer, run:
 
 ```text
-BUILD_CUSTOMER_RELEASE.bat
+scripts\build\BUILD_INSTALLER.bat
 ```
 
-This is the primary one-click release command. After source tests and frozen self-tests pass, it replaces the existing `release` folder and creates:
+After source tests and frozen self-tests pass, it replaces the existing `release` folder and creates:
 
-- `LongJumpReplay-Setup-3.2.exe` and its SHA-256 checksum;
-- a deployable `website` folder containing the same installer download;
-- customer documentation and a recursive `SHA256SUMS.txt` manifest.
+- `LongJumpReplay-Setup-3.3.0.exe` and its SHA-256 checksum;
+- the tested portable application folder used by the installer.
 
-The customer release intentionally excludes the loose application payload, private license key, and owner-only license generator. Run `BUILD_CUSTOMER_RELEASE.bat --no-pause` from automation when no final keypress prompt is wanted.
+The installer excludes private licensing and update-signing keys. Run it with
+`--no-pause` from automation. The separate one-command publication workflow is
+documented in `docs/RELEASING.md`.
 
 For the portable fallback package only, run:
 
@@ -274,7 +282,7 @@ The builder:
 Output:
 
 ```text
-release\LongJumpReplay-3.2-Windows-x64.zip
+release\LongJumpReplay-3.3.0-Windows-x64.zip
 ```
 
 The recipient only extracts the ZIP and runs `LongJumpReplay.exe`.
@@ -289,7 +297,7 @@ The optional `scripts\build\BUILD_LICENSE_GENERATOR.bat` creates an admin-only G
 
 ## Testing performed in this package
 
-- 43 automated tests;
+- 184 automated tests (141 non-GUI and 43 isolated GUI tests);
 - synthetic 120 FPS full pipeline self-test;
 - 1280 × 720 at 120 FPS soak test;
 - temporary MP4 creation and readback;
@@ -301,8 +309,9 @@ The optional `scripts\build\BUILD_LICENSE_GENERATOR.bat` creates an admin-only G
 - static header menu throttling;
 - dark and light visual inspection.
 
-See `docs/CHANGELOG_3.2.md` for the 3.2 release scope and the generated test
-report for exact validation results.
+See `CHANGELOG.md` for current release notes, `docs/CHANGELOG_3.2.md` for the
+previous release scope, and `docs/RELEASING.md` for the publication and rollback
+procedure.
 
 ## Continue development with Codex
 

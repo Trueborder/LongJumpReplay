@@ -298,9 +298,9 @@ the site copy changed and should be re-read once the system is actually live.
   validation path is a separate test-mode setup, not a live charge. Staging
   needs test-mode Stripe prices, webhook secret, restricted test key, Resend
   test sending key, pepper and signing key before that rehearsal can run.
-- The desktop 3.2 portable release is now built and self-tested at
-  `release/LongJumpReplay-3.2-Windows-x64.zip`; the public download location
-  still needs to be updated to point at the accepted release artifact.
+- The desktop 3.3.0 release is built as an Inno Setup installer and verified
+  by source, GUI, frozen, clean-install and in-place-upgrade tests. Publication
+  uses the signed R2 channel documented in `docs/RELEASING.md`.
 - The website still needs publishable Terms, seller identity, withdrawal and
   refund information. Those facts must come from the seller; they must not be
   invented in source code. The privacy page also deserves a final legal review.

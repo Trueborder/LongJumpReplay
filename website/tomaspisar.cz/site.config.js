@@ -9,5 +9,5 @@ window.SITE_CONFIG = {
   // Two ways to buy the same software. Both activate identically and both get
   // the same device limit; they differ only in how they are paid for.
   plans: { lifetime: { label: "Lifetime", labelCs: "Doživotní" }, monthly: { label: "Monthly", labelCs: "Měsíční", price: "379 Kč", period: "month", periodCs: "měsíc" } },
-  products: { longJumpReplay: { key: "longjumpreplay", name: "LongJumpReplay", version: "3.2.0", versionShort: "3.2", price: "4 990 Kč", platform: "Windows", installerUrl: "https://files.tomaspisar.cz/LJR_setup.exe", trialHours: 72, trialExportLimit: 3, screenshots: ["/screenshots/main-screen.png", "/screenshots/recordings.png", "/screenshots/competition-board.png"] } }
+  products: { longJumpReplay: { key: "longjumpreplay", name: "LongJumpReplay", version: "3.3.0", versionShort: "3.3", price: "4 990 Kč", platform: "Windows", installerUrl: "https://files.tomaspisar.cz/LJR_setup.exe", releaseManifestUrl: "https://files.tomaspisar.cz/latest.json", trialHours: 72, trialExportLimit: 3, screenshots: ["/screenshots/main-screen.png", "/screenshots/recordings.png", "/screenshots/competition-board.png"] } }
 };

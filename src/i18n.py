@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from . import VERSION_SHORT
+
 from dataclasses import dataclass
 
 from .language_catalog import TRANSLATION_OVERRIDES, normalize_language
 
 
 EN = {
-    "app.title": "Long Jump Replay 3.2",
+    "app.title": f"Long Jump Replay {VERSION_SHORT}",
     "app.header": "LONG JUMP REPLAY",
     "app.subtitle": "FOUL REVIEW STATION",
     "menu.file": "File",
@@ -33,11 +35,16 @@ EN = {
     "menu.reset": "Reset video view",
     "menu.guide": "Board guide",
     "menu.controls": "Controls",
+    "menu.check_updates": "Check for updates…",
     "menu.diagnostics": "Diagnostics",
     "diagnostics.ui_tick": "UI tick avg / p95 / max: {average:.2f} / {p95:.2f} / {maximum:.2f} ms",
     "diagnostics.ui_stalls": "UI stalls >=100 ms: {count}",
     "diagnostics.uptime": "Uptime: {seconds:.0f} s",
     "menu.about": "About",
+    "update.title": "LongJumpReplay update",
+    "update.checking": "Checking for updates…",
+    "update.current": "LongJumpReplay {version} is up to date.",
+    "update.closing": "Update verified. Closing safely before installation…",
     "menu.wizard": "Start Competition Wizard",
     "menu.import_roster": "Import athlete roster…",
     "menu.export_event": "Export competition package",
@@ -324,7 +331,7 @@ EN = {
 }
 
 CS = {
-    "app.title": "Long Jump Replay 3.2",
+    "app.title": f"Long Jump Replay {VERSION_SHORT}",
     "app.header": "LONG JUMP REPLAY",
     "app.subtitle": "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ",
     "menu.file": "Soubor",
@@ -351,11 +358,16 @@ CS = {
     "menu.reset": "Obnovit pohled videa",
     "menu.guide": "Digitální čára",
     "menu.controls": "Ovládání",
+    "menu.check_updates": "Vyhledat aktualizace…",
     "menu.diagnostics": "Diagnostika",
     "diagnostics.ui_tick": "Cyklus UI průměr / p95 / maximum: {average:.2f} / {p95:.2f} / {maximum:.2f} ms",
     "diagnostics.ui_stalls": "Zaseknutí UI >=100 ms: {count}",
     "diagnostics.uptime": "Doba běhu: {seconds:.0f} s",
     "menu.about": "O aplikaci",
+    "update.title": "Aktualizace LongJumpReplay",
+    "update.checking": "Kontroluji aktualizace…",
+    "update.current": "LongJumpReplay {version} je aktuální.",
+    "update.closing": "Aktualizace ověřena. Bezpečně ukončuji aplikaci před instalací…",
     "menu.wizard": "Spustit průvodce soutěží",
     "menu.import_roster": "Importovat seznam závodníků…",
     "menu.export_event": "Exportovat balíček soutěže",
