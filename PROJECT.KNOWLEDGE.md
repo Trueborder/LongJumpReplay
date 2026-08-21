@@ -119,6 +119,7 @@
 - The correct website checkout is `C:\Users\xpisa\LongJumpReplay\website\tomaspisar.cz`; the earlier `.ai_projects` website tree is separate and was not changed in this pass.
 - `website/tomaspisar.cz/overrides.css` now applies an Apple-inspired material layer over the Evidence Desk system: translucent rounded navigation, system-ui body typography, calmer spacing, rounded evidence surfaces, one restrained primary-action treatment, and a frosted screenshot lightbox while preserving the live-cyan/decision-amber workflow language.
 - `website/tomaspisar.cz/script.js` now provides scroll-aware header separation, accessible mobile-menu controls with outside-press dismissal, keyboard-operable screenshot opening with focus return from the lightbox, and optional IntersectionObserver reveals using opacity/transform only. Reduced motion and reduced transparency keep the site usable without decorative motion or blur.
+- The homepage Featured software card keeps its LongJumpReplay copy and screenshot in separate full-width rows below 650px; the final mobile override in `website/tomaspisar.cz/overrides.css` must remain after the shared desktop product sizing rules to prevent horizontal overlap.
 - UI/UX Pro Max's local search helper could not execute because the checkout's Python launcher points to a missing Python 3.12 installation; the persisted website design system and its quick-reference accessibility/motion rules were used instead. No framework or dependency was added.
 
 ## Documentation changes (2026-08-12)

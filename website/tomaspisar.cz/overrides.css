@@ -326,7 +326,6 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 .pricing-embed stripe-pricing-table { display: block; }
 @media (max-width: 650px) { .pricing-embed { padding: .75rem; box-shadow: none; } }
 
-
 /* Cookie consent. Sits above content but never covers the whole viewport -
    nothing non-essential is stored before a choice is made, so there is no need
    to block the page. */
@@ -431,4 +430,12 @@ html[data-theme="light"] .button-outline:hover { color: #075f55; background: #ff
   .buy-terms { padding: 1.1rem 1.15rem; }
   .faq-item summary { font-size: .98rem; padding: .9rem 1rem; }
   .faq-answer { padding: 0 1rem 1rem; }
+}
+
+/* Final mobile override: the shared desktop sizing rule appears earlier in
+   this file, so keep the product card explicitly single-column here. */
+@media (max-width: 650px) {
+  .product-card { grid-template-columns: minmax(0, 1fr); }
+  .product-card > div:first-child,
+  .product-card .product-image { width: 100%; min-width: 0; }
 }
