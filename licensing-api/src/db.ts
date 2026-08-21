@@ -366,6 +366,32 @@ export async function claimStripeEvent(db: D1Database, id: string, type: string)
   }
 }
 
+export async function applyAdditionalComputerPurchase(
+  db: D1Database,
+  purchase: { stripeSessionId: string; stripePaymentIntentId: string | null; customerId: string; licenseId: string; quantity: number; amount: number; currency: string },
+): Promise<{ applied: boolean; duplicate: boolean; resultingMaxDevices: number | null }> {
+  const timestamp = now();
+  try {
+    const result = await db.batch([
+      db.prepare(`INSERT INTO additional_computer_purchases
+        (stripe_session_id, stripe_payment_intent_id, customer_id, license_id, quantity, amount, currency, processed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(purchase.stripeSessionId, purchase.stripePaymentIntentId, purchase.customerId, purchase.licenseId, purchase.quantity, purchase.amount, purchase.currency, timestamp),
+      db.prepare(`UPDATE licenses SET max_devices = max_devices + ?, updated_at = ?
+        WHERE id = ? AND customer_id = ? AND type = 'lifetime' AND status = 'active'
+          AND max_devices + ? <= 10`).bind(purchase.quantity, timestamp, purchase.licenseId, purchase.customerId, purchase.quantity),
+    ]);
+    const applied = (result[1].meta.changes ?? 0) === 1;
+    const license = await findLicenseById(db, purchase.licenseId);
+    await db.prepare("UPDATE additional_computer_purchases SET resulting_max_devices = ? WHERE stripe_session_id = ?")
+      .bind(applied ? license?.max_devices ?? null : null, purchase.stripeSessionId).run();
+    return { applied, duplicate: false, resultingMaxDevices: applied ? license?.max_devices ?? null : null };
+  } catch (error) {
+    const existing = await db.prepare("SELECT resulting_max_devices FROM additional_computer_purchases WHERE stripe_session_id = ?")
+      .bind(purchase.stripeSessionId).first<{ resulting_max_devices: number | null }>();
+    if (existing) return { applied: false, duplicate: true, resultingMaxDevices: existing.resulting_max_devices };
+    throw error;
+  }
+}
 /**
  * Fixed-window counter in D1. Good enough for the volumes here, and avoids a
  * second binding just for rate limiting.

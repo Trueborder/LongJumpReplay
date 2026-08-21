@@ -20,7 +20,7 @@
       noLicenceCopy: 'Buy with this email address and the licence will appear here automatically after payment.',
       inactiveLicenceEyebrow: 'NO ACTIVE LICENCE', inactiveLicenceTitle: 'No active licence for this account.',
       inactiveLicenceCopy: 'Your previous plan is inactive. Purchase again with this email address to restore access.',
-      notApplicable: 'Not applicable', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.'
+      notApplicable: 'Not applicable', additionalTitle: 'Additional computers', addUpTo: 'You can add up to', usedOf: 'computers used', computer: 'Computer', purchase: 'Purchase securely with Stripe', quantity: 'Quantity', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.'
     },
     cs: {
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
@@ -37,7 +37,7 @@
       noLicenceCopy: 'Nakupte s touto e-mailovou adresou a licence se zde po zaplacení zobrazí automaticky.',
       inactiveLicenceEyebrow: 'ŽÁDNÁ AKTIVNÍ LICENCE', inactiveLicenceTitle: 'Pro tento účet není aktivní žádná licence.',
       inactiveLicenceCopy: 'Předchozí plán je neaktivní. Pro obnovení přístupu nakupte znovu se stejnou e-mailovou adresou.',
-      notApplicable: 'Nevztahuje se', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.'
+      notApplicable: 'Nevztahuje se', additionalTitle: 'Další počítače', addUpTo: 'Můžete přidat až', usedOf: 'počítače využity', computer: 'Počítač', purchase: 'Bezpečně zaplatit přes Stripe', quantity: 'Počet', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.'
     }
   };
 
@@ -143,6 +143,26 @@
     $('#invoices').innerHTML = invoices.length ? `<table class="data-table"><thead><tr><th>${t('invoice')}</th><th>${t('date')}</th><th>${t('amount')}</th><th>${t('status')}</th></tr></thead><tbody>${invoices.map((invoice) => `<tr><td>${invoice.hosted_invoice_url ? `<a href="${escapeHtml(invoice.hosted_invoice_url)}" target="_blank" rel="noopener">${escapeHtml(invoice.id)}</a>` : escapeHtml(invoice.id)}</td><td>${formatDate(invoice.created)}</td><td>${formatMoney(invoice.amount_paid, invoice.currency)}</td><td>${escapeHtml(invoice.status || '—')}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${t('noInvoices')}</div>`;
   };
 
+  const renderAdditionalComputers = (offers) => {
+    const section = $('#additional-computers');
+    const card = $('#additional-computers-card');
+    const offer = (offers || [])[0];
+    if (!offer || offer.remaining < 1) { section.hidden = true; return; }
+    section.hidden = false;
+    const money = (amount) => new Intl.NumberFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: 'CZK', maximumFractionDigits: 0 }).format(amount);
+    const options = Array.from({ length: offer.remaining }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('');
+    const breakdown = offer.breakdown.map((item) => `<span><span>${t('computer')} ${item.computer}</span><strong>${money(item.amount_czk)}</strong></span>`).join('');
+    card.innerHTML = `<div><span class="badge">${t('lifetime')}</span><h3>${t('additionalTitle')}</h3><p>${offer.current_max_devices === 10 ? '10 / 10' : `${offer.current_max_devices} / 10 ${t('usedOf')}`}. ${t('addUpTo')} ${offer.remaining}.</p><div class="addon-breakdown">${breakdown}</div></div><div class="addon-purchase-box"><label for="additional-computers-quantity">${t('quantity')}</label><select id="additional-computers-quantity">${options}</select><div class="addon-total"><span>Total</span><strong id="additional-computers-total">${money(offer.breakdown[0].amount_czk)}</strong></div><button id="additional-computers-purchase" class="button button-primary button-full" type="button">${t('purchase')}</button></div>`;
+    const quantity = $('#additional-computers-quantity');
+    const total = $('#additional-computers-total');
+    const update = () => { const count = Number(quantity.value); total.textContent = money(offer.breakdown.slice(0, count).reduce((sum, item) => sum + item.amount_czk, 0)); };
+    quantity.addEventListener('change', update);
+    $('#additional-computers-purchase').addEventListener('click', async () => {
+      const button = $('#additional-computers-purchase'); button.disabled = true; setStatus(t('sending'));
+      try { const result = await api('/api/portal/additional-computers', { method: 'POST', body: JSON.stringify({ license_id: offer.license_id, quantity: Number(quantity.value) }) }); window.location.href = result.url; }
+      catch (error) { setStatus(error.message); button.disabled = false; await loadDashboard(); }
+    });
+  };
   const renderDashboard = (data) => {
     state.account = data;
     const licences = data.licenses || [];
@@ -176,6 +196,7 @@
     renderLicenceCards(licences);
     renderDevices(devices, activeLicenceIds);
     renderInvoices(data.invoices || []);
+    renderAdditionalComputers(data.additional_computers || []);
     $('#dashboard-loading').hidden = true;
     $('#dashboard-content').hidden = false;
   };

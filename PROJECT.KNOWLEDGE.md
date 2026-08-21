@@ -868,3 +868,15 @@ A change is done only when:
 - Settings Value-column selectors use a bounded request width and a flexible grid column, so long camera, layout, and ShuttleXpress option lists do not push controls beyond the page edge.
 - Settings Value fields now use a compact fixed lane with smaller default Entry/Spinbox/Combobox requests. Settings and Competition Wizard dropdowns retain the themed colours but use normal rectangular native list and field rendering.
 - Camera startup now presents a translated “Looking for input from all sources” overlay with a 10-second progress bar. A background probe checks camera indices 0 and 1 without blocking Tk; if no frame arrives, the progress overlay is replaced by Try again and Help with camera actions. Retry stops and restarts capture asynchronously, starts its fresh 10-second window only after restart, cancels stale probes, and still shows recovery actions even when an earlier capture attempt had already incremented the lifetime frame counter.
+
+## Lifetime additional-computer purchases (2026-08-20)
+
+- Active lifetime licences keep their original `licenses` row and may add computers through the authenticated portal. Subscription, inactive, and already-full licences never receive the purchase option.
+- Lifetime licences start at 2 computers, cost 4,990 Kč, and can grow to 10 total computers. Marginal one-time prices are computer 3: 1,490 Kč; computer 4: 1,290 Kč; computers 5-10: 990 Kč each. The Worker calculates totals; the browser never supplies a price.
+- `POST /api/portal/additional-computers` validates the portal session, customer ownership, active lifetime type, integer quantity, and remaining capacity. It creates an official Stripe-hosted Checkout Session using one server-generated CZK line item per marginal computer and metadata for customer, licence, quantity, product, and purchase type.
+- Migration `licensing-api/migrations/0005_additional_computers.sql` adds a unique Stripe-session purchase ledger. Webhook fulfillment requires `payment_status=paid`, verifies the existing Stripe signature, conditionally updates `max_devices` to stay at or below 10, and records an auditable `additional_computers_purchased` event. Duplicate sessions/events are ignored and abandoned or failed payments do not change entitlements.
+- Test coverage includes marginal totals, breakdown rendering inputs, TypeScript type checking, portal routing, and the existing licensing tests. A Stripe test-mode rehearsal remains required before production deployment; configure test secrets and webhook delivery separately and never commit their values.
+
+## Account portal login fix (2026-08-20)
+
+- The login page must load `account-state.js` before `account.js`. The shared account script destructures `window.LJR_ACCOUNT_STATE` during startup; omitting this dependency prevents the submit handler from registering and leaves the email form visually unchanged.

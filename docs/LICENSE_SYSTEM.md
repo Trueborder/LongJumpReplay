@@ -306,3 +306,13 @@ the site copy changed and should be re-read once the system is actually live.
   invented in source code. The privacy page also deserves a final legal review.
 - `license_service/` is the older machine-code/key design. It remains for
   legacy compatibility but is not part of the new customer purchase flow.
+
+### Lifetime additional computers
+
+Active lifetime customers can purchase one-time marginal computer add-ons from the authenticated portal. The existing licence row is extended from its current limit; subscription and inactive licences are ineligible, and the hard lifetime maximum is 10 computers.
+
+The Worker calculates these CZK prices server-side: computer 3 is 1,490 Kč, computer 4 is 1,290 Kč, and computers 5 through 10 are 990 Kč each. Checkout uses Stripe-hosted Checkout with one inline `price_data` line item per marginal computer, so stepped totals are exact without trusting browser prices. Metadata includes `customer_id`, `license_id`, `quantity`, `product`, and `purchase_type=additional_computers`.
+
+Migration `0005_additional_computers.sql` records each paid Checkout Session once. Signed `checkout.session.completed` and `checkout.session.async_payment_succeeded` events only fulfill when Stripe reports `payment_status=paid`; a conditional D1 update prevents concurrent sessions from exceeding 10, and the resulting `additional_computers_purchased` event records amount, currency, Stripe IDs, quantity, and resulting limit. The portal hides the offer at 10 computers.
+
+The local migration and Worker test suite are safe to run before deployment. Do not apply the migration remotely or add production Stripe configuration until the isolated Stripe test-mode rehearsal has passed.

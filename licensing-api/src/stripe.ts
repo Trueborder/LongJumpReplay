@@ -93,6 +93,7 @@ export interface StripeApi {
   getCheckoutLineItems(sessionId: string): Promise<Record<string, any>[]>;
   getInvoices(customerId: string): Promise<Record<string, any>[]>;
   createBillingPortalSession(customerId: string, returnUrl: string): Promise<string>;
+  createAdditionalComputerCheckout(input: { customerId: string; licenseId: string; quantity: number; pricesCzk: number[]; successUrl: string; cancelUrl: string }): Promise<string>;
 }
 
 /**
@@ -138,6 +139,23 @@ export function stripeApi(secretKey: string): StripeApi {
     createBillingPortalSession: async (customerId, returnUrl) => {
       const data = await postForm("billing_portal/sessions", { customer: customerId, return_url: returnUrl });
       if (typeof data.url !== "string" || !data.url) throw new Error("Stripe did not return a billing portal URL");
+      return data.url;
+    },
+    createAdditionalComputerCheckout: async (input) => {
+      const values: Record<string, string> = {
+        mode: "payment", customer: input.customerId, "metadata[customer_id]": input.customerId,
+        "metadata[license_id]": input.licenseId, "metadata[quantity]": String(input.quantity),
+        "metadata[product]": "LongJumpReplay", "metadata[purchase_type]": "additional_computers",
+        success_url: input.successUrl, cancel_url: input.cancelUrl, integration_identifier: `longjumpreplay_addon_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`,
+      };
+      input.pricesCzk.forEach((amount, index) => {
+        values[`line_items[${index}][price_data][currency]`] = "czk";
+        values[`line_items[${index}][price_data][unit_amount]`] = String(amount * 100);
+        values[`line_items[${index}][price_data][product_data][name]`] = "LongJumpReplay — additional computer";
+        values[`line_items[${index}][quantity]`] = "1";
+      });
+      const data = await postForm("checkout/sessions", values);
+      if (typeof data.url !== "string" || !data.url) throw new Error("Stripe did not return a Checkout URL");
       return data.url;
     },
   };

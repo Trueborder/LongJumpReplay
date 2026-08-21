@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LongJumpReplay licensing API.
  *
  *   POST /api/stripe/webhook          Stripe -> licence creation and sync
@@ -13,6 +13,7 @@
  */
 
 import { PRODUCT_ID, licenseTypeForPrice, rateLimits, settings } from "./config";
+import { additionalComputerPrices, additionalComputerTotalCzk, eligibleAdditionalComputerOffers, LIFETIME_MAX_DEVICES } from "./additional-computers";
 import type { Env, LicenseType } from "./config";
 import {
   generateToken,
@@ -25,6 +26,7 @@ import {
 } from "./crypto";
 import {
   activateDevice,
+  applyAdditionalComputerPurchase,
   activeDeviceCount,
   claimStripeEvent,
   createPortalSession,
@@ -168,8 +170,51 @@ function priceIdFromSession(session: Record<string, any>): string | null {
   return item?.price?.id ?? null;
 }
 
+async function handleAdditionalComputerCheckout(env: Env, event: StripeEvent): Promise<void> {
+  const session = event.data.object;
+  if (session.payment_status !== "paid") {
+    await logEvent(env.DB, "additional_computers_payment_not_confirmed", null, { session: session.id, payment_status: session.payment_status ?? null });
+    return;
+  }
+  const metadata = session.metadata ?? {};
+  const customerId = typeof metadata.customer_id === "string" ? metadata.customer_id : "";
+  const licenseId = typeof metadata.license_id === "string" ? metadata.license_id : "";
+  const quantity = Number.parseInt(String(metadata.quantity ?? ""), 10);
+  const customer = await findCustomerById(env.DB, customerId);
+  const license = await findLicenseById(env.DB, licenseId);
+  if (!customer || !license || license.customer_id !== customerId || license.type !== "lifetime" || license.status !== "active" || !Number.isInteger(quantity) || quantity < 1 || license.max_devices >= LIFETIME_MAX_DEVICES) {
+    await logEvent(env.DB, "additional_computers_rejected", licenseId || null, { session: session.id, reason: "ownership, status, type, or capacity" });
+    return;
+  }
+  let prices: number[];
+  try { prices = additionalComputerPrices(quantity, license.max_devices); } catch {
+    await logEvent(env.DB, "additional_computers_rejected", license.id, { session: session.id, reason: "invalid quantity" });
+    return;
+  }
+  const expectedAmount = additionalComputerTotalCzk(quantity, license.max_devices) * 100;
+  if (session.amount_total !== expectedAmount || String(session.currency ?? "").toLowerCase() !== "czk") {
+    await logEvent(env.DB, "additional_computers_rejected", license.id, { session: session.id, reason: "amount mismatch" });
+    return;
+  }
+  const result = await applyAdditionalComputerPurchase(env.DB, {
+    stripeSessionId: session.id,
+    stripePaymentIntentId: session.payment_intent ?? null,
+    customerId,
+    licenseId,
+    quantity,
+    amount: expectedAmount,
+    currency: "czk",
+  });
+  if (result.duplicate) return;
+  await logEvent(env.DB, result.applied ? "additional_computers_purchased" : "additional_computers_rejected", license.id, {
+    quantity, amount: expectedAmount, currency: "czk", stripe_session_id: session.id,
+    stripe_payment_intent_id: session.payment_intent ?? null, resulting_max_devices: result.resultingMaxDevices,
+    reason: result.applied ? undefined : "capacity reached during processing",
+  });
+}
 async function handleCheckoutCompleted(env: Env, event: StripeEvent): Promise<void> {
   const session = event.data.object;
+  if (session.metadata?.purchase_type === "additional_computers") { await handleAdditionalComputerCheckout(env, event); return; }
   const email: string =
     session.customer_details?.email ?? session.customer_email ?? "";
   if (!EMAIL_PATTERN.test(email)) {
@@ -276,6 +321,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 
   switch (event.type) {
     case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded":
       await handleCheckoutCompleted(env, event);
       break;
     case "customer.subscription.created":
@@ -785,6 +831,7 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
       status: device.status,
     })),
     invoices,
+    additional_computers: eligibleAdditionalComputerOffers(licenses),
     billing: {
       customer_portal_available: Boolean(env.STRIPE_SECRET_KEY && auth.customer.stripe_customer_id),
     },
@@ -792,6 +839,31 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
   });
 }
 
+async function portalAdditionalComputers(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in to purchase additional computers.", 401);
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== env.PORTAL_ORIGIN) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const licenseId = str(data.license_id);
+  const quantity = typeof data.quantity === "number" ? data.quantity : Number(data.quantity);
+  if (!licenseId || !Number.isInteger(quantity)) return fail("invalid_input", "Choose a whole number of computers.");
+  const license = await findLicenseById(env.DB, licenseId);
+  if (!license || license.customer_id !== auth.customer.id) return fail("not_found", "Licence not found.", 404);
+  if (license.status !== "active" || license.type !== "lifetime") return fail("not_eligible", "Additional computers are available only for an active lifetime licence.", 403);
+  const remaining = LIFETIME_MAX_DEVICES - license.max_devices;
+  if (remaining < 1) return fail("at_limit", "This licence already has the maximum number of computers.", 409);
+  if (quantity < 1 || quantity > remaining) return fail("invalid_quantity", "That quantity is not available for this licence.", 400);
+  if (!env.STRIPE_SECRET_KEY || !auth.customer.stripe_customer_id) return fail("billing_unavailable", "Billing is not available for this account yet.", 503);
+  const prices = additionalComputerPrices(quantity, license.max_devices);
+  const url = await stripeApi(env.STRIPE_SECRET_KEY).createAdditionalComputerCheckout({
+    customerId: auth.customer.stripe_customer_id, licenseId, quantity, pricesCzk: prices,
+    successUrl: new URL("/dashboard?additional_computers=success", env.PORTAL_ORIGIN).toString(),
+    cancelUrl: new URL("/dashboard?additional_computers=cancelled", env.PORTAL_ORIGIN).toString(),
+  });
+  await logEvent(env.DB, "additional_computers_checkout_created", license.id, { quantity, amount: prices.reduce((a, b) => a + b, 0) * 100, currency: "czk" });
+  return json({ url, quantity, amount: prices.reduce((a, b) => a + b, 0) * 100, currency: "czk" });
+}
 async function portalBilling(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to manage billing.", 401);
@@ -884,6 +956,9 @@ export default {
           break;
         case "/api/portal/billing":
           response = await portalBilling(request, env);
+          break;
+        case "/api/portal/additional-computers":
+          response = await portalAdditionalComputers(request, env);
           break;
         case "/api/portal/deactivate-device":
           response = await portalDeactivateDevice(request, env);
