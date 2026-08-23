@@ -937,3 +937,4 @@ A change is done only when:
 
 - The portal distinguishes an inactive licence from an actually deactivated device. A stored active device on an inactive licence is labelled `Inactive licence` and must be deactivated before Delete is offered; only rows whose device status is `deactivated` may be deleted.
 - Email-code and reusable-key activation show an indeterminate progress bar for the full `Working…` request state and remove it after success or a handled activation error.
+- The purchase confirmation opens a focused browser/SmartScreen safety dialog immediately after the installer download begins, while keeping the same guidance visible beside the original download button. Closing the dialog restores focus to that button. The page uses a consistent plural company voice in English and Czech.

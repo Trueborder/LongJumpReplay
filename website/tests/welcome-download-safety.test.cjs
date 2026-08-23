@@ -6,6 +6,7 @@ const path = require('node:path');
 const siteRoot = path.join(__dirname, '..', 'tomaspisar.cz');
 const html = fs.readFileSync(path.join(siteRoot, 'welcome', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(siteRoot, 'overrides.css'), 'utf8');
+const script = fs.readFileSync(path.join(siteRoot, 'script.js'), 'utf8');
 
 test('purchase confirmation shows download and SmartScreen guidance beside the installer action', () => {
   const download = html.indexOf('data-installer-url');
@@ -19,4 +20,22 @@ test('purchase confirmation shows download and SmartScreen guidance beside the i
   assert.match(html, /Přesto spustit/);
   assert.match(css, /\.download-safety-alert \{[^}]*border-left: 5px solid var\(--amber\)/);
   assert.match(css, /\.download-safety-steps \{[^}]*grid-template-columns: repeat\(2/);
+});
+
+test('download warning opens after the installer download starts', () => {
+  assert.match(html, /<dialog class="download-safety-dialog" data-download-safety-dialog/);
+  assert.match(html, /DOWNLOAD STARTED/);
+  assert.match(html, /data-download-safety-close/);
+  assert.match(script, /window\.setTimeout\(\(\) => \{/);
+  assert.match(script, /downloadSafetyDialog\.showModal\(\)/);
+  assert.match(script, /downloadSafetyTrigger\?\.focus\(\)/);
+  assert.match(css, /\.download-safety-dialog::backdrop/);
+});
+
+test('purchase confirmation uses plural company voice', () => {
+  assert.doesNotMatch(html, /(?:I will|writing to me|write to me|Email me)/i);
+  assert.doesNotMatch(html, /(?:napište mi\b|vyřeším(?:\s|[.,]))/i);
+  assert.match(html, /we will sort it out/);
+  assert.match(html, /Email us/);
+  assert.match(html, /vyřešíme to/);
 });

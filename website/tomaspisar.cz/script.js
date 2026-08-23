@@ -219,6 +219,31 @@
   document.querySelectorAll('[data-product-price]').forEach((element) => { element.textContent = product.price || '—'; });
   document.querySelectorAll('[data-installer-url]').forEach((element) => { element.href = product.installerUrl || '#'; });
 
+  const downloadSafetyDialog = document.querySelector('[data-download-safety-dialog]');
+  const downloadSafetyClose = downloadSafetyDialog?.querySelector('[data-download-safety-close]');
+  let downloadSafetyTrigger = null;
+  document.querySelectorAll('[data-installer-url]').forEach((element) => {
+    element.addEventListener('click', () => {
+      downloadSafetyTrigger = element;
+      // Let the anchor begin the browser download first, then show the safety
+      // guidance while the customer checks the Downloads panel.
+      window.setTimeout(() => {
+        if (!downloadSafetyDialog || downloadSafetyDialog.open) return;
+        if (typeof downloadSafetyDialog.showModal === 'function') downloadSafetyDialog.showModal();
+        else downloadSafetyDialog.setAttribute('open', '');
+        downloadSafetyClose?.focus();
+      }, 0);
+    });
+  });
+  downloadSafetyClose?.addEventListener('click', () => downloadSafetyDialog?.close());
+  downloadSafetyDialog?.addEventListener('close', () => {
+    downloadSafetyTrigger?.focus();
+    downloadSafetyTrigger = null;
+  });
+  downloadSafetyDialog?.addEventListener('click', (event) => {
+    if (event.target === downloadSafetyDialog) downloadSafetyDialog.close();
+  });
+
   const applyPublishedRelease = (manifest) => {
     const release = manifest?.schema === 1 ? manifest.payload : null;
     if (!release || release.product !== 'longjumpreplay' || release.channel !== 'stable') return;
