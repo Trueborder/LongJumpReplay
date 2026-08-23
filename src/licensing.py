@@ -130,7 +130,13 @@ def format_activation_key_input(value: str) -> str:
             compact += character
         if len(compact) == 12:
             break
-    return "-".join(compact[index:index + 4] for index in range(0, len(compact), 4))
+    formatted = "-".join(compact[index:index + 4] for index in range(0, len(compact), 4))
+    # Draw the separator as soon as a group is complete. Waiting for the next
+    # character makes the field feel delayed and causes Tk to place that next
+    # character on the wrong side of a newly inserted separator.
+    if len(compact) in {4, 8}:
+        formatted += "-"
+    return formatted
 
 
 def _activation_copy(language: str) -> dict[str, str]:
@@ -145,6 +151,7 @@ def _activation_copy(language: str) -> dict[str, str]:
             "key_hint": "Klíč ve formátu 0000-ABCD-2EFG najdete ve svém zákaznickém účtu.", "key_activate": "Aktivovat tento počítač",
             "back": "Zpět", "need_email": "Zadejte platnou e-mailovou adresu.", "need_code": "Zadejte šestimístný kód z e-mailu.",
             "need_key": "Zadejte platný aktivační klíč.", "buy": "Koupit licenci na tomaspisar.cz",
+            "licence_actions": "Aktivace licence", "evaluation_actions": "Zkušební režim",
             "trial_limits": "72hodinové hodnocení slouží pro kameru, zmrazení a přehrávání. Soutěžní režim, rozhodování, výsledky a důkazní balíčky jsou vypnuté. Zahrnuje 3 samostatné exporty videa.",
             "no_active_license": "E-mail byl ověřen, ale tento účet nemá zakoupenou aktivní licenci. Licenci můžete koupit na tomaspisar.cz.",
         }
@@ -158,6 +165,7 @@ def _activation_copy(language: str) -> dict[str, str]:
         "key_hint": "Find the 0000-ABCD-2EFG key in your customer account.", "key_activate": "Activate this computer",
         "back": "Back", "need_email": "Enter a valid email address.", "need_code": "Enter the six-digit code from the email.",
         "need_key": "Enter a valid activation key.", "buy": "Buy a licence at tomaspisar.cz",
+        "licence_actions": "Licence activation", "evaluation_actions": "Evaluation mode",
         "trial_limits": "The 72-hour evaluation demonstrates camera capture, freeze and replay. Competition setup, judging, results and evidence packages are disabled. Three standalone video exports are included.",
         "no_active_license": "Email verified, but this account has no purchased active licence. Buy one at tomaspisar.cz.",
     }
@@ -232,8 +240,16 @@ def ensure_license_or_trial(
 
     status_label = ttk.Label(body, text="", wraplength=560, justify="left")
     status_label.pack(anchor="w", pady=(10, 12))
-    buttons = ttk.Frame(body)
-    buttons.pack(fill="x")
+    licence_actions = ttk.LabelFrame(body, text=copy["licence_actions"], padding=12)
+    licence_actions.pack(fill="x", pady=(0, 12))
+    licence_buttons = ttk.Frame(licence_actions)
+    licence_buttons.pack(fill="x")
+    licence_buttons.columnconfigure((0, 1), weight=1, uniform="licence-action")
+    evaluation_actions = ttk.LabelFrame(body, text=copy["evaluation_actions"], padding=12)
+    evaluation_actions.pack(fill="x", pady=(0, 12))
+    evaluation_actions.columnconfigure(0, weight=1)
+    footer_actions = ttk.Frame(body)
+    footer_actions.pack(fill="x")
 
     def fit_dialog_to_content() -> None:
         """Resize after switching steps so newly packed controls cannot be clipped."""
@@ -262,7 +278,7 @@ def ensure_license_or_trial(
             status_label.configure(text=message)
             return
         code_frame.pack(anchor="w", fill="x", before=status_label)
-        send_button.pack_forget()
+        send_button.grid_remove()
         code_entry.focus_set()
         status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
         fit_dialog_to_content()
@@ -272,7 +288,7 @@ def ensure_license_or_trial(
         code_frame.pack_forget()
         status_label.configure(text="")
         if not send_button.winfo_manager():
-            send_button.pack(side="right", padx=(0, 8))
+            send_button.grid()
         email_entry.focus_set()
         fit_dialog_to_content()
 
@@ -312,11 +328,33 @@ def ensure_license_or_trial(
         key_status.pack(anchor="w", pady=(6, 10))
         row = ttk.Frame(pane)
         row.pack(fill="x")
+        row.columnconfigure((0, 1), weight=1, uniform="key-action")
+
+        format_job: str | None = None
+        formatting_key = False
+
+        def apply_key_format() -> None:
+            """Apply grouping after Tk finishes the edit, then restore the caret."""
+            nonlocal format_job, formatting_key
+            format_job = None
+            current = key_var.get()
+            cursor = key_entry.index(tk.INSERT)
+            formatted = format_activation_key_input(current)
+            formatted_prefix = format_activation_key_input(current[:cursor])
+            if formatted != current:
+                formatting_key = True
+                key_var.set(formatted)
+                formatting_key = False
+            key_entry.icursor(min(len(formatted_prefix), len(formatted)))
 
         def format_key(*_args: object) -> None:
-            formatted = format_activation_key_input(key_var.get())
-            if formatted != key_var.get():
-                key_var.set(formatted)
+            nonlocal format_job
+            if formatting_key or format_job is not None:
+                return
+            # A StringVar trace fires before Entry completes its cursor update.
+            # Formatting on idle gives us the final caret and avoids the
+            # one-character jump observed when a dash is inserted.
+            format_job = key_dialog.after_idle(apply_key_format)
 
         key_var.trace_add("write", format_key)
 
@@ -336,8 +374,8 @@ def ensure_license_or_trial(
             key_dialog.destroy()
             dialog.destroy()
 
-        ttk.Button(row, text=copy["back"], command=key_dialog.destroy).pack(side="right")
-        ttk.Button(row, text=copy["key_activate"], command=use_key, style="Accent.TButton").pack(side="right", padx=(0, 8))
+        ttk.Button(row, text=copy["back"], command=key_dialog.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(row, text=copy["key_activate"], command=use_key, style="Accent.TButton").grid(row=0, column=1, sticky="ew", padx=(6, 0))
         key_dialog.bind("<Return>", lambda _event: use_key())
         key_entry.focus_set()
 
@@ -365,21 +403,22 @@ def ensure_license_or_trial(
     def cancel() -> None:
         dialog.destroy()
 
-    ttk.Button(code_actions, text=copy["back"], command=back_to_email).pack(side="left")
-    ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Accent.TButton").pack(side="right")
+    code_actions.columnconfigure((0, 1), weight=1, uniform="code-action")
+    ttk.Button(code_actions, text=copy["back"], command=back_to_email).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+    ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Accent.TButton").grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-    ttk.Button(buttons, text=copy["cancel"], command=cancel).pack(side="right")
+    ttk.Button(footer_actions, text=copy["cancel"], command=cancel).pack(side="right")
     if status.active:
-        ttk.Button(buttons, text=copy["continue"], command=continue_trial).pack(side="right", padx=(0, 8))
+        ttk.Button(evaluation_actions, text=copy["continue"], command=continue_trial).grid(row=0, column=0, sticky="ew")
     else:
-        ttk.Button(buttons, text=copy["start"], command=begin_trial).pack(side="right", padx=(0, 8))
+        ttk.Button(evaluation_actions, text=copy["start"], command=begin_trial).grid(row=0, column=0, sticky="ew")
     # The email step owns the Send action. Once the code arrives, the code
     # section exposes explicit Back and Activate controls instead of silently
     # repurposing the button at the bottom of the dialog.
-    send_button = ttk.Button(buttons, text=copy["send"], command=send_code, style="Accent.TButton")
-    send_button.pack(side="right", padx=(0, 8))
-    ttk.Button(buttons, text=copy["alternate"], command=show_key_activation).pack(side="left")
-    ttk.Button(buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/software/longjumpreplay/#buy")).pack(side="left", padx=(8, 0))
+    send_button = ttk.Button(licence_buttons, text=copy["send"], command=send_code, style="Accent.TButton")
+    send_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+    ttk.Button(licence_buttons, text=copy["alternate"], command=show_key_activation).grid(row=1, column=0, sticky="ew", padx=(0, 6))
+    ttk.Button(licence_buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/software/longjumpreplay/#buy")).grid(row=1, column=1, sticky="ew", padx=(6, 0))
     ttk.Separator(body).pack(fill="x", pady=(18, 10))
     ttk.Label(body, text=copy["trial_limits"], wraplength=620, justify="left").pack(anchor="w")
     dialog.protocol("WM_DELETE_WINDOW", cancel)

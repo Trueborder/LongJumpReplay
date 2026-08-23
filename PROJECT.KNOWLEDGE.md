@@ -12,6 +12,10 @@
   `ACTIVATION_KEY_ENCRYPTION_KEY` is a Worker secret and must never be committed
   or printed. The portal hides the key on every load and offers explicit reveal,
   copy, and destructive regeneration controls.
+- Manual key entry inserts separators immediately after the fourth and eighth
+  accepted characters and restores the Tk insertion cursor after formatting,
+  so the next character stays to the right of the separator. Portal Copy works
+  while the key remains masked by retrieving it only for the clipboard action.
 - Regenerating a key deactivates only active devices whose activation method is
   `key`; email-activated devices remain active. The portal device table shows
   activation method, activation time, and last activity. Owner-only details put
@@ -38,6 +42,10 @@
   is the practical direct-download route; HTTPS, checksums and signed update
   manifests do not by themselves remove browser or SmartScreen warnings. See
   `docs/WINDOWS_CODE_SIGNING.md`.
+- The post-payment `/welcome/` page places an amber download safety alert beside
+  the installer button. It explains how to keep an uncommon download and use
+  SmartScreen's More info / Run anyway path, while telling customers to verify
+  the official `files.tomaspisar.cz` source and `LJR_setup.exe` filename.
 
 ## Email licensing and customer portal (2026-08-18)
 

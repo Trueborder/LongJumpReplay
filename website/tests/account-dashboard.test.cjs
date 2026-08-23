@@ -25,6 +25,14 @@ test('device controls keep actions together and use a dedicated SVG close icon',
   assert.doesNotMatch(html, /id="device-details-close" class="icon-button"/);
 });
 
+test('activation key can be copied while the displayed value stays hidden', () => {
+  assert.match(html, /id="activation-key-copy" class="button button-outline" type="button"/);
+  assert.doesNotMatch(html, /id="activation-key-copy"[^>]*disabled/);
+  assert.match(script, /const copyActivationKey = async \(\) =>/);
+  assert.match(script, /value = data\.key;[\s\S]*?writeClipboard\(value\)/);
+  assert.match(script, /Key copied without revealing it\./);
+});
+
 test('dashboard markup does not contain duplicate ids', () => {
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(new Set(ids).size, ids.length);

@@ -14,6 +14,8 @@ def test_verification_code_input_keeps_six_ascii_digits() -> None:
 
 
 def test_portal_activation_key_input_is_grouped_live() -> None:
+    assert format_activation_key_input("1234") == "1234-"
+    assert format_activation_key_input("1234abcd") == "1234-ABCD-"
     assert format_activation_key_input("1234 abcd-2efg trailing") == "1234-ABCD-2EFG"
     assert format_activation_key_input("12x34-abio-01efg") == "1234-ABEF-G"
 from tools.license_admin import create_license

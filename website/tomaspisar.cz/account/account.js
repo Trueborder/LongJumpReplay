@@ -178,7 +178,6 @@
   const hideActivationKey = () => {
     state.keyVisible = false; state.keyValue = '';
     if ($('#activation-key-value')) $('#activation-key-value').textContent = '••••-••••-••••';
-    if ($('#activation-key-copy')) $('#activation-key-copy').disabled = true;
     if ($('#activation-key-reveal')) $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Zobrazit klíč' : 'Show key';
   };
 
@@ -300,14 +299,61 @@
     } catch (error) { setStatus(error.message); }
   };
 
+  const fetchActivationKey = async () => {
+    if (!state.ensuredKeys.has(state.keyLicenceId)) {
+      await api('/api/portal/activation-key/ensure', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
+      state.ensuredKeys.add(state.keyLicenceId);
+    }
+    return api('/api/portal/activation-key/reveal', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
+  };
+
   const revealActivationKey = async () => {
     if (state.keyVisible) { hideActivationKey(); return; }
     try {
-      const data = await api('/api/portal/activation-key/reveal', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
+      const data = await fetchActivationKey();
       state.keyVisible = true; state.keyValue = data.key;
-      $('#activation-key-value').textContent = data.key; $('#activation-key-copy').disabled = false;
+      $('#activation-key-value').textContent = data.key;
       $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Skrýt klíč' : 'Hide key';
     } catch (error) { setStatus(error.message); }
+  };
+
+  const writeClipboard = async (value) => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+    const field = document.createElement('textarea');
+    field.value = value;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    const copied = document.execCommand('copy');
+    field.remove();
+    if (!copied) throw new Error('copy failed');
+  };
+
+  const copyActivationKey = async () => {
+    const button = $('#activation-key-copy');
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = state.lang === 'cs' ? 'Kopíruji…' : 'Copying…';
+    try {
+      let value = state.keyValue;
+      if (!value) {
+        const data = await fetchActivationKey();
+        value = data.key;
+      }
+      await writeClipboard(value);
+      setStatus(state.lang === 'cs' ? 'Klíč byl zkopírován, aniž by se zobrazil.' : 'Key copied without revealing it.');
+    } catch {
+      setStatus(state.lang === 'cs' ? 'Klíč se nepodařilo zkopírovat.' : 'The key could not be copied.');
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = state.lang === 'cs' ? 'Kopírovat klíč' : 'Copy key';
+    }
   };
 
   const regenerateActivationKey = async () => {
@@ -317,7 +363,7 @@
     try {
       const data = await api('/api/portal/activation-key/regenerate', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
       state.keyVisible = true; state.keyValue = data.key;
-      $('#activation-key-value').textContent = data.key; $('#activation-key-copy').disabled = false;
+      $('#activation-key-value').textContent = data.key;
       $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Skrýt klíč' : 'Hide key';
       setStatus(state.lang === 'cs' ? `Nový klíč je připraven. Odpojeno počítačů: ${data.disconnected_devices}.` : `New key ready. Disconnected computers: ${data.disconnected_devices}.`);
       if (state.account) state.account.devices = state.account.devices.map((device) => device.license_id === state.keyLicenceId && device.activation_method === 'key' ? { ...device, status: 'deactivated' } : device);
@@ -352,11 +398,7 @@
     $('#security-logout-button')?.addEventListener('click', signOut);
     $('#device-details-close')?.addEventListener('click', () => $('#device-details-dialog').close());
     $('#activation-key-reveal')?.addEventListener('click', revealActivationKey);
-    $('#activation-key-copy')?.addEventListener('click', async () => {
-      if (!state.keyValue) return;
-      try { await navigator.clipboard.writeText(state.keyValue); setStatus(state.lang === 'cs' ? 'Klíč byl zkopírován.' : 'Key copied.'); }
-      catch { setStatus(state.lang === 'cs' ? 'Klíč se nepodařilo zkopírovat.' : 'The key could not be copied.'); }
-    });
+    $('#activation-key-copy')?.addEventListener('click', copyActivationKey);
     $('#activation-key-regenerate')?.addEventListener('click', regenerateActivationKey);
     $('#licence-key-select')?.addEventListener('change', async (event) => {
       state.keyLicenceId = event.target.value; hideActivationKey();
