@@ -309,6 +309,17 @@ class ThemeManager:
         style.map("Control.TButton", background=[("disabled", p["surface2"]), ("active", p["surface2"]), ("pressed", p["selection"])], foreground=[("disabled", p["muted"])])
         style.configure("Accent.TButton", padding=(11, 0), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")
         style.map("Accent.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
+        style.configure(
+            "Modal.Horizontal.TProgressbar",
+            troughcolor=p["surface2"],
+            background=p["accent"],
+            bordercolor=p["border"],
+            lightcolor=p["accent"],
+            darkcolor=p["accent"],
+            borderwidth=1,
+            relief="flat",
+            thickness=10,
+        )
         style.configure("Live.TButton", padding=(11, 0), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
         style.configure("PrimaryJudge.TButton", padding=(18, 4), font=("Segoe UI Semibold", 11), background=p["accent"], foreground="#ffffff")
         style.map("PrimaryJudge.TButton", background=[("disabled", p["surface2"]), ("active", p["accent_hover"]), ("pressed", p["accent_hover"])], foreground=[("disabled", p["muted"])])

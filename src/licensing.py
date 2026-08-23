@@ -2,15 +2,57 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections.abc import Callable
 from datetime import datetime
 import hashlib
 import json
 import os
 import platform
+import queue
+import threading
 import tkinter as tk
 from tkinter import ttk
 import uuid
 import webbrowser
+
+
+def _run_background(
+    window: tk.Misc,
+    task: Callable[[], object],
+    on_success: Callable[[object], None],
+    on_error: Callable[[object], None],
+) -> None:
+    """Run blocking activation I/O without freezing Tk's animation loop."""
+    results: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
+
+    def worker() -> None:
+        try:
+            results.put((True, task()))
+        except Exception as error:
+            results.put((False, error))
+
+    def poll() -> None:
+        try:
+            succeeded, value = results.get_nowait()
+        except queue.Empty:
+            try:
+                if window.winfo_exists():
+                    window.after(15, poll)
+            except tk.TclError:
+                pass
+            return
+        try:
+            if not window.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if succeeded:
+            on_success(value)
+        else:
+            on_error(value)
+
+    threading.Thread(target=worker, name="activation-request", daemon=True).start()
+    window.after(15, poll)
 
 PRODUCT_ID = "LongJumpReplay"
 # Version 2 keys were issued by the previous 3.1 release despite the product
@@ -240,7 +282,7 @@ def ensure_license_or_trial(
 
     status_label = ttk.Label(body, text="", wraplength=560, justify="left")
     status_label.pack(anchor="w", pady=(10, 12))
-    progress_bar = ttk.Progressbar(body, mode="indeterminate")
+    progress_bar = ttk.Progressbar(body, mode="indeterminate", style="Modal.Horizontal.TProgressbar")
     licence_actions = ttk.LabelFrame(body, text=copy["licence_actions"], padding=12)
     licence_actions.pack(fill="x", pady=(0, 12))
     licence_buttons = ttk.Frame(licence_actions)
@@ -251,6 +293,7 @@ def ensure_license_or_trial(
     evaluation_actions.columnconfigure(0, weight=1)
     footer_actions = ttk.Frame(body)
     footer_actions.pack(fill="x")
+    request_in_progress = False
 
     def fit_dialog_to_content() -> None:
         """Resize after switching steps so newly packed controls cannot be clipped."""
@@ -262,36 +305,50 @@ def ensure_license_or_trial(
         y = max(0, (screen_height - height) // 2)
         dialog.geometry(f"{width}x{height}+{x}+{y}")
 
-    def busy(text: str) -> None:
+    def busy(text: str, *buttons: ttk.Button) -> bool:
+        nonlocal request_in_progress
+        if request_in_progress:
+            return False
+        request_in_progress = True
         status_label.configure(text=text)
+        for button in buttons:
+            button.state(["disabled"])
         if not progress_bar.winfo_manager():
             progress_bar.pack(fill="x", pady=(0, 12), before=licence_actions)
         progress_bar.start(12)
-        dialog.update()
+        return True
 
-    def stop_busy() -> None:
+    def stop_busy(*buttons: ttk.Button) -> None:
+        nonlocal request_in_progress
+        request_in_progress = False
         progress_bar.stop()
         progress_bar.pack_forget()
+        for button in buttons:
+            button.state(["!disabled"])
 
     def send_code() -> None:
         email = email_var.get().strip()
         if "@" not in email or "." not in email.split("@")[-1]:
             status_label.configure(text=copy["need_email"])
             return
-        busy(copy["working"])
-        try:
-            minutes = activation_api.request_code(email)
-        except activation_api.ActivationError as error:
-            stop_busy()
-            message = copy["no_active_license"] if error.code in {"no_license", "license_inactive"} else str(error)
-            status_label.configure(text=message)
+        if not busy(copy["working"], send_button):
             return
-        stop_busy()
-        code_frame.pack(anchor="w", fill="x", before=status_label)
-        send_button.grid_remove()
-        code_entry.focus_set()
-        status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
-        fit_dialog_to_content()
+
+        def failed(error: object) -> None:
+            stop_busy(send_button)
+            error_code = getattr(error, "code", None)
+            message = copy["no_active_license"] if error_code in {"no_license", "license_inactive"} else str(error)
+            status_label.configure(text=message)
+
+        def succeeded(minutes: object) -> None:
+            stop_busy(send_button)
+            code_frame.pack(anchor="w", fill="x", before=status_label)
+            send_button.grid_remove()
+            code_entry.focus_set()
+            status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
+            fit_dialog_to_content()
+
+        _run_background(dialog, lambda: activation_api.request_code(email), succeeded, failed)
 
     def back_to_email() -> None:
         code_var.set("")
@@ -308,19 +365,28 @@ def ensure_license_or_trial(
         if not code.isdigit() or len(code) != 6:
             status_label.configure(text=copy["need_code"])
             return
-        busy(copy["working"])
-        try:
-            grant = activation_api.verify_code(email_var.get().strip(), code)
-            activation_api.activate(grant)
-        except activation_api.ActivationError as error:
-            stop_busy()
-            message = copy["no_active_license"] if error.code in {"no_license", "license_inactive"} else str(error)
-            status_label.configure(text=message)
+        email = email_var.get().strip()
+        if not busy(copy["working"], code_back_button, code_activate_button):
             return
-        stop_busy()
-        status_label.configure(text=copy["activated"])
-        accepted = True
-        dialog.destroy()
+
+        def activate() -> None:
+            grant = activation_api.verify_code(email, code)
+            activation_api.activate(grant)
+
+        def failed(error: object) -> None:
+            stop_busy(code_back_button, code_activate_button)
+            error_code = getattr(error, "code", None)
+            message = copy["no_active_license"] if error_code in {"no_license", "license_inactive"} else str(error)
+            status_label.configure(text=message)
+
+        def succeeded(_result: object) -> None:
+            nonlocal accepted
+            stop_busy(code_back_button, code_activate_button)
+            status_label.configure(text=copy["activated"])
+            accepted = True
+            dialog.destroy()
+
+        _run_background(dialog, activate, succeeded, failed)
 
     def show_key_activation() -> None:
         """Alternative activation using the reusable key from the portal."""
@@ -338,10 +404,11 @@ def ensure_license_or_trial(
         key_entry.pack(fill="x", pady=(5, 10))
         key_status = ttk.Label(pane, text="", wraplength=520, justify="left")
         key_status.pack(anchor="w", pady=(6, 10))
-        key_progress = ttk.Progressbar(pane, mode="indeterminate")
+        key_progress = ttk.Progressbar(pane, mode="indeterminate", style="Modal.Horizontal.TProgressbar")
         row = ttk.Frame(pane)
         row.pack(fill="x")
         row.columnconfigure((0, 1), weight=1, uniform="key-action")
+        key_request_in_progress = False
 
         format_job: str | None = None
         formatting_key = False
@@ -372,28 +439,42 @@ def ensure_license_or_trial(
         key_var.trace_add("write", format_key)
 
         def use_key() -> None:
-            nonlocal accepted
+            nonlocal key_request_in_progress
+            if key_request_in_progress:
+                return
             if len(key_var.get()) != 14:
                 key_status.configure(text=copy["need_key"])
                 return
+            key_request_in_progress = True
             key_status.configure(text=copy["working"])
+            key_back_button.state(["disabled"])
+            key_activate_button.state(["disabled"])
             key_progress.pack(fill="x", pady=(0, 10), before=row)
             key_progress.start(12)
-            key_dialog.update()
-            try:
-                activation_api.activate_with_key(key_var.get())
-            except activation_api.ActivationError as error:
+
+            def failed(error: object) -> None:
+                nonlocal key_request_in_progress
+                key_request_in_progress = False
                 key_progress.stop()
                 key_progress.pack_forget()
+                key_back_button.state(["!disabled"])
+                key_activate_button.state(["!disabled"])
                 key_status.configure(text=str(error))
-                return
-            key_progress.stop()
-            accepted = True
-            key_dialog.destroy()
-            dialog.destroy()
 
-        ttk.Button(row, text=copy["back"], command=key_dialog.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(row, text=copy["key_activate"], command=use_key, style="Accent.TButton").grid(row=0, column=1, sticky="ew", padx=(6, 0))
+            def succeeded(_result: object) -> None:
+                nonlocal accepted
+                key_progress.stop()
+                accepted = True
+                key_dialog.destroy()
+                dialog.destroy()
+
+            key = key_var.get()
+            _run_background(key_dialog, lambda: activation_api.activate_with_key(key), succeeded, failed)
+
+        key_back_button = ttk.Button(row, text=copy["back"], command=key_dialog.destroy)
+        key_back_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        key_activate_button = ttk.Button(row, text=copy["key_activate"], command=use_key, style="Accent.TButton")
+        key_activate_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
         key_dialog.bind("<Return>", lambda _event: use_key())
         key_entry.focus_set()
 
@@ -422,8 +503,10 @@ def ensure_license_or_trial(
         dialog.destroy()
 
     code_actions.columnconfigure((0, 1), weight=1, uniform="code-action")
-    ttk.Button(code_actions, text=copy["back"], command=back_to_email).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-    ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Accent.TButton").grid(row=0, column=1, sticky="ew", padx=(6, 0))
+    code_back_button = ttk.Button(code_actions, text=copy["back"], command=back_to_email)
+    code_back_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+    code_activate_button = ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Accent.TButton")
+    code_activate_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
     ttk.Button(footer_actions, text=copy["cancel"], command=cancel).pack(side="right")
     if status.active:

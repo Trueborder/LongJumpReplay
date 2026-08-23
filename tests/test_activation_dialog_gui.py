@@ -1,9 +1,12 @@
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 
 import pytest
 
 from src import activation, licensing, trial
+from src.theme import ThemeManager
 
 
 def _descendants(widget):
@@ -12,17 +15,25 @@ def _descendants(widget):
         yield from _descendants(child)
 
 
+def _wait_until(root, predicate, timeout=1.5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        root.update()
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
 @pytest.mark.parametrize("language", ["en", "cs"])
 def test_code_step_has_back_and_activate_actions(monkeypatch, language):
     observed = {}
+    request_started = threading.Event()
+    release_request = threading.Event()
 
     def request_code(_email):
-        dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
-        observed["progress_visible_while_working"] = any(
-            widget.winfo_ismapped()
-            for widget in _descendants(dialog)
-            if isinstance(widget, ttk.Progressbar)
-        )
+        request_started.set()
+        release_request.wait(timeout=2)
         return 10
 
     monkeypatch.setattr(activation, "request_code", request_code)
@@ -34,6 +45,7 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
 
     root = tk.Tk()
     root.withdraw()
+    ThemeManager(root).apply("dark")
     copy = licensing._trial_copy(language)
 
     def drive_dialog():
@@ -46,7 +58,29 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         )
         initial_height = dialog.winfo_height()
         send.invoke()
-        dialog.update_idletasks()
+        assert _wait_until(root, request_started.is_set)
+        progress = next(
+            widget for widget in _descendants(dialog)
+            if isinstance(widget, ttk.Progressbar) and widget.winfo_ismapped()
+        )
+        initial_progress = float(progress.cget("value"))
+        observed["progress_visible_while_working"] = progress.winfo_ismapped()
+        observed["progress_style"] = progress.cget("style")
+        observed["progress_thickness"] = int(ttk.Style(root).lookup(progress.cget("style"), "thickness"))
+        observed["progress_moves_while_working"] = _wait_until(
+            root,
+            lambda: float(progress.cget("value")) != initial_progress,
+        )
+        observed["send_disabled_while_working"] = send.instate(["disabled"])
+        release_request.set()
+        assert _wait_until(
+            root,
+            lambda: any(
+                widget is not email and widget.winfo_ismapped()
+                for widget in _descendants(dialog)
+                if isinstance(widget, ttk.Entry)
+            ),
+        )
         entries = [widget for widget in _descendants(dialog) if isinstance(widget, ttk.Entry)]
         code_entry = next(widget for widget in entries if widget is not email)
         code_entry.insert(0, "12a 34-56789")
@@ -98,6 +132,10 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         "send_restored": True,
         "email_focus_target": True,
         "progress_visible_while_working": True,
+        "progress_style": "Modal.Horizontal.TProgressbar",
+        "progress_thickness": 10,
+        "progress_moves_while_working": True,
+        "send_disabled_while_working": True,
     }
 
 
@@ -110,16 +148,15 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
 
     root = tk.Tk()
     root.withdraw()
+    ThemeManager(root).apply("dark")
     observed = {}
     copy = licensing._trial_copy("en")
+    request_started = threading.Event()
+    release_request = threading.Event()
 
     def activate_with_key(_key):
-        dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
-        observed["progress_visible_while_working"] = any(
-            widget.winfo_ismapped()
-            for widget in _descendants(dialog)
-            if isinstance(widget, ttk.Progressbar)
-        )
+        request_started.set()
+        release_request.wait(timeout=2)
 
     monkeypatch.setattr(activation, "activate_with_key", activate_with_key)
 
@@ -160,6 +197,21 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
             if isinstance(widget, ttk.Button) and widget.cget("text") == copy["key_activate"]
         )
         activate_button.invoke()
+        assert _wait_until(root, request_started.is_set)
+        progress = next(
+            widget for widget in _descendants(key_dialog)
+            if isinstance(widget, ttk.Progressbar) and widget.winfo_ismapped()
+        )
+        initial_progress = float(progress.cget("value"))
+        observed["progress_visible_while_working"] = progress.winfo_ismapped()
+        observed["progress_style"] = progress.cget("style")
+        observed["progress_thickness"] = int(ttk.Style(root).lookup(progress.cget("style"), "thickness"))
+        observed["progress_moves_while_working"] = _wait_until(
+            root,
+            lambda: float(progress.cget("value")) != initial_progress,
+        )
+        observed["activate_disabled_while_working"] = activate_button.instate(["disabled"])
+        release_request.set()
 
     root.after(20, drive_dialog)
     accepted = licensing.ensure_license_or_trial(
@@ -176,4 +228,8 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
         "second_group": "1234-ABCD-",
         "second_cursor": 10,
         "progress_visible_while_working": True,
+        "progress_style": "Modal.Horizontal.TProgressbar",
+        "progress_thickness": 10,
+        "progress_moves_while_working": True,
+        "activate_disabled_while_working": True,
     }
