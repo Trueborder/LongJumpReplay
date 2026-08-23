@@ -2,6 +2,8 @@
   const API = 'https://api.tomaspisar.cz';
   const { deriveDashboardEntitlement } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
+  const dashboardRoute = page === 'dashboard' ? (window.location.pathname.split('/').filter(Boolean)[1] || 'overview') : '';
+  const dashboardRoutes = new Set(['overview', 'licence', 'activation-key', 'devices', 'billing', 'help']);
   const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null,
     keyVisible: false, keyValue: '', keyLicenceId: '', ensuredKeys: new Set() };
   const $ = (selector) => document.querySelector(selector);
@@ -49,6 +51,43 @@
   }
 
   const t = (key) => copy[state.lang][key] || copy.en[key] || key;
+  const routeCopy = {
+    en: {
+      overview: ['ACCOUNT OVERVIEW', 'Account overview.', 'Your licence, computers and access in one place.'],
+      licence: ['LICENCE & ACCESS', 'Your licence.', 'Review plan status, competition access and available computer capacity.'],
+      'activation-key': ['QUICK ACTIVATION', 'Quick activation.', 'Reveal or rotate the private key used to prepare your Windows stations.'],
+      devices: ['COMPUTERS', 'Your computers.', 'See activation method, recent activity and the slots used by each station.'],
+      billing: ['BILLING', 'Billing and invoices.', 'Manage subscription payments and keep your purchase documents together.'],
+      help: ['HELP & SECURITY', 'Help & security.', 'Installation, support and practical guidance for keeping access safe.']
+    },
+    cs: {
+      overview: ['PŘEHLED ÚČTU', 'Přehled účtu.', 'Licence, počítače a přístup na jednom místě.'],
+      licence: ['LICENCE A PŘÍSTUP', 'Vaše licence.', 'Zkontrolujte stav plánu, závodní přístup a kapacitu počítačů.'],
+      'activation-key': ['RYCHLÁ AKTIVACE', 'Rychlá aktivace.', 'Zobrazte nebo obnovte soukromý klíč pro přípravu stanic Windows.'],
+      devices: ['POČÍTAČE', 'Vaše počítače.', 'Způsob aktivace, poslední aktivita a místa využitá jednotlivými stanicemi.'],
+      billing: ['PLATBY', 'Platby a faktury.', 'Spravujte platby předplatného a mějte doklady o nákupu pohromadě.'],
+      help: ['POMOC A ZABEZPEČENÍ', 'Pomoc a zabezpečení.', 'Instalace, podpora a praktické rady pro bezpečný přístup.']
+    }
+  };
+  const renderDashboardRoute = (hasActiveLicence) => {
+    const route = dashboardRoutes.has(dashboardRoute) ? dashboardRoute : 'overview';
+    const [eyebrow, title, description] = routeCopy[state.lang][route];
+    $('#dashboard-route-eyebrow').textContent = `LONGJUMPREPLAY / ${eyebrow}`;
+    $('#dashboard-title').textContent = title;
+    $('#dashboard-route-description').textContent = description;
+    document.title = `${title.replace(/\.$/, '')} — LongJumpReplay account`;
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', `https://account.tomaspisar.cz/dashboard/${route}`);
+    document.querySelectorAll('[data-dashboard-link]').forEach((link) => {
+      if (link.dataset.dashboardLink === route) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+    document.querySelectorAll('[data-dashboard-route]').forEach((section) => {
+      const available = section.id !== 'additional-computers' || section.dataset.available === 'true';
+      section.hidden = section.dataset.dashboardRoute !== route || !available;
+    });
+    $('#activation-key-card').hidden = !hasActiveLicence;
+    $('#activation-key-unavailable').hidden = hasActiveLicence;
+  };
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
   const formatDate = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium' }).format(new Date(seconds * 1000)) : '—';
   const formatDateTime = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(seconds * 1000)) : '—';
@@ -100,13 +139,13 @@
       setLoginBusy(true);
       try {
         await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) });
-        window.location.replace('/dashboard');
+        window.location.replace('/dashboard/overview');
       } catch (error) { setStatus(error.message, '#login-status'); }
       finally { setLoginBusy(false); }
     };
 
     form.addEventListener('submit', (event) => { event.preventDefault(); state.codeSent ? verifyCode() : requestCode(); });
-    api('/api/portal/account').then(() => window.location.replace('/dashboard')).catch(() => $('#email').focus());
+    api('/api/portal/account').then(() => window.location.replace('/dashboard/overview')).catch(() => $('#email').focus());
   };
 
   const renderLicenceCards = (licences) => {
@@ -168,8 +207,8 @@
     const section = $('#additional-computers');
     const card = $('#additional-computers-card');
     const offer = (offers || [])[0];
+    section.dataset.available = offer && offer.remaining > 0 ? 'true' : 'false';
     if (!offer || offer.remaining < 1) { section.hidden = true; return; }
-    section.hidden = false;
     const money = (amount) => new Intl.NumberFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: 'CZK', maximumFractionDigits: 0 }).format(amount);
     const options = Array.from({ length: offer.remaining }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('');
     const breakdown = offer.breakdown.map((item) => `<span><span>${t('computer')} ${item.computer}</span><strong>${money(item.amount_czk)}</strong></span>`).join('');
@@ -211,14 +250,15 @@
     $('#no-licence-title').textContent = t(hasAnyLicence ? 'inactiveLicenceTitle' : 'noLicenceTitle');
     $('#no-licence-copy').textContent = t(hasAnyLicence ? 'inactiveLicenceCopy' : 'noLicenceCopy');
     $('#licence-cards').hidden = !hasAnyLicence;
-    document.querySelectorAll('.licensed-only').forEach((section) => { section.hidden = !hasAnyLicence; });
     $('#billing-button').hidden = !data.billing?.customer_portal_available;
+    document.querySelectorAll('[data-open-billing]').forEach((button) => { button.hidden = !data.billing?.customer_portal_available; });
     $('#device-count').textContent = `${activeDevices.length} ${state.lang === 'cs' ? 'aktivní' : 'active'} · ${Math.max(0, totalSlots - activeDevices.length)} ${t('available')}`;
     renderLicenceCards(licences);
     renderDevices(devices, activeLicenceIds);
     renderActivationKeys(data);
     renderInvoices(data.invoices || []);
     renderAdditionalComputers(data.additional_computers || []);
+    renderDashboardRoute(hasActiveLicence);
     $('#dashboard-loading').hidden = true;
     $('#dashboard-content').hidden = false;
   };
@@ -290,7 +330,14 @@
     finally { window.location.replace('/login'); }
   };
 
+  const openBilling = async () => {
+    setStatus(t('sending'));
+    try { const data = await api('/api/portal/billing', { method: 'POST', body: '{}' }); window.location.href = data.url; }
+    catch (error) { setStatus(error.message); }
+  };
+
   const initDashboard = () => {
+    renderDashboardRoute(false);
     document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-deactivate]');
       if (button) deactivate(button.dataset.deactivate);
@@ -299,11 +346,8 @@
       const detailsButton = event.target.closest('[data-details]');
       if (detailsButton) showDeviceDetails(detailsButton.dataset.details);
     });
-    $('#billing-button')?.addEventListener('click', async () => {
-      setStatus(t('sending'));
-      try { const data = await api('/api/portal/billing', { method: 'POST', body: '{}' }); window.location.href = data.url; }
-      catch (error) { setStatus(error.message); }
-    });
+    $('#billing-button')?.addEventListener('click', openBilling);
+    document.querySelectorAll('[data-open-billing]').forEach((button) => button.addEventListener('click', openBilling));
     $('#logout-button')?.addEventListener('click', signOut);
     $('#security-logout-button')?.addEventListener('click', signOut);
     $('#device-details-close')?.addEventListener('click', () => $('#device-details-dialog').close());

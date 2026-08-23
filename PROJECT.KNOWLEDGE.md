@@ -74,11 +74,14 @@
   plus plain text, with cyan `APP ACTIVATION` and amber
   `CUSTOMER PORTAL LOGIN` purpose labels so the requested action is obvious.
 - The portal has separate canonical routes: `/login` for passwordless email
-  sign-in and `/dashboard` for the authenticated account. The Worker redirects
-  `/` according to session state, prevents authenticated users returning to the
-  login screen, and protects dashboard HTML with no-store responses. Dashboard
-  categories cover overview, plan, computers, billing, downloads, support, and
-  session security; Settings opens the dedicated login route.
+  sign-in and `/dashboard/overview`, `/dashboard/licence`,
+  `/dashboard/activation-key`, `/dashboard/devices`, `/dashboard/billing`, and
+  `/dashboard/help` for authenticated account categories. `/dashboard`
+  redirects to overview. The Worker redirects `/` according to session state,
+  prevents authenticated users returning to the login screen, and protects all
+  dashboard HTML with no-store responses. A persistent left-side category menu
+  marks the active deep link; the small-screen version becomes a horizontal,
+  touch-sized navigation strip.
 - Portal entitlement display is based on active licence rows, not merely on
   purchase history. A canceled/refunded subscription remains visible as an
   inactive historical licence, while the overview shows no active licence,

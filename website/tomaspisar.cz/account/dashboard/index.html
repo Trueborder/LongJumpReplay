@@ -6,8 +6,8 @@
   <meta name="description" content="Manage your LongJumpReplay licence, computers and billing.">
   <meta name="theme-color" content="#0b1013">
   <meta name="robots" content="noindex">
-  <link rel="canonical" href="https://account.tomaspisar.cz/dashboard">
-  <title>Dashboard — LongJumpReplay account</title>
+  <link rel="canonical" href="https://account.tomaspisar.cz/dashboard/overview">
+  <title>Overview — LongJumpReplay account</title>
   <link rel="icon" type="image/svg+xml" href="https://tomaspisar.cz/assets/favicon.svg">
   <link rel="stylesheet" href="https://tomaspisar.cz/styles.css">
   <link rel="stylesheet" href="https://tomaspisar.cz/overrides.css">
@@ -24,7 +24,7 @@
       <a href="https://tomaspisar.cz/download/" data-ui="downloads">Downloads</a>
       <a href="https://tomaspisar.cz/about/" data-ui="about">About</a>
       <a href="https://tomaspisar.cz/contact/" data-ui="contact">Contact</a>
-      <a href="/dashboard" data-ui="account" data-en="Account" data-cs="Účet" aria-current="page">Account</a>
+      <a href="/dashboard/overview" data-ui="account" data-en="Account" data-cs="Účet" aria-current="page">Account</a>
     </nav>
     <div class="header-actions">
       <button class="icon-button" data-theme-toggle type="button" aria-label="Switch theme">☼</button>
@@ -36,8 +36,9 @@
   <main id="main" class="account-shell dashboard-shell">
     <section class="dashboard-hero" aria-labelledby="dashboard-title">
       <div>
-        <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / CUSTOMER DASHBOARD" data-cs="LONGJUMPREPLAY / ZÁKAZNICKÝ PŘEHLED">LONGJUMPREPLAY / CUSTOMER DASHBOARD</span></p>
-        <h1 id="dashboard-title" data-en="Everything your licence needs." data-cs="Vše, co vaše licence potřebuje.">Everything your licence needs.</h1>
+        <p class="eyebrow"><span class="eyebrow-dot"></span><span id="dashboard-route-eyebrow">LONGJUMPREPLAY / ACCOUNT</span></p>
+        <h1 id="dashboard-title">Account overview.</h1>
+        <p id="dashboard-route-description" class="dashboard-route-description">Your licence, computers and access in one place.</p>
         <p class="dashboard-email"><span data-en="Signed in as" data-cs="Přihlášeni jako">Signed in as</span> <strong id="customer-email">—</strong></p>
       </div>
       <div class="hero-actions dashboard-actions">
@@ -52,16 +53,16 @@
     <div id="dashboard-content" class="dashboard-layout" hidden>
       <aside class="dashboard-nav" aria-label="Dashboard categories">
         <p data-en="YOUR ACCOUNT" data-cs="VÁŠ ÚČET">YOUR ACCOUNT</p>
-        <a href="#overview" data-en="Overview" data-cs="Přehled">Overview</a>
-        <a href="#licence" data-en="Licence" data-cs="Licence">Licence</a>
-        <a href="#activation-key" data-en="Activation key" data-cs="Aktivační klíč">Activation key</a>
-        <a href="#devices" data-en="Computers" data-cs="Počítače">Computers</a>
-        <a href="#billing" data-en="Billing" data-cs="Platby">Billing</a>
-        <a href="#help" data-en="Help & security" data-cs="Pomoc a zabezpečení">Help & security</a>
+        <a href="/dashboard/overview" data-dashboard-link="overview" data-en="Overview" data-cs="Přehled">Overview</a>
+        <a href="/dashboard/licence" data-dashboard-link="licence" data-en="Licence" data-cs="Licence">Licence</a>
+        <a href="/dashboard/activation-key" data-dashboard-link="activation-key" data-en="Activation key" data-cs="Aktivační klíč">Activation key</a>
+        <a href="/dashboard/devices" data-dashboard-link="devices" data-en="Computers" data-cs="Počítače">Computers</a>
+        <a href="/dashboard/billing" data-dashboard-link="billing" data-en="Billing" data-cs="Platby">Billing</a>
+        <a href="/dashboard/help" data-dashboard-link="help" data-en="Help & security" data-cs="Pomoc a zabezpečení">Help & security</a>
       </aside>
 
       <div class="dashboard-sections">
-        <section id="overview" class="dashboard-section" aria-labelledby="overview-title">
+        <section id="overview" class="dashboard-section" data-dashboard-route="overview" aria-labelledby="overview-title">
           <div class="category-heading"><p class="eyebrow" data-en="OVERVIEW" data-cs="PŘEHLED">OVERVIEW</p><h2 id="overview-title" data-en="Account at a glance." data-cs="Účet na první pohled.">Account at a glance.</h2></div>
           <div class="summary-grid">
             <article class="summary-card"><span data-en="Licence" data-cs="Licence">Licence</span><strong id="summary-licence">—</strong><small id="summary-licence-note">—</small></article>
@@ -69,9 +70,13 @@
             <article class="summary-card"><span data-en="Plan date" data-cs="Datum plánu">Plan date</span><strong id="summary-plan-date">—</strong><small id="summary-plan-note">—</small></article>
             <article class="summary-card"><span data-en="Next online check" data-cs="Další online kontrola">Next online check</span><strong id="summary-verification">—</strong><small data-en="Per activated computer" data-cs="Pro každý aktivovaný počítač">Per activated computer</small></article>
           </div>
+          <div class="information-grid information-grid-two">
+            <article class="information-card"><span class="information-index">01</span><div><h3 data-en="Two ways to activate" data-cs="Dva způsoby aktivace">Two ways to activate</h3><p data-en="Use email verification for personal setup, or your private activation key when preparing computers for an event." data-cs="Pro osobní nastavení použijte ověření e-mailem, nebo při přípravě počítačů na závod použijte soukromý aktivační klíč.">Use email verification for personal setup, or your private activation key when preparing computers for an event.</p><a href="/dashboard/activation-key" data-en="Open activation key" data-cs="Otevřít aktivační klíč">Open activation key</a></div></article>
+            <article class="information-card"><span class="information-index">02</span><div><h3 data-en="Keep your slots tidy" data-cs="Udržujte místa přehledná">Keep your slots tidy</h3><p data-en="Last active time shows which stations are still in use. Deactivate old computers before setting up a replacement." data-cs="Poslední aktivita ukazuje, které stanice se stále používají. Před nastavením náhrady deaktivujte staré počítače.">Last active time shows which stations are still in use. Deactivate old computers before setting up a replacement.</p><a href="/dashboard/devices" data-en="Manage computers" data-cs="Spravovat počítače">Manage computers</a></div></article>
+          </div>
         </section>
 
-        <section id="licence" class="dashboard-section" aria-labelledby="licence-title">
+        <section id="licence" class="dashboard-section" data-dashboard-route="licence" aria-labelledby="licence-title">
           <div class="category-heading"><p class="eyebrow" data-en="LICENCE" data-cs="LICENCE">LICENCE</p><h2 id="licence-title" data-en="Plan and access." data-cs="Plán a přístup.">Plan and access.</h2></div>
           <section id="no-licence-state" class="no-licence-state" hidden>
             <p id="no-licence-eyebrow" class="eyebrow">NO ACTIVE LICENCE</p>
@@ -80,10 +85,21 @@
             <a class="button button-primary" href="https://tomaspisar.cz/software/longjumpreplay/#buy" data-en="Buy a licence ↗" data-cs="Koupit licenci ↗">Buy a licence ↗</a>
           </section>
           <div id="licence-cards" class="account-card-grid"></div>
+          <div class="information-grid information-grid-three">
+            <article class="information-card"><span class="information-index">ACCESS</span><div><h3 data-en="Competition-ready licence" data-cs="Licence připravená na závod">Competition-ready licence</h3><p data-en="A paid licence unlocks normal competition workflows. The free trial is reserved for evaluation and training." data-cs="Placená licence odemkne běžné závodní postupy. Bezplatná zkušební verze je určena jen k vyhodnocení a tréninku.">A paid licence unlocks normal competition workflows. The free trial is reserved for evaluation and training.</p></div></article>
+            <article class="information-card"><span class="information-index">CHECKS</span><div><h3 data-en="Periodic verification" data-cs="Pravidelné ověření">Periodic verification</h3><p data-en="Activated computers periodically confirm the licence online, then continue working between checks." data-cs="Aktivované počítače pravidelně potvrdí licenci online a mezi kontrolami pokračují v práci.">Activated computers periodically confirm the licence online, then continue working between checks.</p></div></article>
+            <article class="information-card"><span class="information-index">SLOTS</span><div><h3 data-en="One slot per station" data-cs="Jedno místo na stanici">One slot per station</h3><p data-en="Each active Windows station uses one computer slot. Deactivating it makes the slot available again." data-cs="Každá aktivní stanice Windows používá jedno místo. Deaktivací se místo znovu uvolní.">Each active Windows station uses one computer slot. Deactivating it makes the slot available again.</p></div></article>
+          </div>
         </section>
 
-        <section id="activation-key" class="dashboard-section licensed-only" aria-labelledby="activation-key-title">
+        <section id="activation-key" class="dashboard-section" data-dashboard-route="activation-key" aria-labelledby="activation-key-title">
           <div class="category-heading"><p class="eyebrow" data-en="QUICK ACTIVATION" data-cs="RYCHLÁ AKTIVACE">QUICK ACTIVATION</p><h2 id="activation-key-title" data-en="One key. Your computers." data-cs="Jeden klíč. Vaše počítače.">One key. Your computers.</h2></div>
+          <section id="activation-key-unavailable" class="no-licence-state" hidden>
+            <p class="eyebrow" data-en="ACTIVE LICENCE REQUIRED" data-cs="JE VYŽADOVÁNA AKTIVNÍ LICENCE">ACTIVE LICENCE REQUIRED</p>
+            <h3 data-en="Your activation key will appear here." data-cs="Zde se zobrazí váš aktivační klíč.">Your activation key will appear here.</h3>
+            <p data-en="Purchase or renew a licence with this account email. The key is created automatically when the licence becomes active." data-cs="Kupte nebo obnovte licenci s e-mailem tohoto účtu. Klíč se vytvoří automaticky, jakmile bude licence aktivní.">Purchase or renew a licence with this account email. The key is created automatically when the licence becomes active.</p>
+            <a class="button button-primary" href="https://tomaspisar.cz/software/longjumpreplay/#buy" data-en="Buy a licence ↗" data-cs="Koupit licenci ↗">Buy a licence ↗</a>
+          </section>
           <div id="activation-key-card" class="activation-key-card">
             <div><span class="badge" data-en="ALTERNATIVE TO EMAIL" data-cs="ALTERNATIVA K E-MAILU">ALTERNATIVE TO EMAIL</span><h3 data-en="Reusable activation key" data-cs="Opakovaně použitelný aktivační klíč">Reusable activation key</h3><p data-en="Use this key in the app when email verification is inconvenient. Keep it private: anyone who has it can use an available computer slot." data-cs="Použijte tento klíč v aplikaci, když se nehodí ověření e-mailem. Chraňte jej: každý, kdo ho zná, může využít volné místo pro počítač.">Use this key in the app when email verification is inconvenient. Keep it private: anyone who has it can use an available computer slot.</p></div>
             <div class="activation-key-controls">
@@ -94,25 +110,39 @@
               <p class="form-note" data-en="The key is hidden again whenever this page is loaded. Regenerating disconnects only computers activated with this key." data-cs="Klíč se při každém načtení stránky znovu skryje. Nové vygenerování odpojí pouze počítače aktivované tímto klíčem.">The key is hidden again whenever this page is loaded. Regenerating disconnects only computers activated with this key.</p>
             </div>
           </div>
+          <div class="process-strip" aria-label="Activation key steps">
+            <article><span>01</span><h3 data-en="Reveal" data-cs="Zobrazit">Reveal</h3><p data-en="Show the key only when you are ready to enter it in LongJumpReplay." data-cs="Klíč zobrazte až ve chvíli, kdy jej chcete zadat do LongJumpReplay.">Show the key only when you are ready to enter it in LongJumpReplay.</p></article>
+            <article><span>02</span><h3 data-en="Activate" data-cs="Aktivovat">Activate</h3><p data-en="Choose activation key in the app and enter the grouped digits exactly as shown." data-cs="V aplikaci zvolte aktivační klíč a zadejte skupiny číslic přesně podle zobrazení.">Choose activation key in the app and enter the grouped digits exactly as shown.</p></article>
+            <article><span>03</span><h3 data-en="Protect" data-cs="Chránit">Protect</h3><p data-en="Regenerate a shared key if it may have been exposed. Key-activated computers will be disconnected." data-cs="Pokud mohl být sdílený klíč odhalen, vygenerujte nový. Počítače aktivované klíčem budou odpojeny.">Regenerate a shared key if it may have been exposed. Key-activated computers will be disconnected.</p></article>
+          </div>
         </section>
 
-        <section id="devices" class="dashboard-section licensed-only" aria-labelledby="devices-title">
+        <section id="devices" class="dashboard-section" data-dashboard-route="devices" aria-labelledby="devices-title">
           <div class="category-heading category-heading-row"><div><p class="eyebrow" data-en="COMPUTERS" data-cs="POČÍTAČE">COMPUTERS</p><h2 id="devices-title" data-en="Activated devices." data-cs="Aktivovaná zařízení.">Activated devices.</h2></div><span id="device-count" class="count-badge"></span></div>
           <p class="section-note" data-en="Deactivate a computer you no longer use to free a slot for another Windows station." data-cs="Deaktivujte počítač, který už nepoužíváte, a uvolněte místo pro další stanoviště Windows.">Deactivate a computer you no longer use to free a slot for another Windows station.</p>
           <div id="devices-list" class="table-card"></div>
+          <div class="information-grid information-grid-three">
+            <article class="information-card"><span class="information-index">ACTIVE</span><div><h3 data-en="Uses a licence slot" data-cs="Používá místo licence">Uses a licence slot</h3><p data-en="An active computer can run the licensed app and counts toward your plan limit." data-cs="Aktivní počítač může spouštět licencovanou aplikaci a započítává se do limitu plánu.">An active computer can run the licensed app and counts toward your plan limit.</p></div></article>
+            <article class="information-card"><span class="information-index">DEACTIVATED</span><div><h3 data-en="Kept for your records" data-cs="Uloženo pro přehled">Kept for your records</h3><p data-en="A deactivated computer no longer uses a slot. Delete it when you no longer need its history." data-cs="Deaktivovaný počítač už nepoužívá místo. Smažte jej, pokud už jeho historii nepotřebujete.">A deactivated computer no longer uses a slot. Delete it when you no longer need its history.</p></div></article>
+            <article class="information-card"><span class="information-index">LAST ACTIVE</span><div><h3 data-en="A practical transfer signal" data-cs="Praktická informace pro přesun">A practical transfer signal</h3><p data-en="Use the last active timestamp to identify stale stations before moving a licence to new hardware." data-cs="Podle času poslední aktivity poznáte staré stanice před přesunem licence na nový hardware.">Use the last active timestamp to identify stale stations before moving a licence to new hardware.</p></div></article>
+          </div>
         </section>
 
-        <section id="additional-computers" class="dashboard-section lifetime-only" aria-labelledby="additional-computers-title" hidden>
+        <section id="additional-computers" class="dashboard-section lifetime-only" data-dashboard-route="licence" aria-labelledby="additional-computers-title" hidden>
           <div class="category-heading"><p class="eyebrow" data-en="LIFETIME ADD-ON" data-cs="DOŽIVOTNÍ ROZŠÍŘENÍ">LIFETIME ADD-ON</p><h2 id="additional-computers-title" data-en="More room for your stations." data-cs="Více místa pro vaše stanice.">More room for your stations.</h2></div>
           <div id="additional-computers-card" class="additional-computers-card"></div>
         </section>
 
-        <section id="billing" class="dashboard-section licensed-only" aria-labelledby="billing-title">
+        <section id="billing" class="dashboard-section" data-dashboard-route="billing" aria-labelledby="billing-title">
           <div class="category-heading"><p class="eyebrow" data-en="BILLING" data-cs="PLATBY">BILLING</p><h2 id="billing-title" data-en="Payments and invoices." data-cs="Platby a faktury.">Payments and invoices.</h2></div>
           <div id="invoices" class="table-card"></div>
+          <div class="information-grid information-grid-two">
+            <article class="information-card"><span class="information-index">STRIPE</span><div><h3 data-en="Secure billing management" data-cs="Bezpečná správa plateb">Secure billing management</h3><p data-en="Manage payment details and subscription changes in Stripe's secure customer portal." data-cs="Platební údaje a změny předplatného spravujete v zabezpečeném zákaznickém portálu Stripe.">Manage payment details and subscription changes in Stripe's secure customer portal.</p><button class="text-button" type="button" data-open-billing data-en="Open billing portal" data-cs="Otevřít platební portál">Open billing portal</button></div></article>
+            <article class="information-card"><span class="information-index">INVOICES</span><div><h3 data-en="Documents stay available" data-cs="Doklady zůstávají dostupné">Documents stay available</h3><p data-en="Open hosted invoices from the list above. If a company detail needs correction, contact support before the next payment." data-cs="Faktury otevřete v seznamu výše. Pokud je třeba upravit firemní údaj, kontaktujte podporu před další platbou.">Open hosted invoices from the list above. If a company detail needs correction, contact support before the next payment.</p><a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></div></article>
+          </div>
         </section>
 
-        <section id="help" class="dashboard-section" aria-labelledby="help-title">
+        <section id="help" class="dashboard-section" data-dashboard-route="help" aria-labelledby="help-title">
           <div class="category-heading"><p class="eyebrow" data-en="HELP & SECURITY" data-cs="POMOC A ZABEZPEČENÍ">HELP & SECURITY</p><h2 id="help-title" data-en="Useful next steps." data-cs="Užitečné další kroky.">Useful next steps.</h2></div>
           <div class="help-grid">
             <article><span aria-hidden="true">↓</span><h3 data-en="Install the app" data-cs="Nainstalovat aplikaci">Install the app</h3><p data-en="Download the latest Windows installer and activate with this account email." data-cs="Stáhněte nejnovější instalátor pro Windows a aktivujte pomocí e-mailu tohoto účtu.">Download the latest Windows installer and activate with this account email.</p><a href="https://files.tomaspisar.cz/LJR_setup.exe" data-en="Download ↗" data-cs="Stáhnout ↗">Download ↗</a></article>
@@ -125,7 +155,7 @@
   </main>
 
   <dialog id="device-details-dialog" class="device-details-dialog" aria-labelledby="device-details-title">
-    <div class="dialog-heading"><div><p class="eyebrow" data-en="COMPUTER DETAILS" data-cs="PODROBNOSTI POČÍTAČE">COMPUTER DETAILS</p><h2 id="device-details-title">—</h2></div><button id="device-details-close" class="icon-button" type="button" aria-label="Close">×</button></div>
+    <div class="dialog-heading"><div><p class="eyebrow" data-en="COMPUTER DETAILS" data-cs="PODROBNOSTI POČÍTAČE">COMPUTER DETAILS</p><h2 id="device-details-title">—</h2></div><button id="device-details-close" class="dialog-close-button" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     <div id="device-details-content"></div>
   </dialog>
 

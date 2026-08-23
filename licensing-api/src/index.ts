@@ -185,7 +185,9 @@ function portalRedirect(request: Request, location: string): Response {
 
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
-  if (!["/", "/login", "/login/", "/dashboard", "/dashboard/"].includes(path)) return null;
+  const isPortalPage = ["/", "/login", "/login/", "/dashboard", "/dashboard/"].includes(path)
+    || path.startsWith("/dashboard/");
+  if (!isPortalPage) return null;
 
   const route = portalPageRoute(path, Boolean(await authenticatedPortal(request, env)));
   if (!route) return null;
