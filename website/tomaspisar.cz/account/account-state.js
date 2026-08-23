@@ -20,5 +20,15 @@
     };
   };
 
-  return { deriveDashboardEntitlement };
+  const deriveDevicePortalState = (device, activeLicenceIds = new Set()) => {
+    const storedActive = device?.status === 'active';
+    return {
+      storedActive,
+      entitledActive: storedActive && activeLicenceIds.has(device?.license_id),
+      canDeactivate: storedActive,
+      canDelete: device?.status === 'deactivated',
+    };
+  };
+
+  return { deriveDashboardEntitlement, deriveDevicePortalState };
 });

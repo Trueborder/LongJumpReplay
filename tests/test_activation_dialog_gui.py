@@ -14,7 +14,18 @@ def _descendants(widget):
 
 @pytest.mark.parametrize("language", ["en", "cs"])
 def test_code_step_has_back_and_activate_actions(monkeypatch, language):
-    monkeypatch.setattr(activation, "request_code", lambda _email: 10)
+    observed = {}
+
+    def request_code(_email):
+        dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
+        observed["progress_visible_while_working"] = any(
+            widget.winfo_ismapped()
+            for widget in _descendants(dialog)
+            if isinstance(widget, ttk.Progressbar)
+        )
+        return 10
+
+    monkeypatch.setattr(activation, "request_code", request_code)
     monkeypatch.setattr(
         trial,
         "refresh_trial_status",
@@ -23,7 +34,6 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
 
     root = tk.Tk()
     root.withdraw()
-    observed = {}
     copy = licensing._trial_copy(language)
 
     def drive_dialog():
@@ -87,6 +97,7 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         "action_groups": {copy["licence_actions"], copy["evaluation_actions"]},
         "send_restored": True,
         "email_focus_target": True,
+        "progress_visible_while_working": True,
     }
 
 
@@ -101,6 +112,16 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
     root.withdraw()
     observed = {}
     copy = licensing._trial_copy("en")
+
+    def activate_with_key(_key):
+        dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
+        observed["progress_visible_while_working"] = any(
+            widget.winfo_ismapped()
+            for widget in _descendants(dialog)
+            if isinstance(widget, ttk.Progressbar)
+        )
+
+    monkeypatch.setattr(activation, "activate_with_key", activate_with_key)
 
     def drive_dialog():
         dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
@@ -131,8 +152,14 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
         observed["second_group"] = key_entry.get()
         observed["second_cursor"] = key_entry.index(tk.INSERT)
 
-        key_dialog.destroy()
-        dialog.destroy()
+        for character in "EFGH":
+            key_entry.insert(tk.INSERT, character)
+            key_dialog.update()
+        activate_button = next(
+            widget for widget in _descendants(key_dialog)
+            if isinstance(widget, ttk.Button) and widget.cget("text") == copy["key_activate"]
+        )
+        activate_button.invoke()
 
     root.after(20, drive_dialog)
     accepted = licensing.ensure_license_or_trial(
@@ -142,10 +169,11 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
     )
     root.destroy()
 
-    assert not accepted
+    assert accepted
     assert observed == {
         "first_group": "1234-",
         "first_cursor": 5,
         "second_group": "1234-ABCD-",
         "second_cursor": 10,
+        "progress_visible_while_working": True,
     }

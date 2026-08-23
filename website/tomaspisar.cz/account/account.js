@@ -1,6 +1,6 @@
 (() => {
   const API = 'https://api.tomaspisar.cz';
-  const { deriveDashboardEntitlement } = window.LJR_ACCOUNT_STATE;
+  const { deriveDashboardEntitlement, deriveDevicePortalState } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
   const dashboardRoute = page === 'dashboard' ? (window.location.pathname.split('/').filter(Boolean)[1] || 'overview') : '';
   const dashboardRoutes = new Set(['overview', 'licence', 'activation-key', 'devices', 'billing', 'help']);
@@ -14,7 +14,7 @@
       genericError: 'Something went wrong. Please try again.', noDevices: 'No activated computers.',
       noInvoices: 'No invoices available yet.', deactivate: 'Deactivate', deactivating: 'Deactivating…',
       deactivated: 'Computer deactivated.', statusActive: 'Active', statusInactive: 'Inactive',
-      statusDeactivated: 'Deactivated', lifetime: 'Lifetime licence', subscription: 'Monthly subscription',
+      statusDeactivated: 'Deactivated', statusLicenceInactive: 'Inactive licence', lifetime: 'Lifetime licence', subscription: 'Monthly subscription',
       devices: 'computers', purchased: 'Purchased', activated: 'Activated', paidThrough: 'Paid through', lastSync: 'Last server sync',
       invoice: 'Invoice', amount: 'Amount', date: 'Date', status: 'Status', available: 'available',
       lifetimeNote: 'No renewal required', subscriptionNote: 'Renews while active', notPurchased: 'Not purchased',
@@ -32,7 +32,7 @@
       genericError: 'Něco se nepodařilo. Zkuste to znovu.', noDevices: 'Žádné aktivované počítače.',
       noInvoices: 'Zatím nejsou k dispozici žádné faktury.', deactivate: 'Deaktivovat', deactivating: 'Deaktivuji…',
       deactivated: 'Počítač byl deaktivován.', statusActive: 'Aktivní', statusInactive: 'Neaktivní',
-      statusDeactivated: 'Deaktivováno', lifetime: 'Doživotní licence', subscription: 'Měsíční předplatné',
+      statusDeactivated: 'Deaktivováno', statusLicenceInactive: 'Neaktivní licence', lifetime: 'Doživotní licence', subscription: 'Měsíční předplatné',
       devices: 'počítače', purchased: 'Zakoupeno', activated: 'Aktivováno', paidThrough: 'Zaplaceno do', lastSync: 'Poslední synchronizace',
       invoice: 'Faktura', amount: 'Částka', date: 'Datum', status: 'Stav', available: 'volná',
       lifetimeNote: 'Bez nutnosti obnovení', subscriptionNote: 'Obnovuje se, dokud je aktivní', notPurchased: 'Nezakoupeno',
@@ -169,9 +169,19 @@
 
   const renderDevices = (devices, activeLicenceIds) => {
     $('#devices-list').innerHTML = devices.length ? `<table class="data-table device-table"><thead><tr><th>${t('computer')}</th><th>${t('method')}</th><th>${t('activated')}</th><th>${t('lastActive')}</th><th>${t('status')}</th><th>${t('actions')}</th></tr></thead><tbody>${devices.map((device) => {
-      const active = device.status === 'active' && activeLicenceIds.has(device.license_id);
+      const { entitledActive, canDeactivate, canDelete } = deriveDevicePortalState(device, activeLicenceIds);
       const method = device.activation_method === 'key' ? t('keyMethod') : t('emailMethod');
-      return `<tr><td><strong>${escapeHtml(device.device_name || 'LongJumpReplay computer')}</strong></td><td>${method}</td><td>${formatDateTime(device.activated_at)}</td><td>${formatDateTime(device.last_verified_at)}</td><td><span class="badge ${active ? '' : 'warn'}">${active ? t('statusActive') : t('statusDeactivated')}</span></td><td><div class="row-actions"><button class="small-button" type="button" data-details="${escapeHtml(device.id)}">${t('details')}</button>${active ? `<button class="small-button" type="button" data-deactivate="${escapeHtml(device.id)}">${t('deactivate')}</button>` : `<button class="small-button danger" type="button" data-delete-device="${escapeHtml(device.id)}">${t('delete')}</button>`}</div></td></tr>`;
+      const status = entitledActive
+        ? t('statusActive')
+        : canDeactivate
+          ? t('statusLicenceInactive')
+          : t('statusDeactivated');
+      const deviceAction = canDeactivate
+        ? `<button class="small-button" type="button" data-deactivate="${escapeHtml(device.id)}">${t('deactivate')}</button>`
+        : canDelete
+          ? `<button class="small-button danger" type="button" data-delete-device="${escapeHtml(device.id)}">${t('delete')}</button>`
+          : '';
+      return `<tr><td><strong>${escapeHtml(device.device_name || 'LongJumpReplay computer')}</strong></td><td>${method}</td><td>${formatDateTime(device.activated_at)}</td><td>${formatDateTime(device.last_verified_at)}</td><td><span class="badge ${entitledActive ? '' : 'warn'}">${status}</span></td><td><div class="row-actions"><button class="small-button" type="button" data-details="${escapeHtml(device.id)}">${t('details')}</button>${deviceAction}</div></td></tr>`;
     }).join('')}</tbody></table>` : `<div class="empty">${t('noDevices')}</div>`;
   };
 

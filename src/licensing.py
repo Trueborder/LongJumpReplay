@@ -240,6 +240,7 @@ def ensure_license_or_trial(
 
     status_label = ttk.Label(body, text="", wraplength=560, justify="left")
     status_label.pack(anchor="w", pady=(10, 12))
+    progress_bar = ttk.Progressbar(body, mode="indeterminate")
     licence_actions = ttk.LabelFrame(body, text=copy["licence_actions"], padding=12)
     licence_actions.pack(fill="x", pady=(0, 12))
     licence_buttons = ttk.Frame(licence_actions)
@@ -263,7 +264,14 @@ def ensure_license_or_trial(
 
     def busy(text: str) -> None:
         status_label.configure(text=text)
-        dialog.update_idletasks()
+        if not progress_bar.winfo_manager():
+            progress_bar.pack(fill="x", pady=(0, 12), before=licence_actions)
+        progress_bar.start(12)
+        dialog.update()
+
+    def stop_busy() -> None:
+        progress_bar.stop()
+        progress_bar.pack_forget()
 
     def send_code() -> None:
         email = email_var.get().strip()
@@ -274,9 +282,11 @@ def ensure_license_or_trial(
         try:
             minutes = activation_api.request_code(email)
         except activation_api.ActivationError as error:
+            stop_busy()
             message = copy["no_active_license"] if error.code in {"no_license", "license_inactive"} else str(error)
             status_label.configure(text=message)
             return
+        stop_busy()
         code_frame.pack(anchor="w", fill="x", before=status_label)
         send_button.grid_remove()
         code_entry.focus_set()
@@ -303,9 +313,11 @@ def ensure_license_or_trial(
             grant = activation_api.verify_code(email_var.get().strip(), code)
             activation_api.activate(grant)
         except activation_api.ActivationError as error:
+            stop_busy()
             message = copy["no_active_license"] if error.code in {"no_license", "license_inactive"} else str(error)
             status_label.configure(text=message)
             return
+        stop_busy()
         status_label.configure(text=copy["activated"])
         accepted = True
         dialog.destroy()
@@ -326,6 +338,7 @@ def ensure_license_or_trial(
         key_entry.pack(fill="x", pady=(5, 10))
         key_status = ttk.Label(pane, text="", wraplength=520, justify="left")
         key_status.pack(anchor="w", pady=(6, 10))
+        key_progress = ttk.Progressbar(pane, mode="indeterminate")
         row = ttk.Frame(pane)
         row.pack(fill="x")
         row.columnconfigure((0, 1), weight=1, uniform="key-action")
@@ -364,12 +377,17 @@ def ensure_license_or_trial(
                 key_status.configure(text=copy["need_key"])
                 return
             key_status.configure(text=copy["working"])
-            key_dialog.update_idletasks()
+            key_progress.pack(fill="x", pady=(0, 10), before=row)
+            key_progress.start(12)
+            key_dialog.update()
             try:
                 activation_api.activate_with_key(key_var.get())
             except activation_api.ActivationError as error:
+                key_progress.stop()
+                key_progress.pack_forget()
                 key_status.configure(text=str(error))
                 return
+            key_progress.stop()
             accepted = True
             key_dialog.destroy()
             dialog.destroy()

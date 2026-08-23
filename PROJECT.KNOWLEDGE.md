@@ -932,3 +932,8 @@ A change is done only when:
 ## Account portal login fix (2026-08-20)
 
 - The login page must load `account-state.js` before `account.js`. The shared account script destructures `window.LJR_ACCOUNT_STATE` during startup; omitting this dependency prevents the submit handler from registering and leaves the email form visually unchanged.
+
+## Activation feedback and device deletion state (2026-08-23)
+
+- The portal distinguishes an inactive licence from an actually deactivated device. A stored active device on an inactive licence is labelled `Inactive licence` and must be deactivated before Delete is offered; only rows whose device status is `deactivated` may be deleted.
+- Email-code and reusable-key activation show an indeterminate progress bar for the full `Working…` request state and remove it after success or a handled activation error.
