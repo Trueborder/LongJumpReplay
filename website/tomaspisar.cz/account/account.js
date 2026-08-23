@@ -2,7 +2,8 @@
   const API = 'https://api.tomaspisar.cz';
   const { deriveDashboardEntitlement } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
-  const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null };
+  const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null,
+    keyVisible: false, keyValue: '', keyLicenceId: '', ensuredKeys: new Set() };
   const $ = (selector) => document.querySelector(selector);
   const copy = {
     en: {
@@ -20,7 +21,8 @@
       noLicenceCopy: 'Buy with this email address and the licence will appear here automatically after payment.',
       inactiveLicenceEyebrow: 'NO ACTIVE LICENCE', inactiveLicenceTitle: 'No active licence for this account.',
       inactiveLicenceCopy: 'Your previous plan is inactive. Purchase again with this email address to restore access.',
-      notApplicable: 'Not applicable', additionalTitle: 'Additional computers', addUpTo: 'You can add up to', usedOf: 'computers used', computer: 'Computer', purchase: 'Purchase securely with Stripe', quantity: 'Quantity', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.'
+      notApplicable: 'Not applicable', additionalTitle: 'Additional computers', addUpTo: 'You can add up to', usedOf: 'computers used', computer: 'Computer', purchase: 'Purchase securely with Stripe', quantity: 'Quantity', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.',
+      method: 'Method', lastActive: 'Last active', actions: 'Actions', details: 'Details', delete: 'Delete', emailMethod: 'Email', keyMethod: 'Key'
     },
     cs: {
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
@@ -37,7 +39,8 @@
       noLicenceCopy: 'Nakupte s touto e-mailovou adresou a licence se zde po zaplacení zobrazí automaticky.',
       inactiveLicenceEyebrow: 'ŽÁDNÁ AKTIVNÍ LICENCE', inactiveLicenceTitle: 'Pro tento účet není aktivní žádná licence.',
       inactiveLicenceCopy: 'Předchozí plán je neaktivní. Pro obnovení přístupu nakupte znovu se stejnou e-mailovou adresou.',
-      notApplicable: 'Nevztahuje se', additionalTitle: 'Další počítače', addUpTo: 'Můžete přidat až', usedOf: 'počítače využity', computer: 'Počítač', purchase: 'Bezpečně zaplatit přes Stripe', quantity: 'Počet', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.'
+      notApplicable: 'Nevztahuje se', additionalTitle: 'Další počítače', addUpTo: 'Můžete přidat až', usedOf: 'počítače využity', computer: 'Počítač', purchase: 'Bezpečně zaplatit přes Stripe', quantity: 'Počet', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.',
+      method: 'Způsob', lastActive: 'Poslední aktivita', actions: 'Akce', details: 'Podrobnosti', delete: 'Smazat', emailMethod: 'E-mail', keyMethod: 'Klíč'
     }
   };
 
@@ -126,17 +129,35 @@
   };
 
   const renderDevices = (devices, activeLicenceIds) => {
-    $('#devices-list').innerHTML = devices.length ? devices.map((device) => {
+    $('#devices-list').innerHTML = devices.length ? `<table class="data-table device-table"><thead><tr><th>${t('computer')}</th><th>${t('method')}</th><th>${t('activated')}</th><th>${t('lastActive')}</th><th>${t('status')}</th><th>${t('actions')}</th></tr></thead><tbody>${devices.map((device) => {
       const active = device.status === 'active' && activeLicenceIds.has(device.license_id);
-      const nextCheck = active && device.last_verified_at ? device.last_verified_at + (30 * 86400) : null;
-      return `<article class="device-card">
-        <div class="device-icon" aria-hidden="true">▰</div>
-        <div><div class="device-heading"><h3>${escapeHtml(device.device_name || 'LongJumpReplay computer')}</h3><span class="badge ${active ? '' : 'warn'}">${active ? t('statusActive') : t('statusDeactivated')}</span></div>
-        <p>${t('activated')}: <strong>${formatDateTime(device.activated_at)}</strong> · ${t('lastSync')}: <strong>${formatDate(device.last_verified_at)}</strong></p>
-        ${nextCheck ? `<p>${state.lang === 'cs' ? 'Online ověření do' : 'Online verification by'} <strong>${formatDate(nextCheck)}</strong></p>` : ''}</div>
-        ${active ? `<button class="small-button" type="button" data-deactivate="${escapeHtml(device.id)}">${t('deactivate')}</button>` : ''}
-      </article>`;
-    }).join('') : `<div class="empty">${t('noDevices')}</div>`;
+      const method = device.activation_method === 'key' ? t('keyMethod') : t('emailMethod');
+      return `<tr><td><strong>${escapeHtml(device.device_name || 'LongJumpReplay computer')}</strong></td><td>${method}</td><td>${formatDateTime(device.activated_at)}</td><td>${formatDateTime(device.last_verified_at)}</td><td><span class="badge ${active ? '' : 'warn'}">${active ? t('statusActive') : t('statusDeactivated')}</span></td><td><div class="row-actions"><button class="small-button" type="button" data-details="${escapeHtml(device.id)}">${t('details')}</button>${active ? `<button class="small-button" type="button" data-deactivate="${escapeHtml(device.id)}">${t('deactivate')}</button>` : `<button class="small-button danger" type="button" data-delete-device="${escapeHtml(device.id)}">${t('delete')}</button>`}</div></td></tr>`;
+    }).join('')}</tbody></table>` : `<div class="empty">${t('noDevices')}</div>`;
+  };
+
+  const hideActivationKey = () => {
+    state.keyVisible = false; state.keyValue = '';
+    if ($('#activation-key-value')) $('#activation-key-value').textContent = '••••-••••-••••';
+    if ($('#activation-key-copy')) $('#activation-key-copy').disabled = true;
+    if ($('#activation-key-reveal')) $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Zobrazit klíč' : 'Show key';
+  };
+
+  const renderActivationKeys = async (data) => {
+    const licences = (data.licenses || []).filter((licence) => licence.status === 'active');
+    const select = $('#licence-key-select');
+    if (!select || !licences.length) return;
+    const previous = state.keyLicenceId;
+    select.innerHTML = licences.map((licence) => `<option value="${escapeHtml(licence.id)}">${licence.type === 'subscription' ? t('subscription') : t('lifetime')}</option>`).join('');
+    state.keyLicenceId = licences.some((licence) => licence.id === previous) ? previous : licences[0].id;
+    select.value = state.keyLicenceId;
+    hideActivationKey();
+    if (!state.ensuredKeys.has(state.keyLicenceId)) {
+      try {
+        await api('/api/portal/activation-key/ensure', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
+        state.ensuredKeys.add(state.keyLicenceId);
+      } catch (error) { setStatus(error.message); }
+    }
   };
 
   const renderInvoices = (invoices) => {
@@ -195,6 +216,7 @@
     $('#device-count').textContent = `${activeDevices.length} ${state.lang === 'cs' ? 'aktivní' : 'active'} · ${Math.max(0, totalSlots - activeDevices.length)} ${t('available')}`;
     renderLicenceCards(licences);
     renderDevices(devices, activeLicenceIds);
+    renderActivationKeys(data);
     renderInvoices(data.invoices || []);
     renderAdditionalComputers(data.additional_computers || []);
     $('#dashboard-loading').hidden = true;
@@ -219,6 +241,50 @@
     } catch (error) { setStatus(error.message); }
   };
 
+  const deleteDevice = async (deviceId) => {
+    const prompt = state.lang === 'cs' ? 'Trvale smazat deaktivovaný počítač a jeho historii aktivity?' : 'Permanently delete this deactivated computer and its activity history?';
+    if (!window.confirm(prompt)) return;
+    try {
+      await api('/api/portal/delete-device', { method: 'POST', body: JSON.stringify({ device_id: deviceId }) });
+      await loadDashboard();
+    } catch (error) { setStatus(error.message); }
+  };
+
+  const showDeviceDetails = async (deviceId) => {
+    try {
+      const data = await api(`/api/portal/device-details?device_id=${encodeURIComponent(deviceId)}`);
+      const device = data.device;
+      $('#device-details-title').textContent = device.device_name || 'LongJumpReplay computer';
+      $('#device-details-content').innerHTML = `<dl class="device-facts"><div><dt>${t('status')}</dt><dd>${escapeHtml(device.status)}</dd></div><div><dt>${t('method')}</dt><dd>${device.activation_method === 'key' ? t('keyMethod') : t('emailMethod')}</dd></div><div><dt>${t('activated')}</dt><dd>${formatDateTime(device.activated_at)}</dd></div><div><dt>${t('lastActive')}</dt><dd>${formatDateTime(device.last_verified_at)}</dd></div></dl><details class="advanced-details"><summary>${state.lang === 'cs' ? 'Zobrazit technické údaje a aktivitu' : 'Show technical details and activity'}</summary><dl class="device-facts"><div><dt>App version</dt><dd>${escapeHtml(device.app_version || '—')}</dd></div><div><dt>Windows</dt><dd>${escapeHtml(device.os_version || '—')}</dd></div><div><dt>Architecture</dt><dd>${escapeHtml(device.architecture || '—')}</dd></div><div><dt>Device ID</dt><dd><code>${escapeHtml(device.id)}</code></dd></div><div><dt>Machine ID</dt><dd><code>${escapeHtml(device.machine_id)}</code></dd></div><div><dt>Key generation</dt><dd>${escapeHtml(device.activation_key_generation || '—')}</dd></div></dl><div class="activity-list">${(data.activity || []).map((item) => `<article><strong>${escapeHtml(item.event_type)}</strong><span>${formatDateTime(item.created_at)}</span><code>${escapeHtml(item.ip_address || '—')}</code><span>${escapeHtml(item.country || '—')}</span></article>`).join('') || `<p class="muted">${state.lang === 'cs' ? 'Žádná historie aktivity.' : 'No activity history.'}</p>`}</div></details>`;
+      $('#device-details-dialog').showModal();
+    } catch (error) { setStatus(error.message); }
+  };
+
+  const revealActivationKey = async () => {
+    if (state.keyVisible) { hideActivationKey(); return; }
+    try {
+      const data = await api('/api/portal/activation-key/reveal', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
+      state.keyVisible = true; state.keyValue = data.key;
+      $('#activation-key-value').textContent = data.key; $('#activation-key-copy').disabled = false;
+      $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Skrýt klíč' : 'Hide key';
+    } catch (error) { setStatus(error.message); }
+  };
+
+  const regenerateActivationKey = async () => {
+    const keyed = (state.account?.devices || []).filter((device) => device.license_id === state.keyLicenceId && device.status === 'active' && device.activation_method === 'key').length;
+    const prompt = state.lang === 'cs' ? `Vygenerovat nový klíč? Odpojí se ${keyed} počítačů aktivovaných klíčem. Počítače aktivované e-mailem zůstanou připojené.` : `Generate a new key? This disconnects ${keyed} key-activated computer(s). Email-activated computers stay connected.`;
+    if (!window.confirm(prompt)) return;
+    try {
+      const data = await api('/api/portal/activation-key/regenerate', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
+      state.keyVisible = true; state.keyValue = data.key;
+      $('#activation-key-value').textContent = data.key; $('#activation-key-copy').disabled = false;
+      $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Skrýt klíč' : 'Hide key';
+      setStatus(state.lang === 'cs' ? `Nový klíč je připraven. Odpojeno počítačů: ${data.disconnected_devices}.` : `New key ready. Disconnected computers: ${data.disconnected_devices}.`);
+      if (state.account) state.account.devices = state.account.devices.map((device) => device.license_id === state.keyLicenceId && device.activation_method === 'key' ? { ...device, status: 'deactivated' } : device);
+      renderDevices(state.account.devices, new Set((state.account.licenses || []).filter((licence) => licence.status === 'active').map((licence) => licence.id)));
+    } catch (error) { setStatus(error.message); }
+  };
+
   const signOut = async () => {
     try { await api('/api/portal/logout', { method: 'POST', body: '{}' }); }
     finally { window.location.replace('/login'); }
@@ -228,6 +294,10 @@
     document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-deactivate]');
       if (button) deactivate(button.dataset.deactivate);
+      const deleteButton = event.target.closest('[data-delete-device]');
+      if (deleteButton) deleteDevice(deleteButton.dataset.deleteDevice);
+      const detailsButton = event.target.closest('[data-details]');
+      if (detailsButton) showDeviceDetails(detailsButton.dataset.details);
     });
     $('#billing-button')?.addEventListener('click', async () => {
       setStatus(t('sending'));
@@ -236,6 +306,21 @@
     });
     $('#logout-button')?.addEventListener('click', signOut);
     $('#security-logout-button')?.addEventListener('click', signOut);
+    $('#device-details-close')?.addEventListener('click', () => $('#device-details-dialog').close());
+    $('#activation-key-reveal')?.addEventListener('click', revealActivationKey);
+    $('#activation-key-copy')?.addEventListener('click', async () => {
+      if (!state.keyValue) return;
+      try { await navigator.clipboard.writeText(state.keyValue); setStatus(state.lang === 'cs' ? 'Klíč byl zkopírován.' : 'Key copied.'); }
+      catch { setStatus(state.lang === 'cs' ? 'Klíč se nepodařilo zkopírovat.' : 'The key could not be copied.'); }
+    });
+    $('#activation-key-regenerate')?.addEventListener('click', regenerateActivationKey);
+    $('#licence-key-select')?.addEventListener('change', async (event) => {
+      state.keyLicenceId = event.target.value; hideActivationKey();
+      if (!state.ensuredKeys.has(state.keyLicenceId)) {
+        try { await api('/api/portal/activation-key/ensure', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) }); state.ensuredKeys.add(state.keyLicenceId); }
+        catch (error) { setStatus(error.message); }
+      }
+    });
     loadDashboard();
   };
 

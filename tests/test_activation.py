@@ -141,6 +141,26 @@ def test_activate_stores_a_verifiable_authorization(monkeypatch):
     assert saved == ["LJRA1.aaa.bbb"]
 
 
+def test_activate_with_portal_key_uses_new_endpoint_and_support_metadata(monkeypatch):
+    record: list = []
+    saved: list[str] = []
+    monkeypatch.setattr(activation, "save_authorization", lambda token: saved.append(token))
+    monkeypatch.setattr(activation, "verify_authorization", lambda *a, **k: (True, "authorization.accepted", {}))
+    opener = responder({"/api/license/activate-key": {
+        "activated": True, "license_type": "lifetime", "max_devices": 2,
+        "authorization": "LJRA1.aaa.bbb",
+    }}, record)
+    result = activation.activate_with_key("1234-ABCD-2EFG", opener)
+    path, payload = record[0]
+    assert path == "/api/license/activate-key"
+    assert payload["activation_key"] == "1234-ABCD-2EFG"
+    assert payload["app_version"]
+    assert payload["os_version"]
+    assert payload["architecture"]
+    assert result.license_type == "lifetime"
+    assert saved == ["LJRA1.aaa.bbb"]
+
+
 def test_server_error_message_is_shown_to_the_customer():
     from urllib.error import HTTPError
 

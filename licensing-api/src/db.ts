@@ -37,6 +37,27 @@ export interface DeviceRow {
   last_verified_at: number | null;
   deactivated_at: number | null;
   status: "active" | "deactivated";
+  activation_method: "email" | "key";
+  activation_key_generation: number | null;
+  app_version: string | null;
+  os_version: string | null;
+  architecture: string | null;
+}
+
+export interface ActivationKeyRow {
+  license_id: string;
+  generation: number;
+  verifier_hash: string;
+  ciphertext: string;
+  nonce: string;
+  created_at: number;
+  rotated_at: number | null;
+}
+
+export interface DeviceMetadata {
+  appVersion: string | null;
+  osVersion: string | null;
+  architecture: string | null;
 }
 
 export interface PortalSessionRow {
@@ -251,25 +272,35 @@ export async function activateDevice(
   licenseId: string,
   machineId: string,
   deviceName: string | null,
+  activationMethod: "email" | "key" = "email",
+  activationKeyGeneration: number | null = null,
+  metadata: DeviceMetadata = { appVersion: null, osVersion: null, architecture: null },
 ): Promise<DeviceRow> {
   const existing = await findDevice(db, licenseId, machineId);
   const timestamp = now();
   if (existing) {
     await db
       .prepare(
-        "UPDATE devices SET status = 'active', deactivated_at = NULL, last_verified_at = ?, device_name = COALESCE(?, device_name) WHERE id = ?",
+        `UPDATE devices SET status = 'active', deactivated_at = NULL, last_verified_at = ?,
+          device_name = COALESCE(?, device_name), activation_method = ?, activation_key_generation = ?,
+          app_version = COALESCE(?, app_version), os_version = COALESCE(?, os_version),
+          architecture = COALESCE(?, architecture) WHERE id = ?`,
       )
-      .bind(timestamp, deviceName, existing.id)
+      .bind(timestamp, deviceName, activationMethod, activationKeyGeneration, metadata.appVersion, metadata.osVersion, metadata.architecture, existing.id)
       .run();
-    return { ...existing, status: "active", last_verified_at: timestamp };
+    return { ...existing, status: "active", last_verified_at: timestamp, activation_method: activationMethod,
+      activation_key_generation: activationKeyGeneration, app_version: metadata.appVersion ?? existing.app_version,
+      os_version: metadata.osVersion ?? existing.os_version, architecture: metadata.architecture ?? existing.architecture };
   }
   const id = randomId("dev");
   await db
     .prepare(
-      `INSERT INTO devices (id, license_id, machine_id, device_name, activated_at, last_verified_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+      `INSERT INTO devices (id, license_id, machine_id, device_name, activated_at, last_verified_at, status,
+        activation_method, activation_key_generation, app_version, os_version, architecture)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
     )
-    .bind(id, licenseId, machineId, deviceName, timestamp, timestamp)
+    .bind(id, licenseId, machineId, deviceName, timestamp, timestamp, activationMethod, activationKeyGeneration,
+      metadata.appVersion, metadata.osVersion, metadata.architecture)
     .run();
   return {
     id,
@@ -280,6 +311,11 @@ export async function activateDevice(
     last_verified_at: timestamp,
     deactivated_at: null,
     status: "active",
+    activation_method: activationMethod,
+    activation_key_generation: activationKeyGeneration,
+    app_version: metadata.appVersion,
+    os_version: metadata.osVersion,
+    architecture: metadata.architecture,
   };
 }
 
@@ -348,8 +384,76 @@ export async function revokePortalSession(db: D1Database, tokenHash: string): Pr
   await db.prepare("UPDATE portal_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL").bind(now(), tokenHash).run();
 }
 
-export async function touchDevice(db: D1Database, deviceId: string): Promise<void> {
-  await db.prepare("UPDATE devices SET last_verified_at = ? WHERE id = ?").bind(now(), deviceId).run();
+export async function touchDevice(db: D1Database, deviceId: string, metadata?: DeviceMetadata): Promise<void> {
+  await db.prepare(`UPDATE devices SET last_verified_at = ?, app_version = COALESCE(?, app_version),
+    os_version = COALESCE(?, os_version), architecture = COALESCE(?, architecture) WHERE id = ?`)
+    .bind(now(), metadata?.appVersion ?? null, metadata?.osVersion ?? null, metadata?.architecture ?? null, deviceId).run();
+}
+
+export async function findActivationKeyByLicense(db: D1Database, licenseId: string): Promise<ActivationKeyRow | null> {
+  return db.prepare("SELECT * FROM license_activation_keys WHERE license_id = ?").bind(licenseId).first<ActivationKeyRow>();
+}
+
+export async function findActivationKeyByVerifier(db: D1Database, verifierHash: string): Promise<(ActivationKeyRow & LicenseRow) | null> {
+  return db.prepare(`SELECT k.license_id AS key_license_id, k.generation, k.verifier_hash, k.ciphertext, k.nonce,
+      k.created_at AS key_created_at, k.rotated_at, l.* FROM license_activation_keys k
+      JOIN licenses l ON l.id = k.license_id WHERE k.verifier_hash = ?`)
+    .bind(verifierHash).first<ActivationKeyRow & LicenseRow>();
+}
+
+export async function saveActivationKey(db: D1Database, row: Omit<ActivationKeyRow, "created_at" | "rotated_at">): Promise<void> {
+  const timestamp = now();
+  await db.prepare(`INSERT INTO license_activation_keys
+      (license_id, generation, verifier_hash, ciphertext, nonce, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(row.license_id, row.generation, row.verifier_hash, row.ciphertext, row.nonce, timestamp).run();
+}
+
+export async function rotateActivationKey(db: D1Database, licenseId: string, generation: number,
+  verifierHash: string, ciphertext: string, nonce: string): Promise<number> {
+  const timestamp = now();
+  const results = await db.batch([
+    db.prepare(`UPDATE license_activation_keys SET generation = ?, verifier_hash = ?, ciphertext = ?, nonce = ?, rotated_at = ?
+      WHERE license_id = ?`).bind(generation, verifierHash, ciphertext, nonce, timestamp, licenseId),
+    db.prepare(`UPDATE devices SET status = 'deactivated', deactivated_at = ? WHERE license_id = ?
+      AND activation_method = 'key' AND status = 'active'`).bind(timestamp, licenseId),
+  ]);
+  return results[1].meta.changes ?? 0;
+}
+
+export async function recordDeviceActivity(db: D1Database, device: DeviceRow, eventType: "activation" | "verification",
+  network: { ipAddress: string | null; country: string | null }, metadata: DeviceMetadata): Promise<void> {
+  await db.prepare(`INSERT INTO device_activity
+      (id, device_id, license_id, event_type, ip_address, country, app_version, os_version, architecture, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(randomId("activity"), device.id, device.license_id, eventType, network.ipAddress, network.country,
+      metadata.appVersion, metadata.osVersion, metadata.architecture, now()).run();
+}
+
+export async function deviceDetailsForCustomer(db: D1Database, customerId: string, deviceId: string) {
+  const device = await db.prepare(`SELECT d.* FROM devices d JOIN licenses l ON l.id = d.license_id
+    WHERE d.id = ? AND l.customer_id = ?`).bind(deviceId, customerId).first<DeviceRow>();
+  if (!device) return null;
+  const activity = await db.prepare(`SELECT event_type, ip_address, country, app_version, os_version, architecture, created_at
+    FROM device_activity WHERE device_id = ? ORDER BY created_at DESC LIMIT 100`).bind(deviceId).all();
+  return { device, activity: activity.results ?? [] };
+}
+
+export async function deleteDeactivatedDeviceForCustomer(db: D1Database, customerId: string, deviceId: string): Promise<{ deleted: boolean; licenseId: string | null }> {
+  const device = await db.prepare(`SELECT d.id, d.license_id FROM devices d JOIN licenses l ON l.id = d.license_id
+    WHERE d.id = ? AND d.status = 'deactivated' AND l.customer_id = ?`).bind(deviceId, customerId)
+    .first<{ id: string; license_id: string }>();
+  if (!device) return { deleted: false, licenseId: null };
+  await db.batch([
+    db.prepare("DELETE FROM device_activity WHERE device_id = ?").bind(deviceId),
+    db.prepare("DELETE FROM devices WHERE id = ? AND status = 'deactivated'").bind(deviceId),
+  ]);
+  return { deleted: true, licenseId: device.license_id };
+}
+
+export async function purgeOldDeviceActivity(db: D1Database, cutoff: number): Promise<number> {
+  const result = await db.prepare("DELETE FROM device_activity WHERE created_at < ?").bind(cutoff).run();
+  return result.meta.changes ?? 0;
 }
 
 /** Returns false when the event was already handled - the idempotency guard. */

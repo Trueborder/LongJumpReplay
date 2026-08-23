@@ -5,12 +5,17 @@ import json
 import pytest
 
 import src.licensing as licensing
-from src.licensing import format_verification_code_input, machine_code, verify_license
+from src.licensing import format_activation_key_input, format_verification_code_input, machine_code, verify_license
 
 
 def test_verification_code_input_keeps_six_ascii_digits() -> None:
     assert format_verification_code_input("12a 34-56789") == "123456"
     assert format_verification_code_input("１２٣45") == "45"
+
+
+def test_portal_activation_key_input_is_grouped_live() -> None:
+    assert format_activation_key_input("1234 abcd-2efg trailing") == "1234-ABCD-2EFG"
+    assert format_activation_key_input("12x34-abio-01efg") == "1234-ABEF-G"
 from tools.license_admin import create_license
 
 

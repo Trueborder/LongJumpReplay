@@ -12,7 +12,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/overrides.css">
-  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/),p=a&&m?decodeURIComponent(m[1]):'system',r=p==='light'||p==='dark'?p:(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.dataset.theme=r;document.documentElement.dataset.themePreference=p}catch(e){}</script>
 </head>
 <body>
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
@@ -41,7 +41,7 @@
         <a class="button button-outline" href="/software/longjumpreplay/" data-en="View product" data-cs="Zobrazit produkt">View product</a>
         <a class="text-link" href="/licensing/" data-en="How licensing works →" data-cs="Jak funguje licencování →">How licensing works →</a>
       </div>
-      <div class="notice trial-notice" data-en="Free testing: the installer includes a 72-hour trial with the full workflow and up to 3 successful exports. On first launch, choose paid activation or start the trial. No email address, no account and no internet connection are required. The trial belongs to the computer it is started on - one trial per computer." data-cs="Testování zdarma: instalátor obsahuje 72hodinové testování s celým postupem a nejvýše 3 úspěšnými exporty. Při prvním spuštění zvolte placenou aktivaci, nebo spusťte testování. Nevyžaduje e-mailovou adresu, účet ani připojení k internetu. Testování patří k počítači, na kterém ho spustíte - jedno testování na počítač.">Free testing: the installer includes a 72-hour trial with the full workflow and up to 3 successful exports. On first launch, choose paid activation or start the trial. No email address, no account and no internet connection are required. The trial belongs to the computer it is started on - one trial per computer.</div>
+      <div class="notice trial-notice" data-en="Free evaluation: test camera capture, freeze and replay for 72 hours, with up to 3 standalone video exports. Competition setup, rosters, judging, results and evidence packages are disabled. No email, account or internet is required. One evaluation per computer." data-cs="Bezplatné hodnocení: 72 hodin testujte kameru, zmrazení a přehrávání, včetně nejvýše 3 samostatných exportů videa. Nastavení soutěže, soupisky, rozhodování, výsledky a důkazní balíčky jsou vypnuté. Není potřeba e-mail, účet ani internet. Jedno hodnocení na počítač.">Free evaluation: test camera capture, freeze and replay for 72 hours, with up to 3 standalone video exports. Competition setup, rosters, judging, results and evidence packages are disabled. No email, account or internet is required. One evaluation per computer.</div>
     </section>
     <section class="section-shell content-section">
       <div class="download-panel">

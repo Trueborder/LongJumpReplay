@@ -41,6 +41,7 @@ TIME_API_URL = os.environ.get(
     "LJR_TRIAL_TIME_URL", "https://worldtimeapi.org/api/timezone/Etc/UTC"
 )
 TRIAL_STATE_FILENAME = "trial-state.json"
+TRIAL_CONSUMED_FILENAME = "trial-consumed.json"
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Separate trial key. The matching private key is supplied to the trial
@@ -71,6 +72,28 @@ def _urlsafe_decode(value: str) -> bytes:
 
 def _state_path() -> Path:
     return writable_data_directory() / TRIAL_STATE_FILENAME
+
+
+def _consumed_path() -> Path:
+    return writable_data_directory() / TRIAL_CONSUMED_FILENAME
+
+
+def _trial_was_consumed() -> bool:
+    try:
+        payload = json.loads(_unprotect(_urlsafe_decode(json.loads(_consumed_path().read_text(encoding="utf-8"))["protected"])).decode("utf-8"))
+        return payload.get("machine_code") == machine_code() and bool(payload.get("consumed"))
+    except (OSError, KeyError, TypeError, ValueError, UnicodeError, json.JSONDecodeError):
+        return False
+
+
+def _mark_trial_consumed(issued_at: int) -> None:
+    path = _consumed_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    protected = _protect(json.dumps({"consumed": True, "machine_code": machine_code(), "issued_at": issued_at},
+                                    sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"version": 1, "protected": _urlsafe_encode(protected)}) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
 def _utc_timestamp(value: datetime | None = None) -> int:
@@ -248,7 +271,10 @@ def start_local_trial(time_fetcher: Callable[[], int] = lambda: int(time.time())
     service. State is protected with Windows DPAPI when available and remains
     bound to the machine code, matching the customer's offline workflow.
     """
+    if _load_state() is not None or _trial_was_consumed():
+        raise RuntimeError("The free trial has already been used on this computer.")
     issued = int(time_fetcher())
+    _mark_trial_consumed(issued)
     _save_state({
         "local_trial": True,
         "machine_code": machine_code(),

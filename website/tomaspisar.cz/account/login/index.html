@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://tomaspisar.cz/styles.css">
   <link rel="stylesheet" href="https://tomaspisar.cz/overrides.css">
   <link rel="stylesheet" href="/account.css">
-  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/),p=a&&m?decodeURIComponent(m[1]):'system',r=p==='light'||p==='dark'?p:(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.dataset.theme=r;document.documentElement.dataset.themePreference=p}catch(e){}</script>
 </head>
 <body class="account-page portal-login-page" data-portal-page="login">
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
@@ -76,6 +76,7 @@
   <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><a href="https://tomaspisar.cz/privacy/" data-en="Privacy" data-cs="Soukromí">Privacy</a><a href="mailto:info@tomaspisar.cz" data-en="Support" data-cs="Podpora">Support</a></footer>
   <script src="https://tomaspisar.cz/site.config.js"></script>
   <script src="https://tomaspisar.cz/script.js"></script>
+  <script src="/account-state.js"></script>
   <script src="/account.js"></script>
 </body>
 </html>

@@ -14,7 +14,6 @@ def _descendants(widget):
 
 @pytest.mark.parametrize("language", ["en", "cs"])
 def test_code_step_has_back_and_activate_actions(monkeypatch, language):
-    monkeypatch.setattr(licensing, "load_saved_license", lambda: (False, "license.missing", None))
     monkeypatch.setattr(activation, "request_code", lambda _email: 10)
     monkeypatch.setattr(
         trial,

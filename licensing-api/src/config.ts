@@ -27,12 +27,14 @@ export interface Env {
   RATE_LIMIT_REQUEST_CODE?: string;
   RATE_LIMIT_VERIFY_CODE?: string;
   RATE_LIMIT_ACTIVATE?: string;
+  RATE_LIMIT_ACTIVATION_KEY?: string;
   RATE_LIMIT_VERIFY?: string;
 
   // Secrets - set with `wrangler secret put`, never in wrangler.jsonc.
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_SECRET_KEY: string;
   VERIFICATION_PEPPER: string;
+  ACTIVATION_KEY_ENCRYPTION_KEY?: string;
   AUTHORIZATION_PRIVATE_KEY: string;
   MAIL_API_KEY: string;
 }
@@ -98,6 +100,7 @@ export function rateLimits(env: Env) {
     requestCode: [int(env.RATE_LIMIT_REQUEST_CODE, 5), window] as [number, number],
     verifyCode: [int(env.RATE_LIMIT_VERIFY_CODE, 10), window] as [number, number],
     activate: [int(env.RATE_LIMIT_ACTIVATE, 20), window] as [number, number],
+    activationKey: [int(env.RATE_LIMIT_ACTIVATION_KEY, 30), window] as [number, number],
     verify: [int(env.RATE_LIMIT_VERIFY, 120), window] as [number, number],
   };
 }

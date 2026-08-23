@@ -126,6 +126,31 @@
 .no-licence-state h3 { margin: .7rem 0 1rem; font-size: clamp(2rem, 4vw, 3.5rem); }
 
 .device-grid { display: grid; gap: .75rem; }
+.device-table { min-width: 860px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+.small-button.danger, .danger-text { color: var(--coral); }
+.small-button.danger:hover { border-color: var(--coral); background: color-mix(in srgb, var(--coral) 8%, transparent); }
+.activation-key-card { display: grid; grid-template-columns: minmax(0, .9fr) minmax(360px, 1.1fr); gap: clamp(1.5rem, 5vw, 4rem); padding: clamp(1.35rem, 4vw, 2.4rem); border: 1px solid color-mix(in srgb, var(--cyan) 34%, var(--account-border)); border-radius: 24px; background: linear-gradient(145deg, color-mix(in srgb, var(--cyan) 6%, var(--account-panel)), var(--account-panel)); }
+.activation-key-card h3 { margin: 1rem 0 .7rem; font-size: clamp(1.8rem, 3.8vw, 3.2rem); }
+.activation-key-card p { color: var(--muted); line-height: 1.6; }
+.activation-key-controls { display: grid; align-content: center; gap: .8rem; }
+.activation-key-controls label { color: var(--muted); font: 500 .64rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.activation-key-controls select { min-height: 48px; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--text); font: inherit; }
+.activation-key-value { display: block; min-height: 72px; padding: 1.15rem; border: 1px solid var(--account-border); border-radius: 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--text); font: 600 clamp(1.4rem, 4vw, 2.3rem) var(--mono); letter-spacing: .08em; text-align: center; }
+.activation-key-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.activation-key-actions .button { min-height: 44px; }
+.device-details-dialog { width: min(760px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); padding: clamp(1.25rem, 4vw, 2rem); overflow: auto; border: 1px solid var(--account-border); border-radius: 24px; background: var(--surface); color: var(--text); box-shadow: var(--account-shadow); }
+.device-details-dialog::backdrop { background: rgba(3, 7, 9, .72); backdrop-filter: blur(6px); }
+.dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.dialog-heading h2 { margin: .4rem 0 0; font-size: clamp(2rem, 5vw, 3.4rem); }
+.device-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.device-facts div { min-width: 0; padding: .9rem; border: 1px solid var(--account-border); border-radius: 13px; }
+.device-facts dt { color: var(--muted); font: 500 .6rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.device-facts dd { margin: .35rem 0 0; overflow-wrap: anywhere; }
+.advanced-details { margin-top: 1rem; }
+.advanced-details summary { min-height: 44px; padding: .75rem 0; color: var(--cyan); cursor: pointer; }
+.activity-list { display: grid; gap: .45rem; margin-top: 1rem; }
+.activity-list article { display: grid; grid-template-columns: 1fr 1.5fr 1.5fr .4fr; gap: .7rem; padding: .75rem; border-bottom: 1px solid var(--account-border); font-size: .78rem; }
 .device-card { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: 1.15rem; border: 1px solid var(--account-border); border-radius: 18px; background: var(--account-panel); }
 .device-icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--cyan) 10%, transparent); color: var(--cyan); }
 .device-card h3 { margin: 0; font-size: 1.25rem; }
@@ -152,7 +177,7 @@ html[data-theme="light"] .summary-card, html[data-theme="light"] .licence-card, 
   .dashboard-hero { display: block; }
   .dashboard-actions { justify-content: flex-start; margin-top: 1.5rem; }
   .dashboard-layout { grid-template-columns: 1fr; }
-  .dashboard-nav { position: static; grid-template-columns: repeat(5, max-content); overflow-x: auto; scrollbar-width: thin; }
+  .dashboard-nav { position: static; grid-template-columns: repeat(6, max-content); overflow-x: auto; scrollbar-width: thin; }
   .dashboard-nav p { display: none; }
 }
 @media (max-width: 650px) {
@@ -169,6 +194,10 @@ html[data-theme="light"] .summary-card, html[data-theme="light"] .licence-card, 
   .licence-card dl { grid-template-columns: 1fr; }
   .device-card { grid-template-columns: 42px minmax(0, 1fr); }
   .device-card > .small-button { grid-column: 1 / -1; width: 100%; }
+  .activation-key-card { grid-template-columns: 1fr; }
+  .activation-key-actions { display: grid; }
+  .device-facts { grid-template-columns: 1fr; }
+  .activity-list article { grid-template-columns: 1fr; }
   .table-card { margin-right: -.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {

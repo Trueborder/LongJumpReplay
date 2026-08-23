@@ -20,11 +20,63 @@ export function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function base64ToBytes(value: string): Uint8Array {
+export function base64ToBytes(value: string): Uint8Array {
   const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
   return out;
+}
+
+const KEY_DIGITS = "0123456789";
+const KEY_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const KEY_MIXED = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+function secureCharacters(alphabet: string, count: number): string {
+  const limit = Math.floor(256 / alphabet.length) * alphabet.length;
+  let result = "";
+  while (result.length < count) {
+    const bytes = new Uint8Array(Math.max(8, count - result.length));
+    crypto.getRandomValues(bytes);
+    for (const byte of bytes) {
+      if (byte < limit) result += alphabet[byte % alphabet.length];
+      if (result.length === count) break;
+    }
+  }
+  return result;
+}
+
+/** Human-friendly 4-4-4 key: digits, letters, then unambiguous alphanumerics. */
+export function generateActivationKey(): string {
+  return `${secureCharacters(KEY_DIGITS, 4)}-${secureCharacters(KEY_LETTERS, 4)}-${secureCharacters(KEY_MIXED, 4)}`;
+}
+
+export function normalizeActivationKey(value: string): string | null {
+  const compact = value.toUpperCase().replace(/[\s-]/g, "");
+  if (!/^\d{4}[A-HJ-NP-Z]{4}[2-9A-HJ-NP-Z]{4}$/.test(compact)) return null;
+  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8)}`;
+}
+
+async function importEncryptionKey(secret: string, usages: Array<"encrypt" | "decrypt">): Promise<CryptoKey> {
+  if (!secret) throw new Error("ACTIVATION_KEY_ENCRYPTION_KEY is empty");
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, usages);
+}
+
+export async function encryptActivationKey(secret: string, value: string): Promise<{ ciphertext: string; nonce: string }> {
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const key = await importEncryptionKey(secret, ["encrypt"]);
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, encoder.encode(value));
+  return { ciphertext: base64UrlEncode(ciphertext), nonce: base64UrlEncode(nonce) };
+}
+
+export async function decryptActivationKey(secret: string, ciphertext: string, nonce: string): Promise<string> {
+  const key = await importEncryptionKey(secret, ["decrypt"]);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(nonce) },
+    key,
+    base64ToBytes(ciphertext),
+  );
+  return new TextDecoder().decode(plaintext);
 }
 
 /**

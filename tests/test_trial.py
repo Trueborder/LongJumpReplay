@@ -122,6 +122,13 @@ def test_local_trial_starts_without_email_or_service(isolated_state):
     assert status.expires_at == 1_700_000_000 + trial.TRIAL_DURATION_SECONDS
 
 
+def test_local_trial_cannot_be_restarted_after_state_is_removed(isolated_state):
+    trial.start_local_trial(lambda: 1_700_000_000)
+    trial._state_path().unlink()
+    with pytest.raises(RuntimeError, match="already been used"):
+        trial.start_local_trial(lambda: 1_700_100_000)
+
+
 def test_local_trial_does_not_call_network_time_service(isolated_state):
     issued = int(time.time())
     trial.start_local_trial(lambda: issued)

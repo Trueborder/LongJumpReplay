@@ -101,6 +101,16 @@ class MainWindow:
     ) -> None:
         self.root = root
         self.config = config
+        self._evaluation_mode = trial_is_active()
+        if self._evaluation_mode:
+            # The evaluation demonstrates capture, freeze, replay and up to
+            # three standalone exports. It must never become a competition tool.
+            self.config.competition.enabled = False
+            self.config.competition.show_competition_board = False
+            self.config.competition.decision_controls_enabled = False
+            self.config.competition.event_export_enabled = False
+            self.config.competition.auto_save_evidence = False
+            self.config.display.show_decision_controls = False
         self._restore_startup_view()
         self.config_path = config_path
         self._persistent_camera_source_type = persistent_camera_source_type
@@ -225,7 +235,7 @@ class MainWindow:
         display.show_status_bar = True
         display.show_live_preview = True
         display.timeline_height = max(self.TIMELINE_USABLE_HEIGHT, display.timeline_height)
-        self.config.competition.show_competition_board = True
+        self.config.competition.show_competition_board = not getattr(self, "_evaluation_mode", False)
 
     def _build_variables(self) -> None:
         d = self.config.display
@@ -310,6 +320,9 @@ class MainWindow:
         self.file_menu.add_command(label=self._t("menu.settings"), command=self.open_settings)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.exit"), command=self.close)
+        if self._evaluation_mode:
+            for index in (0, 1, 5):
+                self.file_menu.entryconfigure(index, state="disabled")
 
         self.view_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.layout_menu = tk.Menu(self.view_menu, tearoff=False, postcommand=self._begin_menu_interaction)
@@ -445,10 +458,20 @@ class MainWindow:
         self._update_athlete_timer_display()
 
         self.warning_banner = tk.Label(self.outer, textvariable=self.warning_var, anchor="w", padx=10, pady=5, font=("Segoe UI Semibold", 9))
+        if self._evaluation_mode:
+            self.evaluation_banner = tk.Label(
+                self.outer,
+                text="Evaluation only — competition features disabled" if self.config.general.language != "cs" else "Pouze zkušební režim — soutěžní funkce jsou vypnuté",
+                anchor="center", padx=10, pady=6, font=("Segoe UI Semibold", 9),
+                bg="#5b4300", fg="#fff1b8",
+            )
+            self.evaluation_banner.pack(fill="x", pady=(0, 8))
         self.competition_banner = tk.Label(self.outer, textvariable=self.competition_banner_var, anchor="center", padx=10, pady=5, font=("Segoe UI Semibold", 9))
 
         self.wizard_button = ttk.Button(self.outer, text=self._t("button.wizard"), style="Accent.TButton", command=self.start_competition_wizard)
         self.wizard_button.pack(anchor="w", pady=(0, 6))
+        if self._evaluation_mode:
+            self.wizard_button.configure(state="disabled")
 
         self.content_pane = ttk.Panedwindow(self.outer, orient="horizontal")
         self.content_pane.pack(fill="both", expand=True)
@@ -2031,6 +2054,8 @@ class MainWindow:
             self._show_message("Marker added.", 3); self._last_timeline_update = 0
 
     def mark_decision(self, decision: AttemptDecision) -> None:
+        if self._evaluation_mode:
+            self._show_message("Competition verdicts are disabled in the evaluation.", 6); return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
         if not self.config.competition.decision_controls_enabled and not self.config.display.show_decision_controls: return
@@ -2075,6 +2100,8 @@ class MainWindow:
             self._finish_decision_workflow(attempt_id)
 
     def mark_special_result(self, decision: AttemptDecision) -> None:
+        if self._evaluation_mode:
+            self._show_message("Competition results are disabled in the evaluation.", 6); return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
         if not self.config.competition.enabled or not self.config.competition.enable_special_results:
@@ -2096,6 +2123,8 @@ class MainWindow:
             self._show_next_athlete_overlay(next_assignment)
 
     def grant_reattempt(self) -> None:
+        if self._evaluation_mode:
+            self._show_message("Competition verdicts are disabled in the evaluation.", 6); return
         if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
             self._show_message("Select the attempt that should be repeated.", 5); return
         attempt = self.attempts.get_attempt(self.playback.attempt_id)
@@ -2741,6 +2770,13 @@ class MainWindow:
         self._refresh_attempts()
 
     def apply_settings(self, new_config: AppConfig) -> None:
+        if self._evaluation_mode:
+            new_config.competition.enabled = False
+            new_config.competition.show_competition_board = False
+            new_config.competition.decision_controls_enabled = False
+            new_config.competition.event_export_enabled = False
+            new_config.competition.auto_save_evidence = False
+            new_config.display.show_decision_controls = False
         camera_changed = new_config.camera != self.config.camera or new_config.buffer != self.config.buffer
         language_changed = new_config.general.language != self.config.general.language
         timer_duration_changed = new_config.athlete_timer.duration_seconds != self.config.athlete_timer.duration_seconds
@@ -2796,6 +2832,8 @@ class MainWindow:
 
     # ------------------------------------------------------ competition setup
     def start_competition_wizard(self) -> None:
+        if self._evaluation_mode:
+            self._show_message("Competition setup is disabled in the evaluation.", 6); return
         CompetitionWizard(
             self.root,
             self.config,
@@ -2883,6 +2921,8 @@ class MainWindow:
             )
 
     def export_competition_package(self) -> None:
+        if self._evaluation_mode:
+            self._show_message("Competition packages are disabled in the evaluation.", 7); return
         if trial_is_active() and trial_exports_remaining() <= 0:
             self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
             return
@@ -2948,6 +2988,8 @@ class MainWindow:
 
     def export_adjudication_package(self) -> None:
         """Create an explicit, standalone evidence and decision package."""
+        if self._evaluation_mode:
+            self._show_message("Evidence packages are disabled in the evaluation.", 7); return
         if trial_is_active() and trial_exports_remaining() <= 0:
             self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
             return
@@ -2998,6 +3040,8 @@ class MainWindow:
 
     def import_roster(self) -> None:
         """Preview and atomically commit a generic roster into the active group."""
+        if self._evaluation_mode:
+            self._show_message("Roster import is disabled in the evaluation.", 6); return
         selected = filedialog.askopenfilename(
             parent=self.root,
             title=self._t("menu.import_roster"),

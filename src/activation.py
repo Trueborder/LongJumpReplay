@@ -21,6 +21,7 @@ from typing import Any, Callable, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from . import __version__
 from .authorization import (
     clear_authorization,
     load_authorization,
@@ -33,6 +34,14 @@ API_BASE = os.environ.get("LJR_LICENSE_API_URL", "https://api.tomaspisar.cz").rs
 PORTAL_LOGIN_URL = os.environ.get("LJR_ACCOUNT_PORTAL_URL", "https://account.tomaspisar.cz/login")
 REQUEST_TIMEOUT = 15
 EXPLICIT_REJECTION_CODES = {"no_license", "device_not_active", "license_inactive"}
+
+
+def _device_metadata() -> dict[str, str]:
+    return {
+        "app_version": __version__,
+        "os_version": platform.platform()[:160],
+        "architecture": platform.machine()[:40],
+    }
 
 
 def _windows_machine_guid() -> str | None:
@@ -177,7 +186,7 @@ def activate(grant: str, opener: Callable[..., Any] = urlopen) -> ActivationResu
     """Activate this computer and store the returned authorization."""
     data = _post(
         "/api/license/activate",
-        {"activation_grant": grant, "machine_id": device_id(), "device_name": device_name()},
+        {"activation_grant": grant, "machine_id": device_id(), "device_name": device_name(), **_device_metadata()},
         opener,
     )
     token = data.get("authorization")
@@ -198,6 +207,27 @@ def activate(grant: str, opener: Callable[..., Any] = urlopen) -> ActivationResu
     )
 
 
+def activate_with_key(activation_key: str, opener: Callable[..., Any] = urlopen) -> ActivationResult:
+    """Activate with the reusable key managed in the customer portal."""
+    data = _post(
+        "/api/license/activate-key",
+        {"activation_key": activation_key, "machine_id": device_id(), "device_name": device_name(), **_device_metadata()},
+        opener,
+    )
+    token = data.get("authorization")
+    if not isinstance(token, str):
+        raise ActivationError("The licensing server did not return an authorization.")
+    valid, reason, _ = verify_authorization(token, device_id())
+    if not valid:
+        raise ActivationError(f"The authorization could not be verified ({reason}).", reason)
+    save_authorization(token)
+    return ActivationResult(
+        license_type=str(data.get("license_type") or "unknown"),
+        max_devices=int(data.get("max_devices") or 0),
+        authorization=token,
+    )
+
+
 def deactivate_this_computer(grant: str, opener: Callable[..., Any] = urlopen) -> bool:
     data = _post(
         "/api/license/deactivate-device",
@@ -210,7 +240,7 @@ def deactivate_this_computer(grant: str, opener: Callable[..., Any] = urlopen) -
 def refresh(license_id: str, opener: Callable[..., Any] = urlopen) -> bool:
     """Periodic re-verification. Returns True when a fresh authorization was stored."""
     data = _post(
-        "/api/license/verify", {"license_id": license_id, "machine_id": device_id()}, opener
+        "/api/license/verify", {"license_id": license_id, "machine_id": device_id(), **_device_metadata()}, opener
     )
     token = data.get("authorization")
     if not isinstance(token, str):

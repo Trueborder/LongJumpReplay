@@ -75,16 +75,16 @@ Set with `wrangler secret put <NAME>` from `licensing-api/`. Never in
 | `STRIPE_WEBHOOK_SECRET` | Verifies webhook signatures. From the Stripe webhook endpoint. |
 | `STRIPE_SECRET_KEY` | Reads back line items and subscriptions. Restricted key is enough. |
 | `VERIFICATION_PEPPER` | HMAC key for verification codes. Any 32 random bytes. |
+| `ACTIVATION_KEY_ENCRYPTION_KEY` | Encrypts reusable portal activation keys with AES-GCM. Use a separate high-entropy secret. |
 | `AUTHORIZATION_PRIVATE_KEY` | PKCS#8 RSA private key signing authorizations. |
 | `MAIL_API_KEY` | Transactional email provider key. |
 
 ## Database
 
-`licensing-api/migrations/0001_init.sql`, `0002_portal.sql`, and
-`0003_portal_login_without_license.sql`. Tables:
+Migrations `0001` through `0006` define the current schema. Tables:
 `customers`, `licenses`, `devices`, `verification_codes`, `activation_grants`,
 `stripe_events`, `rate_limits`, `events`, `portal_login_codes`, and
-`portal_sessions`.
+`portal_sessions`, `license_activation_keys`, and `device_activity`.
 
 Notable constraints:
 
@@ -95,9 +95,10 @@ Notable constraints:
   of the idempotency story.
 - `stripe_events` primary key - the insert failing *is* the duplicate check.
 
-Only the email address is personal data. Devices are stored as an opaque
-identifier derived on the customer's machine; no hardware serials, computer
-names or locations are stored.
+Devices use an opaque identifier derived on the customer's machine; no raw
+hardware serial is sent. Activation activity stores the exact connecting IP,
+Cloudflare country, app version, Windows version and architecture for account
+security and support. A daily scheduled job deletes this detail after 365 days.
 
 ## API
 
@@ -137,6 +138,12 @@ returns the normal activation grant.
 max_devices, authorization, expires_at}`. Returns `409 device_limit` when the
 seat limit is reached.
 
+### `POST /api/license/activate-key`
+`{activation_key, machine_id, device_name?, app_version?, os_version?, architecture?}`
+activates with the reusable `NNNN-LLLL-RRRR` key from the customer portal. The
+endpoint is limited to 30 attempts per IP per hour. Keys are generated with Web
+Crypto, stored as an HMAC verifier plus AES-GCM ciphertext, and never logged.
+
 ### `POST /api/license/verify`
 `{license_id, machine_id}` -> `{valid, license_type, authorization, expires_at}`.
 The periodic refresh. Returns 403 once a subscription is past its period end
@@ -161,7 +168,14 @@ never receives or stores card data.
 - `POST /api/portal/verify-code` - exchange the OTP for a portal session.
 - `GET /api/portal/account` - licence, device, invoice and billing status.
 - `POST /api/portal/billing` - create a Stripe Customer Portal session.
-- `POST /api/portal/devices/:id/deactivate` - free one device slot.
+- `POST /api/portal/deactivate-device` - free one device slot.
+- `POST /api/portal/delete-device` - delete an already-deactivated device and
+  its detailed activity history.
+- `GET /api/portal/device-details?device_id=...` - owner-only technical and
+  one-year activity detail.
+- `POST /api/portal/activation-key/ensure`, `/reveal`, `/regenerate` - create,
+  reveal, or rotate the one reusable key for an active licence. Rotation
+  disconnects key-activated devices only; email-activated devices stay active.
 - `POST /api/portal/logout` - revoke the current portal session.
 
 Portal access proves control of an email address and does not require a
@@ -170,6 +184,13 @@ link to buy LongJumpReplay. A later Stripe purchase made with the same
 normalised email is attached to that existing account automatically. Portal
 codes are stored separately from activation codes and cannot activate the
 desktop application.
+
+The best future activation upgrade is a one-time portal/QR pairing code: the
+desktop would show a short-lived code or QR, the already signed-in owner would
+approve that exact computer, and the code would become useless immediately.
+Passkeys are a useful future portal-login upgrade. Floating network licences,
+shared permanent club passwords and hardware dongles are intentionally not
+planned because they add support burden or weaken ownership controls.
 
 Both the activation flow and the portal use ten-minute email codes. A customer
 can activate up to two computers. Authorizations are signed for 30 days and

@@ -1,5 +1,44 @@
 # Long Jump Replay — Project Knowledge
 
+## Reusable activation keys, device history, and replay-only evaluation (2026-08-23)
+
+- Email OTP remains the primary desktop activation method. The redesigned
+  startup window uses the Evidence Desk cyan/dark visual language, removes the
+  old offline machine-key route, offers a portal-managed key as the alternative,
+  and directs a verified account without a purchase to tomaspisar.cz.
+- Each active licence may have one reusable `NNNN-LLLL-RRRR` activation key.
+  Digits, unambiguous uppercase letters, and unambiguous alphanumerics are
+  generated with Web Crypto. D1 stores an HMAC verifier and AES-GCM ciphertext;
+  `ACTIVATION_KEY_ENCRYPTION_KEY` is a Worker secret and must never be committed
+  or printed. The portal hides the key on every load and offers explicit reveal,
+  copy, and destructive regeneration controls.
+- Regenerating a key deactivates only active devices whose activation method is
+  `key`; email-activated devices remain active. The portal device table shows
+  activation method, activation time, and last activity. Owner-only details put
+  app/Windows/architecture, opaque identifiers, key generation, exact IP,
+  country, and activity history behind an advanced disclosure. Only already
+  deactivated device rows may be deleted.
+- Migration `0006_activation_keys_and_device_activity.sql` adds activation-key
+  storage, activation method and support metadata, plus device activity. Exact
+  IP/country activity is disclosed in the privacy page and removed after 365
+  days by a daily Worker schedule. Device deletion removes its detailed history
+  immediately while retaining a minimal licence audit event.
+- The local 72-hour evaluation is replay-only: camera capture, freeze, replay,
+  and at most three standalone video exports remain available. Competition
+  setup/board/rosters, verdicts/results, evidence and competition packages are
+  forced off and guarded at their command entry points. A persistent banner
+  identifies evaluation mode. A separate DPAPI-protected consumed marker makes
+  the local trial one-use per Windows profile/machine on a best-effort basis;
+  it is not tamper-proof against a local administrator deleting state.
+- The website theme defaults to the system preference. Its control cycles
+  System -> Light -> Dark and stores the override only under accepted preference
+  consent. The preferred future activation upgrade is a short-lived portal/QR
+  pairing approval; passkeys are a useful future portal-login upgrade.
+- No code-signing change is included. A publicly trusted Authenticode certificate
+  is the practical direct-download route; HTTPS, checksums and signed update
+  manifests do not by themselves remove browser or SmartScreen warnings. See
+  `docs/WINDOWS_CODE_SIGNING.md`.
+
 ## Email licensing and customer portal (2026-08-18)
 
 - The authoritative licensing implementation is under `licensing-api/`. The
@@ -685,10 +724,11 @@ At the time this handoff was prepared, the Windows source suite passed **67 test
 - `scripts\build\BUILD_RELEASE.bat` is the supported 3.3 portable payload entry point. It runs source and GUI tests plus source/frozen self-tests before refreshing the exact `release` directory.
 - `scripts\build\BUILD_INSTALLER.bat` compiles `packaging\LongJumpReplay.iss` with Inno Setup. It preserves the 3.1 AppId and installs under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
-- Offline machine-bound licenses are verified with an embedded RSA public key. The private signing key is kept in the ignored local `tools\.license_private_key.json` file and is never bundled with the application.
-- License administration uses `tools\license_admin.py`; the customer supplies the machine code shown on first launch and receives a signed key by email.
-- `scripts/run/RUN_LICENSE_GENERATOR.bat` launches the Tkinter admin GUI. It generates, copies, or saves signed keys and normalizes pasted machine codes. `scripts/build/BUILD_LICENSE_GENERATOR.bat` can create an admin-only GUI EXE, which reads the private key from the project-side `tools\.license_private_key.json` file; it must never be sent to customers.
-- `docs\LICENSE_ADMIN.md` documents the customer activation and key-delivery workflow. The private key must remain backed up and outside customer installers, ZIPs, and support attachments.
+- The previous offline machine-bound customer key route is retired and is no
+  longer reachable from startup. Paid customer activation uses email OTP or the
+  reusable portal key; both result in the same server-issued, device-bound
+  signed authorization. Shared RSA primitives remain because trial,
+  authorization and updater signature verification still depend on them.
 - The first-run license dialog is independent of the withdrawn Tk root, centered, raised, focused, and temporarily topmost so frozen Windows launches cannot wait invisibly for activation.
 - The static sales site is under `website`; edit `website\site.config.js` to change the contact email, price, domain, or installer URL, then run `website\BUILD_SITE.ps1` to create the deployable `website\dist` folder. The build must preserve UTF-8 for Czech copy and symbols, rewrite source-only asset paths, and keep the 390 px mobile layout free of horizontal overflow.
 

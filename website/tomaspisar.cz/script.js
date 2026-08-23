@@ -75,6 +75,14 @@
   const storedLanguage = readPref('site-language');
   let lang = storedLanguage === 'cs' ? 'cs' : 'en';
 
+  // Keep older minified product markup accurate while email remains primary.
+  document.querySelectorAll('[data-en]').forEach((element) => {
+    if (element.dataset.en === 'Activation uses the email address you buy with - there is no license key to keep safe. If you would rather test first, the installer includes a free 72-hour trial.') {
+      element.dataset.en = 'Activation is email-first. A reusable alternative key is available in the customer portal. The installer also includes a replay-only 72-hour evaluation.';
+      element.dataset.cs = 'Aktivace probíhá primárně e-mailem. Opakovaně použitelný alternativní klíč najdete v zákaznickém portálu. Instalátor obsahuje také 72hodinové hodnocení pouze pro přehrávání.';
+    }
+  });
+
   document.querySelectorAll('.site-footer').forEach((footer) => {
     const github = cfg.developer?.github;
     if (!github || footer.querySelector('[data-github-link]')) return;
@@ -151,15 +159,22 @@
     document.querySelector('[data-lightbox-close]')?.setAttribute('aria-label', ui[lang].closeImage);
   };
 
-  const setTheme = (theme) => {
-    const safeTheme = theme === 'light' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = safeTheme;
-    writePref('site-theme', safeTheme);
+  const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
+  const setTheme = (preference, persist = true) => {
+    const safePreference = ['system', 'light', 'dark'].includes(preference) ? preference : 'system';
+    const resolvedTheme = safePreference === 'system' ? (systemTheme.matches ? 'light' : 'dark') : safePreference;
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.dataset.themePreference = safePreference;
+    if (persist) writePref('site-theme', safePreference);
     document.querySelectorAll('[data-theme-toggle]').forEach((element) => {
-      element.innerHTML = safeTheme === 'dark' ? ICONS.sun : ICONS.moon;
+      element.innerHTML = resolvedTheme === 'dark' ? ICONS.sun : ICONS.moon;
+      element.title = safePreference === 'system' ? (lang === 'cs' ? 'Motiv: podle systému' : 'Theme: system') : `Theme: ${safePreference}`;
     });
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', safeTheme === 'dark' ? '#0b1013' : '#f2f0e9');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolvedTheme === 'dark' ? '#0b1013' : '#f2f0e9');
   };
+  systemTheme.addEventListener?.('change', () => {
+    if (document.documentElement.dataset.themePreference === 'system') setTheme('system', false);
+  });
 
   const closeMenu = () => {
     document.body.classList.remove('menu-open');
@@ -246,7 +261,8 @@
     renderLanguage();
   }));
   document.querySelectorAll('[data-theme-toggle]').forEach((element) => element.addEventListener('click', () => {
-    setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    const current = document.documentElement.dataset.themePreference || 'system';
+    setTheme(current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system');
   }));
 
   const preview = document.querySelector('.product-image img');
@@ -386,7 +402,7 @@
       writeCookie(CONSENT_COOKIE, choice, CONSENT_MAX_AGE);
       if (choice === 'accepted') {
         // Persist whatever the visitor already chose this session.
-        writePref('site-theme', document.documentElement.dataset.theme || 'dark');
+        writePref('site-theme', document.documentElement.dataset.themePreference || 'system');
         writePref('site-language', lang);
       } else {
         forgetPrefs();
@@ -412,7 +428,7 @@
     if (force) decline.focus();
   };
 
-  setTheme(readPref('site-theme') || 'dark');
+  setTheme(readPref('site-theme') || 'system');
   renderLanguage();
   showConsentBanner();
 })();

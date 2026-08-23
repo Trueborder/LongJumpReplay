@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   "observability": { "enabled": true },
+  "triggers": { "crons": ["17 3 * * *"] },
   "assets": {
     "directory": "../website/tomaspisar.cz/account",
     "binding": "ASSETS",
@@ -44,6 +45,7 @@
     "RATE_LIMIT_REQUEST_CODE": "500",
     "RATE_LIMIT_VERIFY_CODE": "500",
     "RATE_LIMIT_ACTIVATE": "500",
+    "RATE_LIMIT_ACTIVATION_KEY": "500",
     "RATE_LIMIT_VERIFY": "500"
   },
 
@@ -63,7 +65,12 @@
         "PORTAL_ORIGIN": "https://account.tomaspisar.cz",
         "PORTAL_SESSION_TTL_DAYS": "30",
         "STRIPE_PRICE_LIFETIME": "",
-        "STRIPE_PRICE_SUBSCRIPTION": ""
+        "STRIPE_PRICE_SUBSCRIPTION": "",
+        "RATE_LIMIT_REQUEST_CODE": "5",
+        "RATE_LIMIT_VERIFY_CODE": "10",
+        "RATE_LIMIT_ACTIVATE": "20",
+        "RATE_LIMIT_ACTIVATION_KEY": "30",
+        "RATE_LIMIT_VERIFY": "120"
       },
       "d1_databases": [
         {
@@ -93,7 +100,12 @@
         "PORTAL_ORIGIN": "https://account.tomaspisar.cz",
         "PORTAL_SESSION_TTL_DAYS": "30",
         "STRIPE_PRICE_LIFETIME": "price_1U5LRVRzuUbjN0GOz1g4eLth",
-        "STRIPE_PRICE_SUBSCRIPTION": "price_1U5NVeRzuUbjN0GO8DTXza5u"
+        "STRIPE_PRICE_SUBSCRIPTION": "price_1U5NVeRzuUbjN0GO8DTXza5u",
+        "RATE_LIMIT_REQUEST_CODE": "5",
+        "RATE_LIMIT_VERIFY_CODE": "10",
+        "RATE_LIMIT_ACTIVATE": "20",
+        "RATE_LIMIT_ACTIVATION_KEY": "30",
+        "RATE_LIMIT_VERIFY": "120"
       },
       "d1_databases": [
         {

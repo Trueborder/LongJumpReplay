@@ -17,6 +17,10 @@ import { additionalComputerPrices, additionalComputerTotalCzk, eligibleAdditiona
 import type { Env, LicenseType } from "./config";
 import {
   generateToken,
+  generateActivationKey,
+  normalizeActivationKey,
+  encryptActivationKey,
+  decryptActivationKey,
   generateVerificationCode,
   hashCode,
   randomId,
@@ -33,6 +37,10 @@ import {
   createLicense,
   deactivateDevice,
   deactivateDeviceForCustomer,
+  deleteDeactivatedDeviceForCustomer,
+  deviceDetailsForCustomer,
+  findActivationKeyByLicense,
+  findActivationKeyByVerifier,
   findActivatableLicense,
   findCustomerById,
   findDevice,
@@ -45,12 +53,17 @@ import {
   normaliseEmail,
   now,
   rateLimit,
+  recordDeviceActivity,
+  rotateActivationKey,
+  saveActivationKey,
   setLicenseStatus,
   touchDevice,
   touchPortalSession,
   upsertCustomer,
   revokePortalSession,
+  purgeOldDeviceActivity,
 } from "./db";
+import type { DeviceMetadata } from "./db";
 import { sendVerificationCode } from "./email";
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
@@ -100,6 +113,32 @@ function str(value: unknown): string {
 
 function clientKey(request: Request): string {
   return request.headers.get("CF-Connecting-IP") ?? "unknown";
+}
+
+function bounded(value: unknown, max: number): string | null {
+  const result = str(value);
+  return result ? result.slice(0, max) : null;
+}
+
+function deviceMetadata(data: Record<string, unknown>): DeviceMetadata {
+  return {
+    appVersion: bounded(data.app_version, 40),
+    osVersion: bounded(data.os_version, 160),
+    architecture: bounded(data.architecture, 40),
+  };
+}
+
+function clientNetwork(request: Request): { ipAddress: string | null; country: string | null } {
+  const cf = request.cf as { country?: string } | undefined;
+  return {
+    ipAddress: bounded(request.headers.get("CF-Connecting-IP"), 64),
+    country: bounded(cf?.country ?? request.headers.get("CF-IPCountry"), 2),
+  };
+}
+
+function portalMutationAllowed(request: Request, env: Env): boolean {
+  const origin = request.headers.get("Origin");
+  return !origin || origin === env.PORTAL_ORIGIN;
 }
 
 function portalCorsHeaders(request: Request, env: Env): Headers {
@@ -643,6 +682,7 @@ async function activate(request: Request, env: Env): Promise<Response> {
   const grant = str(data.activation_grant);
   const machineId = str(data.machine_id);
   const deviceName = str(data.device_name) || null;
+  const metadata = deviceMetadata(data);
 
   if (!grant || !MACHINE_PATTERN.test(machineId)) {
     return fail("invalid_input", "Missing or malformed activation request.");
@@ -679,7 +719,8 @@ async function activate(request: Request, env: Env): Promise<Response> {
   }
 
   await env.DB.prepare("UPDATE activation_grants SET used_at = ? WHERE id = ?").bind(now(), row.id).run();
-  const device = await activateDevice(env.DB, license.id, machineId, deviceName);
+  const device = await activateDevice(env.DB, license.id, machineId, deviceName, "email", null, metadata);
+  await recordDeviceActivity(env.DB, device, "activation", clientNetwork(request), metadata);
   const authorization = await issueAuthorization(env, license, machineId);
   await logEvent(env.DB, "device_activated", license.id, { device: device.id });
 
@@ -697,6 +738,7 @@ async function verify(request: Request, env: Env): Promise<Response> {
   const data = await readJson(request);
   const licenseId = str(data.license_id);
   const machineId = str(data.machine_id);
+  const metadata = deviceMetadata(data);
   if (!licenseId || !MACHINE_PATTERN.test(machineId)) {
     return fail("invalid_input", "Missing or malformed verification request.");
   }
@@ -723,7 +765,8 @@ async function verify(request: Request, env: Env): Promise<Response> {
     return fail("license_inactive", "This licence is no longer active.", 403);
   }
 
-  await touchDevice(env.DB, device.id);
+  await touchDevice(env.DB, device.id, metadata);
+  await recordDeviceActivity(env.DB, device, "verification", clientNetwork(request), metadata);
   const authorization = await issueAuthorization(env, license, machineId);
   return json({
     valid: true,
@@ -731,6 +774,32 @@ async function verify(request: Request, env: Env): Promise<Response> {
     authorization: authorization.token,
     expires_at: authorization.expiresAt,
   });
+}
+
+async function activateWithKey(request: Request, env: Env): Promise<Response> {
+  const data = await readJson(request);
+  const activationKey = normalizeActivationKey(str(data.activation_key));
+  const machineId = str(data.machine_id);
+  const deviceName = bounded(data.device_name, 120);
+  const metadata = deviceMetadata(data);
+  if (!activationKey || !MACHINE_PATTERN.test(machineId)) {
+    return fail("invalid_input", "Enter a valid activation key and computer identifier.");
+  }
+  if (!(await rateLimit(env.DB, `actkey:${clientKey(request)}`, ...rateLimits(env).activationKey))) {
+    return fail("rate_limited", "Too many activation attempts. Try again later.", 429);
+  }
+  const row = await findActivationKeyByVerifier(env.DB, await hashCode(env.VERIFICATION_PEPPER, activationKey));
+  if (!row || row.status !== "active") return fail("invalid_key", "That activation key is not valid.", 401);
+  const existing = await findDevice(env.DB, row.id, machineId);
+  if ((!existing || existing.status !== "active") && await activeDeviceCount(env.DB, row.id) >= row.max_devices) {
+    return fail("device_limit", `This licence is already active on ${row.max_devices} computers.`, 409);
+  }
+  const device = await activateDevice(env.DB, row.id, machineId, deviceName, "key", row.generation, metadata);
+  await recordDeviceActivity(env.DB, device, "activation", clientNetwork(request), metadata);
+  const authorization = await issueAuthorization(env, row, machineId);
+  await logEvent(env.DB, "device_activated", row.id, { device: device.id, method: "key", generation: row.generation });
+  return json({ activated: true, license_type: row.type, max_devices: row.max_devices,
+    authorization: authorization.token, expires_at: authorization.expiresAt });
 }
 
 async function deactivate(request: Request, env: Env): Promise<Response> {
@@ -817,7 +886,13 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
   const deviceCounts = await Promise.all(
     licenses.map(async (license) => [license.id, await activeDeviceCount(env.DB, license.id)] as const),
   );
+  const keyStates = await Promise.all(licenses.map(async (license) => {
+    const key = await findActivationKeyByLicense(env.DB, license.id);
+    return [license.id, key ? { exists: true, generation: key.generation, created_at: key.created_at,
+      rotated_at: key.rotated_at } : { exists: false }] as const;
+  }));
   const counts = new Map(deviceCounts);
+  const keys = Object.fromEntries(keyStates);
   return json({
     customer: { email: auth.customer.email },
     licenses: licenses.map((license) => ({ ...publicLicense(license), active_devices: counts.get(license.id) ?? 0 })),
@@ -829,7 +904,13 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
       last_verified_at: device.last_verified_at,
       deactivated_at: device.deactivated_at,
       status: device.status,
+      activation_method: device.activation_method,
+      activation_key_generation: device.activation_key_generation,
+      app_version: device.app_version,
+      os_version: device.os_version,
+      architecture: device.architecture,
     })),
+    activation_keys: keys,
     invoices,
     additional_computers: eligibleAdditionalComputerOffers(licenses),
     billing: {
@@ -881,6 +962,7 @@ async function portalBilling(request: Request, env: Env): Promise<Response> {
 async function portalDeactivateDevice(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to manage devices.", 401);
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const deviceId = str(data.device_id);
   if (!/^dev_[A-Za-z0-9]{16,80}$/.test(deviceId)) return fail("invalid_input", "Missing or malformed device.");
@@ -889,6 +971,84 @@ async function portalDeactivateDevice(request: Request, env: Env): Promise<Respo
     await logEvent(env.DB, "device_deactivated", result.licenseId, { source: "portal" });
   }
   return json({ deactivated: result.removed });
+}
+
+async function ownedActiveLicense(request: Request, env: Env) {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return { error: fail("not_authenticated", "Sign in to manage activation keys.", 401) } as const;
+  const data = await readJson(request);
+  const licenseId = str(data.license_id);
+  const license = await findLicenseById(env.DB, licenseId);
+  if (!license || license.customer_id !== auth.customer.id) return { error: fail("not_found", "Licence not found.", 404) } as const;
+  if (license.status !== "active") return { error: fail("license_inactive", "This licence is not active.", 403) } as const;
+  return { auth, license } as const;
+}
+
+async function makeStoredActivationKey(env: Env, licenseId: string, generation: number) {
+  const key = generateActivationKey();
+  const encrypted = await encryptActivationKey(env.ACTIVATION_KEY_ENCRYPTION_KEY ?? "", key);
+  return { key, row: { license_id: licenseId, generation,
+    verifier_hash: await hashCode(env.VERIFICATION_PEPPER, key), ciphertext: encrypted.ciphertext, nonce: encrypted.nonce } };
+}
+
+async function portalActivationKeyEnsure(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const owned = await ownedActiveLicense(request, env);
+  if ("error" in owned && owned.error) return owned.error;
+  let stored = await findActivationKeyByLicense(env.DB, owned.license.id);
+  if (!stored) {
+    const generated = await makeStoredActivationKey(env, owned.license.id, 1);
+    try { await saveActivationKey(env.DB, generated.row); }
+    catch { /* Another concurrent request may have created it. */ }
+    stored = await findActivationKeyByLicense(env.DB, owned.license.id);
+  }
+  if (!stored) throw new Error("activation key creation failed");
+  return json({ exists: true, generation: stored.generation, created_at: stored.created_at, rotated_at: stored.rotated_at });
+}
+
+async function portalActivationKeyReveal(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const owned = await ownedActiveLicense(request, env);
+  if ("error" in owned && owned.error) return owned.error;
+  const stored = await findActivationKeyByLicense(env.DB, owned.license.id);
+  if (!stored) return fail("not_created", "Create an activation key first.", 404);
+  const key = await decryptActivationKey(env.ACTIVATION_KEY_ENCRYPTION_KEY ?? "", stored.ciphertext, stored.nonce);
+  return json({ key, generation: stored.generation });
+}
+
+async function portalActivationKeyRegenerate(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const owned = await ownedActiveLicense(request, env);
+  if ("error" in owned && owned.error) return owned.error;
+  const stored = await findActivationKeyByLicense(env.DB, owned.license.id);
+  if (!stored) return fail("not_created", "Create an activation key first.", 404);
+  const generated = await makeStoredActivationKey(env, owned.license.id, stored.generation + 1);
+  const disconnected = await rotateActivationKey(env.DB, owned.license.id, generated.row.generation,
+    generated.row.verifier_hash, generated.row.ciphertext, generated.row.nonce);
+  await logEvent(env.DB, "activation_key_regenerated", owned.license.id, { disconnected, generation: generated.row.generation });
+  return json({ key: generated.key, generation: generated.row.generation, disconnected_devices: disconnected });
+}
+
+async function portalDeviceDetails(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in to view device details.", 401);
+  const deviceId = new URL(request.url).searchParams.get("device_id") ?? "";
+  if (!/^dev_[A-Za-z0-9]{16,80}$/.test(deviceId)) return fail("invalid_input", "Missing or malformed device.");
+  const details = await deviceDetailsForCustomer(env.DB, auth.customer.id, deviceId);
+  return details ? json(details) : fail("not_found", "Device not found.", 404);
+}
+
+async function portalDeleteDevice(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in to manage devices.", 401);
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const deviceId = str(data.device_id);
+  if (!/^dev_[A-Za-z0-9]{16,80}$/.test(deviceId)) return fail("invalid_input", "Missing or malformed device.");
+  const result = await deleteDeactivatedDeviceForCustomer(env.DB, auth.customer.id, deviceId);
+  if (!result.deleted) return fail("not_deactivated", "Only a deactivated computer can be deleted.", 409);
+  await logEvent(env.DB, "device_history_deleted", result.licenseId, { source: "portal" });
+  return json({ deleted: true });
 }
 
 async function portalLogout(request: Request, env: Env): Promise<Response> {
@@ -923,6 +1083,9 @@ export default {
       if (path === "/api/portal/account" && request.method === "GET") {
         return withPortalCors(await portalAccount(request, env), request, env);
       }
+      if (path === "/api/portal/device-details" && request.method === "GET") {
+        return withPortalCors(await portalDeviceDetails(request, env), request, env);
+      }
       if (request.method !== "POST") return fail("not_found", "Not found", 404);
 
       let response: Response;
@@ -938,6 +1101,9 @@ export default {
           break;
         case "/api/license/activate":
           response = await activate(request, env);
+          break;
+        case "/api/license/activate-key":
+          response = await activateWithKey(request, env);
           break;
         case "/api/license/verify":
           response = await verify(request, env);
@@ -963,6 +1129,18 @@ export default {
         case "/api/portal/deactivate-device":
           response = await portalDeactivateDevice(request, env);
           break;
+        case "/api/portal/delete-device":
+          response = await portalDeleteDevice(request, env);
+          break;
+        case "/api/portal/activation-key/ensure":
+          response = await portalActivationKeyEnsure(request, env);
+          break;
+        case "/api/portal/activation-key/reveal":
+          response = await portalActivationKeyReveal(request, env);
+          break;
+        case "/api/portal/activation-key/regenerate":
+          response = await portalActivationKeyRegenerate(request, env);
+          break;
         default:
           response = fail("not_found", "Not found", 404);
       }
@@ -973,5 +1151,9 @@ export default {
       const response = fail("server_error", "Something went wrong. Please try again.", 500);
       return path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
     }
+  },
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const removed = await purgeOldDeviceActivity(env.DB, now() - 365 * 86400);
+    if (removed) console.log("purged device activity", removed);
   },
 } satisfies ExportedHandler<Env>;

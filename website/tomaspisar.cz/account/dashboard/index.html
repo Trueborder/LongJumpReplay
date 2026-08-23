@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://tomaspisar.cz/styles.css">
   <link rel="stylesheet" href="https://tomaspisar.cz/overrides.css">
   <link rel="stylesheet" href="/account.css">
-  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/);document.documentElement.dataset.theme=a&&m&&decodeURIComponent(m[1])==='light'?'light':'dark'}catch(e){}</script>
+  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/),p=a&&m?decodeURIComponent(m[1]):'system',r=p==='light'||p==='dark'?p:(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.dataset.theme=r;document.documentElement.dataset.themePreference=p}catch(e){}</script>
 </head>
 <body class="account-page portal-dashboard-page" data-portal-page="dashboard">
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
@@ -54,6 +54,7 @@
         <p data-en="YOUR ACCOUNT" data-cs="VÁŠ ÚČET">YOUR ACCOUNT</p>
         <a href="#overview" data-en="Overview" data-cs="Přehled">Overview</a>
         <a href="#licence" data-en="Licence" data-cs="Licence">Licence</a>
+        <a href="#activation-key" data-en="Activation key" data-cs="Aktivační klíč">Activation key</a>
         <a href="#devices" data-en="Computers" data-cs="Počítače">Computers</a>
         <a href="#billing" data-en="Billing" data-cs="Platby">Billing</a>
         <a href="#help" data-en="Help & security" data-cs="Pomoc a zabezpečení">Help & security</a>
@@ -81,10 +82,24 @@
           <div id="licence-cards" class="account-card-grid"></div>
         </section>
 
+        <section id="activation-key" class="dashboard-section licensed-only" aria-labelledby="activation-key-title">
+          <div class="category-heading"><p class="eyebrow" data-en="QUICK ACTIVATION" data-cs="RYCHLÁ AKTIVACE">QUICK ACTIVATION</p><h2 id="activation-key-title" data-en="One key. Your computers." data-cs="Jeden klíč. Vaše počítače.">One key. Your computers.</h2></div>
+          <div id="activation-key-card" class="activation-key-card">
+            <div><span class="badge" data-en="ALTERNATIVE TO EMAIL" data-cs="ALTERNATIVA K E-MAILU">ALTERNATIVE TO EMAIL</span><h3 data-en="Reusable activation key" data-cs="Opakovaně použitelný aktivační klíč">Reusable activation key</h3><p data-en="Use this key in the app when email verification is inconvenient. Keep it private: anyone who has it can use an available computer slot." data-cs="Použijte tento klíč v aplikaci, když se nehodí ověření e-mailem. Chraňte jej: každý, kdo ho zná, může využít volné místo pro počítač.">Use this key in the app when email verification is inconvenient. Keep it private: anyone who has it can use an available computer slot.</p></div>
+            <div class="activation-key-controls">
+              <label for="licence-key-select" data-en="Licence" data-cs="Licence">Licence</label>
+              <select id="licence-key-select"></select>
+              <output id="activation-key-value" class="activation-key-value" aria-live="polite">••••-••••-••••</output>
+              <div class="activation-key-actions"><button id="activation-key-reveal" class="button button-primary" type="button" data-en="Show key" data-cs="Zobrazit klíč">Show key</button><button id="activation-key-copy" class="button button-outline" type="button" disabled data-en="Copy" data-cs="Kopírovat">Copy</button><button id="activation-key-regenerate" class="text-button danger-text" type="button" data-en="Regenerate key" data-cs="Vygenerovat nový klíč">Regenerate key</button></div>
+              <p class="form-note" data-en="The key is hidden again whenever this page is loaded. Regenerating disconnects only computers activated with this key." data-cs="Klíč se při každém načtení stránky znovu skryje. Nové vygenerování odpojí pouze počítače aktivované tímto klíčem.">The key is hidden again whenever this page is loaded. Regenerating disconnects only computers activated with this key.</p>
+            </div>
+          </div>
+        </section>
+
         <section id="devices" class="dashboard-section licensed-only" aria-labelledby="devices-title">
           <div class="category-heading category-heading-row"><div><p class="eyebrow" data-en="COMPUTERS" data-cs="POČÍTAČE">COMPUTERS</p><h2 id="devices-title" data-en="Activated devices." data-cs="Aktivovaná zařízení.">Activated devices.</h2></div><span id="device-count" class="count-badge"></span></div>
           <p class="section-note" data-en="Deactivate a computer you no longer use to free a slot for another Windows station." data-cs="Deaktivujte počítač, který už nepoužíváte, a uvolněte místo pro další stanoviště Windows.">Deactivate a computer you no longer use to free a slot for another Windows station.</p>
-          <div id="devices-list" class="device-grid"></div>
+          <div id="devices-list" class="table-card"></div>
         </section>
 
         <section id="additional-computers" class="dashboard-section lifetime-only" aria-labelledby="additional-computers-title" hidden>
@@ -108,6 +123,11 @@
       </div>
     </div>
   </main>
+
+  <dialog id="device-details-dialog" class="device-details-dialog" aria-labelledby="device-details-title">
+    <div class="dialog-heading"><div><p class="eyebrow" data-en="COMPUTER DETAILS" data-cs="PODROBNOSTI POČÍTAČE">COMPUTER DETAILS</p><h2 id="device-details-title">—</h2></div><button id="device-details-close" class="icon-button" type="button" aria-label="Close">×</button></div>
+    <div id="device-details-content"></div>
+  </dialog>
 
   <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><a href="https://tomaspisar.cz/privacy/" data-en="Privacy" data-cs="Soukromí">Privacy</a><a href="mailto:info@tomaspisar.cz" data-en="Support" data-cs="Podpora">Support</a></footer>
   <script src="https://tomaspisar.cz/site.config.js"></script>
