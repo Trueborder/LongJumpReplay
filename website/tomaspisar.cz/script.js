@@ -217,12 +217,35 @@
   });
   document.querySelectorAll('[data-product-version]').forEach((element) => { element.textContent = product.version || '—'; });
   document.querySelectorAll('[data-product-price]').forEach((element) => { element.textContent = product.price || '—'; });
-  document.querySelectorAll('[data-installer-url]').forEach((element) => { element.href = product.installerUrl || '#'; });
+  const installerLinks = [...document.querySelectorAll('[data-installer-url]')];
+  installerLinks.forEach((element) => { element.href = product.installerUrl || '#'; });
 
-  const downloadSafetyDialog = document.querySelector('[data-download-safety-dialog]');
+  let downloadSafetyDialog = document.querySelector('[data-download-safety-dialog]');
+  if (installerLinks.length && !downloadSafetyDialog) {
+    const template = document.createElement('template');
+    template.innerHTML = `
+      <dialog class="download-safety-dialog" data-download-safety-dialog aria-labelledby="download-started-title">
+        <div class="download-safety-dialog-panel">
+          <div class="download-safety-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 20 6v5c0 5.2-3.4 8.5-8 10-4.6-1.5-8-4.8-8-10V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>
+          </div>
+          <div>
+            <p class="eyebrow" data-en="DOWNLOAD STARTED" data-cs="STAHOVÁNÍ ZAHÁJENO">DOWNLOAD STARTED</p>
+            <h2 id="download-started-title" data-en="Your browser may ask you to confirm the download." data-cs="Prohlížeč vás může požádat o potvrzení stažení.">Your browser may ask you to confirm the download.</h2>
+            <p data-en="If LJR_setup.exe does not appear, open your browser's Downloads panel and choose Keep or Download anyway. The official file from files.tomaspisar.cz is safe to proceed with." data-cs="Pokud se soubor LJR_setup.exe nezobrazí, otevřete v prohlížeči panel Stažené soubory a zvolte Ponechat nebo Přesto stáhnout. S oficiálním souborem z files.tomaspisar.cz můžete bezpečně pokračovat.">If LJR_setup.exe does not appear, open your browser's Downloads panel and choose Keep or Download anyway. The official file from files.tomaspisar.cz is safe to proceed with.</p>
+            <p class="download-safety-dialog-windows" data-en="When you run the setup, Windows SmartScreen may also ask for confirmation. Choose More info, verify LJR_setup.exe, then choose Run anyway." data-cs="Při spuštění instalace může potvrzení vyžadovat také Windows SmartScreen. Zvolte Další informace, ověřte LJR_setup.exe a poté vyberte Přesto spustit.">When you run the setup, Windows SmartScreen may also ask for confirmation. Choose More info, verify LJR_setup.exe, then choose Run anyway.</p>
+            <div class="download-safety-dialog-actions">
+              <button class="button button-primary" type="button" data-download-safety-close data-en="Understood" data-cs="Rozumím">Understood</button>
+            </div>
+          </div>
+        </div>
+      </dialog>`;
+    downloadSafetyDialog = template.content.firstElementChild;
+    document.body.append(downloadSafetyDialog);
+  }
   const downloadSafetyClose = downloadSafetyDialog?.querySelector('[data-download-safety-close]');
   let downloadSafetyTrigger = null;
-  document.querySelectorAll('[data-installer-url]').forEach((element) => {
+  installerLinks.forEach((element) => {
     element.addEventListener('click', () => {
       downloadSafetyTrigger = element;
       // Let the anchor begin the browser download first, then show the safety
