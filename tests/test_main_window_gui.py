@@ -76,6 +76,7 @@ def test_multiple_attempts_can_be_selected_with_action_queue(tmp_path):
     root = tk.Tk()
     app = MainWindow(root, config, path)
     selected = []
+    selection_deadline = time.perf_counter() + 5.0
 
     def first_freeze():
         app.toggle_freeze()
@@ -88,6 +89,9 @@ def test_multiple_attempts_can_be_selected_with_action_queue(tmp_path):
         app.action_queue.put(('select_attempt', -1))
 
     def inspect_and_close():
+        if app.playback.attempt_id != 1 and time.perf_counter() < selection_deadline:
+            root.after(50, inspect_and_close)
+            return
         selected.append(app.playback.attempt_id)
         app.close()
 
@@ -199,6 +203,57 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     assert sizes['status'] >= 20
     assert sizes['replay_width'] > 400
     assert sizes['view_flags'] == (True, True, True, True, True)
+
+
+def test_withdrawn_startup_waits_for_real_geometry_before_positioning_timeline(tmp_path):
+    config = AppConfig()
+    config.camera.source_type = 'synthetic'
+    config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
+    config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
+    config.display.window_geometry = '1100x700'
+    config.display.timeline_height = 220
+    config.shuttle.enabled = False
+    path = tmp_path / 'config.json'
+    save_config(config, path)
+    root = tk.Tk(); root.withdraw()
+    app = MainWindow(root, config, path)
+    sizes = {}
+
+    def inspect():
+        sizes['video'] = app.video_host.winfo_height()
+        sizes['timeline'] = app.timeline_wrap.winfo_height()
+        app.close()
+
+    root.deiconify()
+    root.after(700, inspect)
+    root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+    assert sizes['video'] > 250
+    assert 200 <= sizes['timeline'] <= 280
+
+
+def test_exit_survives_an_out_of_range_timeline_sash(tmp_path):
+    config = AppConfig()
+    config.camera.source_type = 'synthetic'
+    config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
+    config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
+    config.display.window_geometry = '1100x700'
+    config.shuttle.enabled = False
+    path = tmp_path / 'config.json'
+    save_config(config, path)
+    root = tk.Tk()
+    app = MainWindow(root, config, path)
+
+    def break_sash_then_close():
+        app.media_pane.sashpos(0, 0)
+        app.close()
+
+    root.after(500, break_sash_then_close)
+    root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+
+    assert not app.capture.is_running
+    assert 100 <= app.config.display.timeline_height <= 500
 
 
 def test_showing_timeline_restores_a_usable_height(tmp_path):

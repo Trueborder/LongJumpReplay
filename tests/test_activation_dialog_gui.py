@@ -65,6 +65,7 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         )
         initial_progress = float(progress.cget("value"))
         observed["progress_visible_while_working"] = progress.winfo_ismapped()
+        observed["progress_mode"] = str(progress.cget("mode"))
         observed["progress_style"] = progress.cget("style")
         observed["progress_thickness"] = int(ttk.Style(root).lookup(progress.cget("style"), "thickness"))
         observed["progress_moves_while_working"] = _wait_until(
@@ -132,6 +133,7 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         "send_restored": True,
         "email_focus_target": True,
         "progress_visible_while_working": True,
+        "progress_mode": "indeterminate",
         "progress_style": "Modal.Horizontal.TProgressbar",
         "progress_thickness": 10,
         "progress_moves_while_working": True,
@@ -204,6 +206,7 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
         )
         initial_progress = float(progress.cget("value"))
         observed["progress_visible_while_working"] = progress.winfo_ismapped()
+        observed["progress_mode"] = str(progress.cget("mode"))
         observed["progress_style"] = progress.cget("style")
         observed["progress_thickness"] = int(ttk.Style(root).lookup(progress.cget("style"), "thickness"))
         observed["progress_moves_while_working"] = _wait_until(
@@ -228,6 +231,7 @@ def test_manual_activation_key_inserts_separators_without_moving_caret_back(monk
         "second_group": "1234-ABCD-",
         "second_cursor": 10,
         "progress_visible_while_working": True,
+        "progress_mode": "indeterminate",
         "progress_style": "Modal.Horizontal.TProgressbar",
         "progress_thickness": 10,
         "progress_moves_while_working": True,

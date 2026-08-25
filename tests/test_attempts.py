@@ -27,7 +27,8 @@ def test_attempt_is_pinned_then_encoded_and_exported(tmp_path, jpeg_frame):
     for i in range(31):
         ring.append(base + i * 20_000_000, jpeg, 160, 90)
     config = AttemptsConfig(pre_seconds=.4, post_seconds=.2, retention_minutes=1, max_attempts=4, max_cache_gb=.2)
-    manager = AttemptManager(ring, config, ExportConfig(), tmp_path / 'cache', Queue())
+    events = Queue()
+    manager = AttemptManager(ring, config, ExportConfig(), tmp_path / 'cache', events)
     manager.start()
     attempt = manager.create_attempt()
     assert attempt is not None
@@ -50,6 +51,14 @@ def test_attempt_is_pinned_then_encoded_and_exported(tmp_path, jpeg_frame):
     exported = _wait_for(manager, ready.attempt_id, {AttemptState.EXPORTED, AttemptState.ERROR})
     assert exported and exported.state is AttemptState.EXPORTED
     assert exported.export_path and exported.export_path.exists()
+    progress = []
+    while not events.empty():
+        event, payload = events.get_nowait()
+        if event == "attempt_export_progress":
+            progress.append(payload)
+    assert progress
+    assert progress[0][1] == 0
+    assert progress[-1][1] == progress[-1][2] == exported.export_path.stat().st_size
     manager.stop()
 
 

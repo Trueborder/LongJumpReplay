@@ -18,6 +18,7 @@ from threading import Event, Lock, Thread
 import time
 import tkinter as tk
 from tkinter import filedialog, ttk
+from typing import Callable
 
 import cv2
 import numpy as np
@@ -38,12 +39,20 @@ from .competition_board import CompetitionBoard
 from .competition_setup import RecordingDisposition, WizardReadiness, merge_competition_setup
 from .competition_wizard import CompetitionWizard
 from .competition_io import CsvExportAdapter, JsonExportAdapter, adapter_for_path
-from .config import AppConfig, CompetitionConfig, save_config
+from .config import (
+    MAX_TIMELINE_HEIGHT,
+    MIN_TIMELINE_HEIGHT,
+    AppConfig,
+    CompetitionConfig,
+    clamp_display_panel_sizes,
+    save_config,
+)
 from .i18n import Translator
 from .exporter import save_bgr_png
 from .hotkeys import HotkeyRouter
 from .models import AttemptDecision, AttemptSession, AttemptState, TimelineModel
 from .playback import PlaybackController, PlaybackMode
+from .progress import ProgressState, StartupProgressEvent
 from .portable_paths import resolve_user_path, writable_data_directory
 from .ring_buffer import TimeRingBuffer
 from .runtime_diagnostics import RuntimeTelemetry, log_event
@@ -89,6 +98,7 @@ def first_available_camera(
 
 class MainWindow:
     TIMELINE_USABLE_HEIGHT = 220
+    VIDEO_USABLE_HEIGHT = 260
 
     def __init__(
         self,
@@ -98,7 +108,13 @@ class MainWindow:
         persistent_camera_source_type: str | None = None,
         startup_camera_index: int | None = None,
         startup_update_task: UpdateCheckTask | None = None,
+        startup_progress: Callable[[StartupProgressEvent], None] | None = None,
     ) -> None:
+        def report(operation: str, completed: int, total: int, detail: str = "", *, phase: str = "interface", state: ProgressState = ProgressState.DETERMINATE) -> None:
+            if startup_progress:
+                startup_progress(StartupProgressEvent(phase, operation, completed, total, .4 if phase == "interface" else .1, detail, state))
+
+        report("Preparing application state…", 0, 8)
         self.root = root
         self.config = config
         self._evaluation_mode = trial_is_active()
@@ -112,6 +128,7 @@ class MainWindow:
             self.config.competition.auto_save_evidence = False
             self.config.display.show_decision_controls = False
         self._restore_startup_view()
+        report("Preparing application state…", 1, 8, "Workspace preferences restored")
         self.config_path = config_path
         self._persistent_camera_source_type = persistent_camera_source_type
         self._selected_camera_startup_feedback = startup_camera_index is not None
@@ -138,9 +155,11 @@ class MainWindow:
         self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
         self.competition = CompetitionSession(config.competition)
         self.shuttle = ShuttleHIDPoller(config.shuttle, self.action_queue)
+        report("Creating replay components…", 2, 8, "Replay, capture and evidence components created")
 
         self.theme = ThemeManager(root)
         self.palette = self.theme.apply(config.display.theme)
+        report("Applying interface theme…", 3, 8, "Interface theme applied")
         self._closing = False
         self._shutdown_started = 0.0
         self._tick_job: str | None = None
@@ -186,6 +205,7 @@ class MainWindow:
         self._camera_help_dialog: tk.Toplevel | None = None
         self._busy_depth = 0
         self._busy_message = ""
+        self._busy_show_job: str | None = None
         # Export/Delete follow the last explicit capture selection, not merely
         # whichever attempt the replay controller still has open.
         self._selected_action_attempt_id: int | None = None
@@ -198,15 +218,19 @@ class MainWindow:
         self._logger = logging.getLogger("long_jump_replay")
         self._startup_update_task = startup_update_task
         self._manual_update_task: UpdateCheckTask | None = None
+        self._manual_update_parent: tk.Misc | None = None
         self._update_dialog: UpdateDialog | None = None
 
         self._build_variables()
         self._build_menu()
+        report("Building operator interface…", 4, 8, "Menus and interface state created")
         self._build_layout()
+        report("Building operator interface…", 5, 8, "Judge workspace constructed")
         self.hotkeys = HotkeyRouter(root)
         self._install_hotkeys()
         self._apply_layout()
         self._apply_visibility()
+        report("Connecting operator controls…", 7, 8, "Keyboard and workspace controls connected")
         self._refresh_competitor_selector()
         if config.display.fullscreen:
             self.root.attributes("-fullscreen", True)
@@ -214,17 +238,23 @@ class MainWindow:
             self.root.after_idle(self._apply_initial_window_state)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.bind("<Configure>", self._on_root_configure, add="+")
+        report("Finishing interface construction…", 8, 8, "Main interface constructed")
 
+        report("Starting background services…", 0, 4, phase="services")
         self.attempts.start()
+        report("Starting background services…", 1, 4, "Attempt worker started", phase="services")
         self._reconcile_adjudication_records()
         self.root.after(150, self._check_recovered_session)
         self._start_camera_with_feedback(self._t("status.starting"))
+        report("Starting background services…", 2, 4, "Camera worker started", phase="services")
         self.shuttle.start()
+        report("Starting background services…", 3, 4, "Input services started", phase="services")
         self._schedule_tick()
         if not self.config.general.onboarding_completed:
             self.root.after(350, self.show_onboarding)
         if self._startup_update_task is not None:
             self.root.after(700, lambda: self._poll_update_task(self._startup_update_task, manual=False))
+        report("Judge station ready", 4, 4, "Required workers are running", phase="services")
 
     # ------------------------------------------------------------------ UI
     def _restore_startup_view(self) -> None:
@@ -234,6 +264,7 @@ class MainWindow:
         display.show_timeline = True
         display.show_status_bar = True
         display.show_live_preview = True
+        clamp_display_panel_sizes(display)
         display.timeline_height = max(self.TIMELINE_USABLE_HEIGHT, display.timeline_height)
         self.config.competition.show_competition_board = not getattr(self, "_evaluation_mode", False)
 
@@ -359,11 +390,12 @@ class MainWindow:
         self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), f"Long Jump Replay {__version__}\nLive video review for long-jump take-off decisions."))
         self._style_all_menus()
 
-    def check_for_updates(self) -> None:
+    def check_for_updates(self, parent: tk.Misc | None = None) -> None:
         if self._manual_update_task is not None and not self._manual_update_task.done:
             self._show_message(self._t("update.checking"), 4)
             return
         self._show_message(self._t("update.checking"), 8)
+        self._manual_update_parent = parent or self.root
         self._manual_update_task = start_update_check(respect_skip=False)
         self.root.after(80, lambda: self._poll_update_task(self._manual_update_task, manual=True))
 
@@ -379,12 +411,20 @@ class MainWindow:
         self._handle_update_result(result, manual=manual)
 
     def _handle_update_result(self, result: UpdateCheckResult, *, manual: bool) -> None:
+        parent = self.root
+        if manual and self._manual_update_parent is not None:
+            try:
+                if self._manual_update_parent.winfo_exists():
+                    parent = self._manual_update_parent
+            except tk.TclError:
+                pass
+            self._manual_update_parent = None
         if result.status == "available" and result.release:
             if self._update_dialog is not None and self._update_dialog.window.winfo_exists():
                 self._update_dialog.window.lift()
                 return
             self._update_dialog = UpdateDialog(
-                self.root,
+                parent,
                 result.release,
                 self.config.general.language,
                 self._install_downloaded_update,
@@ -396,21 +436,43 @@ class MainWindow:
             return
         if result.status == "current":
             show_themed_info(
-                self.root,
+                parent,
                 self._t("update.title"),
                 self._t("update.current", version=VERSION_SHORT),
             )
         elif result.status == "error":
-            show_themed_info(self.root, self._t("update.title"), result.message)
+            show_themed_info(parent, self._t("update.title"), result.message)
 
     def _install_downloaded_update(self, installer: Path) -> None:
-        try:
-            schedule_installer_after_exit(installer)
-        except UpdateError as error:
-            show_themed_info(self.root, self._t("update.title"), str(error))
-            return
-        self._show_message(self._t("update.closing"), 8)
-        self.close()
+        self._show_message(self._t("update.launching"), 8)
+        result_queue: Queue[UpdateError | None] = Queue(maxsize=1)
+
+        def launch() -> None:
+            try:
+                schedule_installer_after_exit(installer)
+            except UpdateError as error:
+                result_queue.put(error)
+            else:
+                result_queue.put(None)
+
+        def poll() -> None:
+            if self._closing:
+                return
+            try:
+                error = result_queue.get_nowait()
+            except Empty:
+                self.root.after(80, poll)
+                return
+            if error is not None:
+                if self._update_dialog is not None and self._update_dialog.window.winfo_exists():
+                    self._update_dialog.show_install_launch_error(str(error))
+                show_themed_info(self.root, self._t("update.title"), str(error))
+                return
+            self._show_message(self._t("update.closing"), 8)
+            self.close()
+
+        Thread(target=launch, name="update-installer-launch", daemon=True).start()
+        self.root.after(80, poll)
 
     def _style_all_menus(self) -> None:
         for name in ("file_menu", "view_menu", "layout_menu", "theme_menu", "help_menu", "special_result_menu"):
@@ -580,7 +642,7 @@ class MainWindow:
         self.camera_waiting_title.pack(anchor="center")
         self.camera_waiting_detail = ttk.Label(self.camera_waiting_frame, text=self._t("camera.input_checking"), style="Muted.TLabel")
         self.camera_waiting_detail.pack(anchor="center", pady=(4, 9))
-        self.camera_waiting_progress = ttk.Progressbar(self.camera_waiting_frame, mode="determinate", maximum=100, length=300)
+        self.camera_waiting_progress = ttk.Progressbar(self.camera_waiting_frame, mode="indeterminate", length=300)
         self.camera_waiting_progress.pack(fill="x")
         self.camera_action_frame = ttk.Frame(self.video_host, style="Toolbar.TFrame", padding=(8, 6))
         self.camera_try_again_button = ttk.Button(self.camera_action_frame, text=self._t("camera.try_again"), style="Accent.TButton", command=self._try_camera_again)
@@ -991,25 +1053,37 @@ class MainWindow:
         if capture.last_error and capture.last_error != self._last_error:
             self._last_error = capture.last_error; self._show_message(f"Camera: {capture.last_error}", 8)
 
-    def _begin_busy(self, message: str) -> None:
+    def _begin_busy(self, message: str, *, mode: str = "indeterminate", delay_ms: int = 0) -> None:
         """Show non-blocking activity feedback in the status bar."""
         self._busy_depth += 1
         self._busy_message = message
-        if hasattr(self, "status_progress"):
-            self.status_progress.grid()
-            self.status_progress.start(12)
         self.message_var.set(message)
+        if not hasattr(self, "status_progress"):
+            return
+        self.status_progress.stop()
+        self.status_progress.configure(mode=mode, value=0)
+        def show() -> None:
+            self._busy_show_job = None
+            if not self._busy_depth:
+                return
+            self.status_progress.grid()
+            if str(self.status_progress.cget("mode")) == "indeterminate":
+                self.status_progress.start(12)
+        if delay_ms:
+            self._busy_show_job = self.root.after(delay_ms, show)
+        else:
+            show()
 
     def _update_camera_input_overlay(self, no_video: bool) -> None:
         waiting = self._camera_starting and self._displayed_bgr is None
         timed_out = no_video and (self._camera_input_timed_out or not self._camera_starting)
         if waiting:
-            elapsed = 0.0 if self._camera_retrying else max(0.0, time.perf_counter() - self._camera_start_started_at)
-            self.camera_waiting_progress.configure(value=min(100.0, elapsed / 10.0 * 100.0))
+            self.camera_waiting_progress.start(12)
             self.camera_waiting_frame.place(relx=.5, rely=.55, anchor="center")
             self.camera_waiting_frame.lift()
             self.camera_action_frame.place_forget()
             return
+        self.camera_waiting_progress.stop()
         self.camera_waiting_frame.place_forget()
         if timed_out:
             self.camera_action_frame.place(relx=.5, rely=.61, anchor="center")
@@ -1097,7 +1171,6 @@ class MainWindow:
         self._camera_start_started_at = 0.0
         self._camera_start_deadline = 0.0
         self._camera_input_timed_out = False
-        self._begin_busy(self._t("status.starting"))
         self.capture.latest.clear()
         self._displayed_bgr = None
         self._displayed_timestamp_ns = 0
@@ -1118,7 +1191,6 @@ class MainWindow:
         self._camera_start_started_at = time.perf_counter()
         self._camera_start_deadline = self._camera_start_started_at + 10.0
         self._camera_input_timed_out = False
-        self._begin_busy(message)
         self.capture.start()
         self._start_camera_probe()
 
@@ -1128,13 +1200,16 @@ class MainWindow:
         self._camera_starting = False
         self._camera_start_deadline = 0.0
         self._camera_input_timed_out = timed_out
-        self._end_busy()
 
     def _end_busy(self) -> None:
         self._busy_depth = max(0, self._busy_depth - 1)
         if self._busy_depth:
             return
         self._busy_message = ""
+        if self._busy_show_job is not None:
+            try: self.root.after_cancel(self._busy_show_job)
+            except tk.TclError: pass
+            self._busy_show_job = None
         if hasattr(self, "status_progress"):
             self.status_progress.stop()
             self.status_progress.grid_remove()
@@ -1263,7 +1338,7 @@ class MainWindow:
         self._system_pause_transition = True
         self.playback.go_live()
         self.athlete_timer.reset(); self._update_athlete_timer_display()
-        self._begin_busy(self._t("status.pausing"))
+        self._begin_busy(self._t("status.pausing"), delay_ms=350)
         self._show_message(self._t("system.pausing"), 5)
         self._set_system_paused_ui()
         log_event(self._logger, "system_pause_requested")
@@ -1717,7 +1792,10 @@ class MainWindow:
             elif event == "attempt_ready":
                 self._show_message(self._t("message.attempt_ready", attempt=int(payload)), 5); self._last_replay_key = None
             elif event == "attempt_exported":
-                attempt_id, path = payload; self._end_busy()
+                attempt_id, path = payload
+                if str(self.status_progress.cget("mode")) == "determinate":
+                    self.status_progress.configure(value=self.status_progress.cget("maximum"))
+                self._end_busy()
                 if trial_is_active():
                     try:
                         remaining = record_successful_export().exports_remaining
@@ -1727,6 +1805,18 @@ class MainWindow:
                 else:
                     self._show_message(f"Attempt #{attempt_id:02d} exported: {Path(path).name}", 7)
                 self._update_judging_controls()
+            elif event == "attempt_export_progress":
+                attempt_id, copied, total = payload
+                if total is None:
+                    self.message_var.set(self._t("status.export_waiting", attempt=int(attempt_id)))
+                    self.status_progress.stop(); self.status_progress.configure(mode="indeterminate")
+                    self.status_progress.grid(); self.status_progress.start(12)
+                else:
+                    self.status_progress.stop()
+                    maximum = max(1, int(total))
+                    self.status_progress.configure(mode="determinate", maximum=maximum, value=min(int(copied), maximum - 1))
+                    self.status_progress.grid()
+                    self.message_var.set(self._t("status.export_bytes", copied=int(copied), total=int(total)))
             elif event == "attempt_error":
                 attempt_id, error = payload; self._end_busy(); self._show_message(f"Attempt #{attempt_id:02d} error: {error}", 10)
             elif event == "takeoff_candidate":
@@ -2424,11 +2514,7 @@ class MainWindow:
         return count
 
     def clear_all_recordings(self) -> None:
-        self._begin_busy(self._t("status.clearing"))
-        try:
-            self._clear_recordings_mode("all", ask=True)
-        finally:
-            self._end_busy()
+        self._clear_recordings_mode("all", ask=True)
 
     def _attempt_tree_selected(self, _event) -> None:
         selected = self.attempt_tree.selection()
@@ -2605,8 +2691,19 @@ class MainWindow:
         if not self._timeline_pane_added: return
         try:
             total = self.media_pane.winfo_height()
-            desired = max(self.TIMELINE_USABLE_HEIGHT, self.config.display.timeline_height)
-            self.media_pane.sashpos(0, max(240, total - desired))
+            # Startup builds the interface while the root is withdrawn. Sash
+            # coordinates applied against that 1 px placeholder can maximize
+            # the timeline when the real fullscreen geometry appears.
+            if not self.root.winfo_viewable() or total < self.VIDEO_USABLE_HEIGHT + MIN_TIMELINE_HEIGHT:
+                self.root.after(120, self._set_timeline_sash)
+                return
+            desired = min(
+                MAX_TIMELINE_HEIGHT,
+                max(self.TIMELINE_USABLE_HEIGHT, self.config.display.timeline_height),
+                max(MIN_TIMELINE_HEIGHT, total - self.VIDEO_USABLE_HEIGHT),
+            )
+            sash = min(total - MIN_TIMELINE_HEIGHT, max(self.VIDEO_USABLE_HEIGHT, total - desired))
+            self.media_pane.sashpos(0, sash)
         except tk.TclError: pass
 
     def _apply_layout(self) -> None:
@@ -2644,7 +2741,14 @@ class MainWindow:
 
     # -------------------------------------------------------------- settings
     def open_settings(self) -> SettingsDialog:
-        return SettingsDialog(self.root, self.config, self.apply_settings, self.open_camera_diagnostic, self.show_onboarding)
+        return SettingsDialog(
+            self.root,
+            self.config,
+            self.apply_settings,
+            self.open_camera_diagnostic,
+            self.show_onboarding,
+            self.check_for_updates,
+        )
 
     def restart_now(self, startup_camera_index: int | None = None) -> None:
         """Launch the same command line again, then use the normal bounded shutdown."""
@@ -3233,7 +3337,7 @@ class MainWindow:
     def _save_config_safely(self) -> None:
         try:
             save_config(self._config_for_persistence(self.config), self.config_path)
-        except OSError as exc:
+        except (OSError, TypeError, ValueError) as exc:
             self._logger.warning("config_save_failed path=%s error=%s", self.config_path, exc)
 
     def _config_for_persistence(self, config: AppConfig) -> AppConfig:
@@ -3268,10 +3372,11 @@ class MainWindow:
             if self._attempts_pane_added and self.content_pane.winfo_width() > 10:
                 self.config.display.attempts_panel_width = max(220, self.content_pane.winfo_width() - int(self.content_pane.sashpos(0)))
             if self._timeline_pane_added and self.media_pane.winfo_height() > 10:
-                self.config.display.timeline_height = max(
-                    self.TIMELINE_USABLE_HEIGHT,
-                    self.media_pane.winfo_height() - int(self.media_pane.sashpos(0)),
-                )
+                measured_timeline_height = self.media_pane.winfo_height() - int(self.media_pane.sashpos(0))
+                if MIN_TIMELINE_HEIGHT <= measured_timeline_height <= MAX_TIMELINE_HEIGHT:
+                    self.config.display.timeline_height = measured_timeline_height
+                else:
+                    clamp_display_panel_sizes(self.config.display)
         except tk.TclError: pass
         self._save_config_safely(); self.mode_var.set("CLOSING"); self.message_var.set("Stopping camera and background workers…")
         for child in self.root.winfo_children():

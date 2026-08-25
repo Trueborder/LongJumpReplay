@@ -4,6 +4,7 @@
     close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"/></svg>',
     sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
     moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.1A8.2 8.2 0 0 1 8.9 4a8.2 8.2 0 1 0 11.1 11.1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+    system: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 20h8M12 16.5V20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>'
   };
 
@@ -23,8 +24,8 @@
      the visitor across pages and survives a return visit.
 
      Consent model: these are preference cookies, set only after the visitor
-     accepts. Declining is a real choice - preferences then live in memory for
-     the session only and nothing is written. The consent record itself is
+     accepts. Declining is a real choice - preferences then live in session
+     storage only and no preference cookie is written. The consent record itself is
      stored either way, because remembering "no" is what stops the banner
      reappearing on every page, and a site cannot ask for permission to
      remember a refusal.
@@ -41,14 +42,30 @@
   };
   const writeCookie = (name, value, maxAge) => {
     const secure = location.protocol === 'https:' ? '; Secure' : '';
-    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
+    const domain = /(^|\.)tomaspisar\.cz$/i.test(location.hostname) ? '; Domain=tomaspisar.cz' : '';
+    // Remove an older host-only value before writing the shared main/account value.
+    document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}${domain}`;
   };
   const deleteCookie = (name) => {
     document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
+    if (/(^|\.)tomaspisar\.cz$/i.test(location.hostname)) {
+      document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax; Domain=tomaspisar.cz`;
+    }
   };
 
   let consent = readCookie(CONSENT_COOKIE);           // 'accepted' | 'declined' | null
+  if (consent === 'accepted' || consent === 'declined') {
+    writeCookie(CONSENT_COOKIE, consent, CONSENT_MAX_AGE);
+  }
   const memoryPrefs = {};
+
+  const readSessionPref = (name) => {
+    try { return window.sessionStorage.getItem(name); } catch (_) { return null; }
+  };
+  const writeSessionPref = (name, value) => {
+    try { window.sessionStorage.setItem(name, value); } catch (_) { /* memory fallback below */ }
+  };
 
   const readPref = (name) => {
     if (consent === 'accepted') {
@@ -56,13 +73,11 @@
       if (value !== null) return value;
     }
     if (name in memoryPrefs) return memoryPrefs[name];
-    // A declined preference must remain session-only. Do not fall back to
-    // browser storage: it would silently persist an optional preference after
-    // the visitor has declined it.
-    return null;
+    return readSessionPref(name);
   };
   const writePref = (name, value) => {
     memoryPrefs[name] = value;
+    writeSessionPref(name, value);
     if (consent !== 'accepted') return;
     writeCookie(name, value, PREF_MAX_AGE);
   };
@@ -99,12 +114,12 @@
   const ui = {
     en: {
       skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact', account: 'Account',
-      theme: 'Switch theme', menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
+      theme: 'Change theme', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark', menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
       footer: 'Independent software development from the Czech Republic.', cookies: 'Cookie settings'
     },
     cs: {
       skip: 'Přejít na obsah', software: 'Software', downloads: 'Stažení', about: 'O mně', contact: 'Kontakt', account: 'Účet',
-      theme: 'Přepnout motiv', menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
+      theme: 'Změnit motiv', themeSystem: 'Systém', themeLight: 'Světlý', themeDark: 'Tmavý', menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
       footer: 'Nezávislý vývoj softwaru z České republiky.', cookies: 'Nastavení cookies'
     }
   };
@@ -154,22 +169,31 @@
       element.textContent = lang === 'en' ? 'CZ' : 'EN';
       element.setAttribute('aria-label', ui[lang].language);
     });
-    document.querySelectorAll('[data-theme-toggle]').forEach((element) => element.setAttribute('aria-label', ui[lang].theme));
+    renderThemeControls();
     if (menu) menu.setAttribute('aria-label', document.body.classList.contains('menu-open') ? ui[lang].close : ui[lang].menu);
     document.querySelector('[data-lightbox-close]')?.setAttribute('aria-label', ui[lang].closeImage);
   };
 
   const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
+  const renderThemeControls = () => {
+    const preference = document.documentElement.dataset.themePreference || 'system';
+    const labelKey = preference === 'light' ? 'themeLight' : preference === 'dark' ? 'themeDark' : 'themeSystem';
+    const label = ui[lang][labelKey];
+    const icon = preference === 'light' ? ICONS.sun : preference === 'dark' ? ICONS.moon : ICONS.system;
+    document.querySelectorAll('[data-theme-toggle]').forEach((element) => {
+      element.innerHTML = `${icon}<span class="theme-label">${label}</span>`;
+      element.title = `${ui[lang].theme}: ${label}`;
+      element.setAttribute('aria-label', `${ui[lang].theme}. ${label}.`);
+      element.setAttribute('aria-pressed', preference === 'system' ? 'false' : 'true');
+    });
+  };
   const setTheme = (preference, persist = true) => {
     const safePreference = ['system', 'light', 'dark'].includes(preference) ? preference : 'system';
     const resolvedTheme = safePreference === 'system' ? (systemTheme.matches ? 'light' : 'dark') : safePreference;
     document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.dataset.themePreference = safePreference;
     if (persist) writePref('site-theme', safePreference);
-    document.querySelectorAll('[data-theme-toggle]').forEach((element) => {
-      element.innerHTML = resolvedTheme === 'dark' ? ICONS.sun : ICONS.moon;
-      element.title = safePreference === 'system' ? (lang === 'cs' ? 'Motiv: podle systému' : 'Theme: system') : `Theme: ${safePreference}`;
-    });
+    renderThemeControls();
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolvedTheme === 'dark' ? '#0b1013' : '#f2f0e9');
   };
   systemTheme.addEventListener?.('change', () => {
@@ -276,7 +300,6 @@
       const expected = `/releases/${release.version}/LongJumpReplay-Setup-${release.version}.exe`;
       if (installer.protocol !== 'https:' || installer.hostname !== 'files.tomaspisar.cz' || installer.pathname !== expected) return;
       document.querySelectorAll('[data-product-version]').forEach((element) => { element.textContent = release.version; });
-      document.querySelectorAll('[data-installer-url]').forEach((element) => { element.href = installer.href; });
     } catch (_) {
       // Keep the configured fallback when release metadata is unavailable.
     }

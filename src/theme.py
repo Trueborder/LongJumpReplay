@@ -71,6 +71,10 @@ def themed_message(
 ) -> str:
     """Show a blocking, ttk-themed message/confirmation dialog."""
     palette = _theme_palette_for(parent)
+    try:
+        previous_grab = parent.grab_current()
+    except tk.TclError:
+        previous_grab = None
     dialog = tk.Toplevel(parent)
     configure_popup(dialog, parent)
     dialog.title(title)
@@ -98,6 +102,13 @@ def themed_message(
         dialog.destroy()
     except tk.TclError:
         pass
+    if previous_grab is not None:
+        try:
+            if previous_grab.winfo_exists():
+                previous_grab.grab_set()
+                previous_grab.lift()
+        except tk.TclError:
+            pass
     return value
 
 

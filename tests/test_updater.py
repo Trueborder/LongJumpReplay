@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
 from pathlib import Path
+import threading
 
 import pytest
 
 from src.licensing import _encoded_message, _urlsafe_encode
 from src.updater import (
     ReleaseInfo,
+    UpdateCancelled,
     UpdateError,
     canonical_payload,
     check_for_update,
@@ -146,22 +149,69 @@ def test_download_is_atomic_and_checksum_verified(tmp_path):
     assert progress[-1] == (len(content), len(content))
     assert not list(tmp_path.glob("*.partial"))
 
+
+def test_download_cancellation_removes_partial_file(tmp_path):
+    content = b"x" * (1024 * 1024)
+    release = ReleaseInfo(
+        version="3.3.1",
+        published_at="2026-08-19T12:00:00Z",
+        installer_url="https://files.tomaspisar.cz/releases/3.3.1/LongJumpReplay-Setup-3.3.1.exe",
+        sha256=hashlib.sha256(content).hexdigest().upper(),
+        size=len(content),
+        notes=(),
+    )
+    cancelled = threading.Event()
+
+    def progress(_received, _total):
+        cancelled.set()
+
+    with pytest.raises(UpdateCancelled):
+        download_update(
+            release,
+            opener=lambda *_args, **_kwargs: Response(content),
+            destination_directory=tmp_path,
+            progress=progress,
+            cancel_event=cancelled,
+        )
+    assert not list(tmp_path.glob("*.partial"))
+
     corrupt = ReleaseInfo(**{**release.__dict__, "sha256": "0" * 64})
     with pytest.raises(UpdateError, match="checksum"):
         download_update(corrupt, opener=lambda *_args, **_kwargs: Response(content), destination_directory=tmp_path)
     assert not list(tmp_path.glob("*.partial"))
 
 
-def test_installer_handoff_uses_hidden_waiting_helper(monkeypatch, tmp_path):
+def test_installer_handoff_confirms_hidden_installer_launch(monkeypatch, tmp_path):
     installer = tmp_path / "LongJumpReplay-Setup-3.3.1.exe"
     installer.write_bytes(b"exe")
     calls = []
-    monkeypatch.setattr("src.updater.subprocess.Popen", lambda args, **kwargs: calls.append((args, kwargs)))
-    schedule_installer_after_exit(installer, process_id=1234)
+    monkeypatch.setattr(
+        "src.updater.subprocess.run",
+        lambda args, **kwargs: calls.append((args, kwargs)) or type("Result", (), {"returncode": 0})(),
+    )
+    schedule_installer_after_exit(installer)
     args, kwargs = calls[0]
     assert args[:5] == ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden"]
     assert "-EncodedCommand" in args
     assert kwargs["close_fds"] is True
+    command = base64.b64decode(args[-1]).decode("utf-16le")
+    assert "Wait-Process" not in command
+    assert "Start-Process" in command
+    assert "/FORCECLOSEAPPLICATIONS" in command
+    assert "/LOG=" in command
+    assert kwargs["timeout"] == 60
+
+
+def test_installer_handoff_reports_rejected_launch(monkeypatch, tmp_path):
+    installer = tmp_path / "LongJumpReplay-Setup-3.3.1.exe"
+    installer.write_bytes(b"exe")
+    monkeypatch.setattr(
+        "src.updater.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 1})(),
+    )
+
+    with pytest.raises(UpdateError, match="run it manually"):
+        schedule_installer_after_exit(installer)
 
 
 def test_production_update_key_is_embedded():

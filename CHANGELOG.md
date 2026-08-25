@@ -1,5 +1,37 @@
 # LongJumpReplay changelog
 
+## 3.3.8 - 2026-08-24
+
+- Update-system test release with no application behaviour changes.
+
+## 3.3.7 - 2026-08-24
+
+- Starts and confirms the Windows installer before closing the running app, preventing a stalled shutdown from silently blocking installation.
+- Keeps the update dialog open with a manual installer path if Windows rejects the launch, and records an Inno Setup installation log.
+
+## 3.3.6 - 2026-08-24
+
+- Preserves Settings modality after up-to-date and update-error messages close.
+
+## 3.3.5 - 2026-08-24
+
+- Adds a localized Check for updates action to Licence & account in Settings.
+- Keeps Settings modal and keyboard focus intact after closing an available-update dialog.
+
+## 3.3.4 - 2026-08-24
+
+- Replaces simulated loading animations with truthful Windows-style startup, activation, update, camera, export, and pause progress feedback.
+- Keeps activation indicators visibly moving and shows the startup window for at least two seconds before activation opens.
+- Restores the timeline at a usable height so the camera remains visible at startup.
+- Prevents transient pane measurements from producing Settings errors or blocking Exit.
+
+## 3.3.3 - 2026-08-24
+
+- Adds reusable portal-managed activation keys and clearer email activation guidance.
+- Limits the free 72-hour evaluation to replay testing rather than competition operation.
+- Improves activation feedback and customer device management.
+- Keeps website downloads on the current stable installer while protecting immutable update releases from accidental replacement.
+
 ## 3.3.2 - 2026-08-19
 
 - Automatically filters the activation verification-code field to six ASCII digits when typing or pasting.

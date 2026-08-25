@@ -12,7 +12,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/overrides.css">
-  <script>try{const c=document.cookie.match(/(?:^|;\s*)ljr-consent=([^;]+)/),a=c&&decodeURIComponent(c[1])==='accepted',m=document.cookie.match(/(?:^|;\s*)site-theme=([^;]+)/),p=a&&m?decodeURIComponent(m[1]):'system',r=p==='light'||p==='dark'?p:(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.dataset.theme=r;document.documentElement.dataset.themePreference=p}catch(e){}</script>
+  <script>try{const g=n=>{const m=document.cookie.match(new RegExp('(?:^|;\\s*)'+n+'=([^;]+)'));return m?decodeURIComponent(m[1]):null},a=g('ljr-consent')==='accepted',c=a?g('site-theme'):null;let s=null;try{s=sessionStorage.getItem('site-theme')}catch(e){}const p=['system','light','dark'].includes(c)?c:(['system','light','dark'].includes(s)?s:'system'),r=p==='light'||p==='dark'?p:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.dataset.theme=r;document.documentElement.dataset.themePreference=p}catch(e){}</script>
 </head>
 <body>
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>

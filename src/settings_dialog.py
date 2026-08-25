@@ -7,7 +7,7 @@ from tkinter import ttk
 import webbrowser
 from collections.abc import Callable
 
-from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset
+from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset, clamp_display_panel_sizes
 from .camera_devices import enumerate_camera_devices
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
@@ -96,13 +96,16 @@ class SettingsDialog(tk.Toplevel):
         on_apply: Callable[[AppConfig], None],
         on_camera_diagnostic: Callable[[], None] | None = None,
         on_show_onboarding: Callable[[], None] | None = None,
+        on_check_updates: Callable[[tk.Misc], None] | None = None,
     ) -> None:
         super().__init__(parent)
         configure_popup(self, parent)
         self.working = deepcopy(config)
+        clamp_display_panel_sizes(self.working.display)
         self.on_apply = on_apply
         self.on_camera_diagnostic = on_camera_diagnostic
         self.on_show_onboarding = on_show_onboarding
+        self.on_check_updates = on_check_updates
         self.lang = self.working.general.language
         self.tr = Translator(self.lang)
         self.title(self.tr("settings.title"))
@@ -478,6 +481,14 @@ class SettingsDialog(tk.Toplevel):
             style="Accent.TButton",
             command=lambda: webbrowser.open(activation_api.PORTAL_LOGIN_URL),
         ).pack(side="left")
+        self.check_updates_button = ttk.Button(
+            actions,
+            text=self.tr("menu.check_updates"),
+            style="Control.TButton",
+            command=lambda: self.on_check_updates(self) if self.on_check_updates else None,
+            state="normal" if self.on_check_updates else "disabled",
+        )
+        self.check_updates_button.pack(side="left", padx=(10, 0))
         ttk.Label(
             f,
             text=self._txt(

@@ -79,3 +79,43 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
         assert dialog.footer.winfo_manager() == "grid"
         assert dialog._nav_buttons[page].instate(["selected"])
     dialog.destroy(); root.destroy()
+
+
+def test_settings_repairs_invalid_runtime_panel_measurements(monkeypatch):
+    monkeypatch.setattr(
+        "src.settings_dialog.enumerate_camera_devices",
+        lambda current: [CameraDevice(current, "Current camera")],
+    )
+    config = AppConfig()
+    config.display.attempts_panel_width = 1
+    config.display.timeline_height = 900
+    root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
+    dialog = SettingsDialog(root, config, lambda _updated: None)
+
+    assert dialog._vars["attempts_width"].get() == 220
+    assert dialog._vars["timeline_height"].get() == 500
+    dialog._apply_vars().validate()
+
+    dialog.destroy(); root.destroy()
+
+
+def test_settings_can_start_manual_update_check(monkeypatch):
+    monkeypatch.setattr(
+        "src.settings_dialog.enumerate_camera_devices",
+        lambda current: [CameraDevice(current, "Current camera")],
+    )
+    root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
+    requested_from = []
+    dialog = SettingsDialog(
+        root,
+        AppConfig(),
+        lambda _updated: None,
+        on_check_updates=requested_from.append,
+    )
+
+    assert dialog.check_updates_button.cget("text") == "Check for updates…"
+    assert dialog.check_updates_button.instate(["!disabled"])
+    dialog.check_updates_button.invoke()
+    assert requested_from == [dialog]
+
+    dialog.destroy(); root.destroy()

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import queue
-import random
 import sys
 import tempfile
 import threading
@@ -12,21 +12,7 @@ import traceback
 import tkinter as tk
 from tkinter import ttk
 
-from PIL import Image, ImageTk
-
-from src import VERSION_SHORT
-from src.attempts import AttemptManager
-from src.activation import StartupAuthorizationCheck, check_startup_authorization
-from src.capture import CaptureEngine
-from src.config import load_config
-from src.main_window import MainWindow
-from src.models import AttemptState
-from src.licensing import ensure_license_or_trial
-from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_path
-from src.ring_buffer import TimeRingBuffer
-from src.runtime_diagnostics import configure_runtime_logging, log_event
-from src.theme import ThemeManager, show_themed_info
-from src.updater import UpdateCheckTask, start_update_check
+ACTIVATION_STARTUP_MINIMUM_SECONDS = 2.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,6 +39,11 @@ def _write_report(lines: list[str], path: str | Path | None) -> None:
 
 
 def run_self_test(config_path: Path, report_path: str | Path | None = None) -> int:
+    from src.attempts import AttemptManager
+    from src.capture import CaptureEngine
+    from src.config import load_config
+    from src.models import AttemptState
+    from src.ring_buffer import TimeRingBuffer
     lines: list[str] = []
     def log(text: str) -> None: lines.append(text)
     try:
@@ -115,6 +106,7 @@ def run_self_test(config_path: Path, report_path: str | Path | None = None) -> i
 
 
 def _show_fatal(message: str) -> None:
+    from src.theme import ThemeManager, show_themed_info
     try:
         root = tk.Tk(); root.withdraw()
         ThemeManager(root).apply("dark")
@@ -147,66 +139,173 @@ def _animate_splash_window(root: tk.Tk, splash: tk.Toplevel, width: int, height:
         return
 
 
-def _startup_splash(root: tk.Tk, language: str = "en") -> tuple[tk.Toplevel, tk.Label, ttk.Progressbar, tk.Label]:
-    """Create a cinematic, branded startup screen while workers and the UI load."""
-    splash = tk.Toplevel(root)
-    splash.withdraw()
-    splash.overrideredirect(True)
-    splash.configure(bg="#0b111b")
+class StartupWindow:
+    PHASE_RANGES = {
+        "settings": (0.0, 10.0),
+        "components": (10.0, 30.0),
+        "licence_update": (30.0, 50.0),
+        "interface": (50.0, 90.0),
+        "services": (90.0, 100.0),
+    }
+
+    def __init__(self, root: tk.Tk, language: str = "en", details_expanded: bool = False) -> None:
+        from src.progress import ProgressController
+
+        self.root = root
+        self.language = language
+        self.is_cs = language == "cs"
+        self.overall = ProgressController()
+        self.task = ProgressController()
+        self._phase_id = ""
+        self._history: list[str] = []
+        self._details_expanded = details_expanded
+        self._preference_callback = None
+        splash = self.window = tk.Toplevel(root)
+        splash.withdraw()
+        splash.overrideredirect(True)
+        splash.configure(bg="#0b111b")
+        try: splash.attributes("-topmost", True)
+        except tk.TclError: pass
+        self.width, self.closed_height = 820, 450
+        self._center(self.closed_height)
+        canvas = self.canvas = tk.Canvas(splash, width=self.width, height=self.closed_height, highlightthickness=0, bg="#0b111b")
+        canvas.pack(fill="x")
+        hero_path = _runtime_asset_path("assets/long_jump_splash.png")
+        if hero_path.exists():
+            try:
+                photo = tk.PhotoImage(file=str(hero_path)).subsample(2, 2)
+                canvas.create_image(self.width // 2, self.closed_height // 2, image=photo, anchor="center")
+                splash._splash_photo = photo
+            except tk.TclError:
+                pass
+        canvas.create_rectangle(0, 0, 430, self.closed_height, fill="#08111d", outline="")
+        canvas.create_rectangle(0, self.closed_height - 3, self.width, self.closed_height, fill="#4f8cff", outline="")
+        canvas.create_rectangle(40, 42, 112, 46, fill="#4f8cff", outline="")
+        tk.Label(canvas, text="LJR", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=60)
+        canvas.create_text(38, 86, text="LONG JUMP", anchor="nw", fill="#f4f7fb", font=("Segoe UI Semibold", 27))
+        canvas.create_text(38, 130, text="REPLAY", anchor="nw", fill="#4f8cff", font=("Segoe UI Semibold", 27))
+        subtitle = "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ" if self.is_cs else "FOUL REVIEW STATION"
+        tk.Label(canvas, text=subtitle, bg="#08111d", fg="#8fa6c4", font=("Segoe UI", 9)).place(x=42, y=186)
+        tk.Label(canvas, text="PRECISION REVIEW  ·  LIVE CAPTURE  ·  EVIDENCE", bg="#08111d", fg="#607b9f", font=("Consolas", 8)).place(x=42, y=213)
+        tk.Label(canvas, text="STARTUP", bg="#162944", fg="#a9c8ff", font=("Consolas", 8, "bold"), padx=8, pady=3).place(x=42, y=248)
+        style = ttk.Style(root)
+        style.configure("Startup.Horizontal.TProgressbar", troughcolor="#1e2b3d", background="#4f8cff", lightcolor="#78a8ff", darkcolor="#245fc7", borderwidth=0)
+        self.overall_label = tk.Label(canvas, text=self._txt("Overall startup progress", "Celkový průběh spuštění"), bg="#08111d", fg="#d4e0ef", font=("Segoe UI", 9), anchor="w")
+        self.overall_label.place(x=42, y=282)
+        self.overall_bar = ttk.Progressbar(canvas, mode="determinate", maximum=100, value=0, length=330, style="Startup.Horizontal.TProgressbar")
+        self.overall_bar.place(x=42, y=305)
+        self.task_label = tk.Label(canvas, text=self._txt("Preparing settings…", "Připravuji nastavení…"), bg="#08111d", fg="#d4e0ef", font=("Segoe UI", 9), anchor="w")
+        self.task_label.place(x=42, y=329)
+        self.task_bar = ttk.Progressbar(canvas, mode="determinate", maximum=100, value=0, length=330, style="Startup.Horizontal.TProgressbar")
+        self.task_bar.place(x=42, y=352)
+        self.detail_label = tk.Label(canvas, text="", bg="#08111d", fg="#8faed1", font=("Segoe UI", 8), anchor="w", width=48)
+        self.detail_label.place(x=42, y=376)
+        self.details_button = ttk.Button(canvas, text="", command=self._toggle_details, takefocus=True)
+        self.details_button.place(x=42, y=405)
+        self.details_frame = ttk.Frame(splash, padding=(38, 12))
+        self.history = tk.Text(self.details_frame, height=6, wrap="word", state="disabled", takefocus=False)
+        self.history.pack(fill="both", expand=True)
+        self._sync_details()
+        splash.update_idletasks()
+        _animate_splash_window(root, splash, self.width, self.closed_height, opening=True)
+        root.update()
+        self._painted_at = time.monotonic()
+
+    def _txt(self, english: str, czech: str) -> str:
+        return czech if self.is_cs else english
+
+    def _center(self, height: int) -> None:
+        screen_w, screen_h = self.window.winfo_screenwidth(), self.window.winfo_screenheight()
+        self.window.geometry(f"{self.width}x{height}+{max(0, (screen_w-self.width)//2)}+{max(0, (screen_h-height)//2)}")
+
+    def set_preference_callback(self, callback) -> None:
+        self._preference_callback = callback
+
+    def _toggle_details(self) -> None:
+        self._details_expanded = not self._details_expanded
+        self._sync_details()
+        if self._preference_callback: self._preference_callback(self._details_expanded)
+
+    def _sync_details(self) -> None:
+        self.details_button.configure(text=self._txt("Hide details", "Skrýt podrobnosti") if self._details_expanded else self._txt("Details", "Podrobnosti"))
+        if self._details_expanded:
+            self.details_frame.pack(fill="both", expand=True)
+            self._center(590)
+        else:
+            self.details_frame.pack_forget()
+            self._center(self.closed_height)
+
+    def emit(self, event) -> None:
+        from src.progress import ProgressState
+
+        phase_start, phase_end = self.PHASE_RANGES[event.phase_id]
+        fraction = min(1.0, max(0.0, event.completed_units / max(1, event.total_units)))
+        overall_value = phase_start + (phase_end - phase_start) * fraction
+        if event.state is not ProgressState.COMPLETED:
+            overall_value = min(overall_value, 99.0)
+        self.overall_bar.configure(value=max(float(self.overall_bar.cget("value")), overall_value))
+        if event.phase_id != self._phase_id:
+            self._phase_id = event.phase_id
+            self.task_bar.configure(value=0)
+        self.task_bar.configure(value=max(float(self.task_bar.cget("value")), fraction * 100.0))
+        self.task_label.configure(text=event.operation_label)
+        self.detail_label.configure(text=event.detail)
+        history_line = event.detail or event.operation_label
+        if history_line and (not self._history or self._history[-1] != history_line):
+            self._history.append(history_line)
+            self.history.configure(state="normal")
+            self.history.insert("end", history_line.rstrip("…") + "\n")
+            self.history.see("end")
+            self.history.configure(state="disabled")
+        self.window.update_idletasks(); self.root.update()
+
+    def show_failure(self, log_path: Path) -> None:
+        self.task_bar.stop()
+        self.task_label.configure(text=self._txt("LongJumpReplay could not start", "LongJumpReplay se nepodařilo spustit"), fg="#ff9b9b")
+        self.detail_label.configure(text=self._txt("Open the log for details, then exit and try again.", "Otevřete protokol s podrobnostmi, ukončete aplikaci a zkuste to znovu."))
+        self.details_button.place_forget()
+        ttk.Button(self.canvas, text=self._txt("Open log", "Otevřít protokol"), command=lambda: os.startfile(log_path)).place(x=42, y=405)
+        ttk.Button(self.canvas, text=self._txt("Exit", "Ukončit"), command=self.root.destroy).place(x=140, y=405)
+        self.window.update_idletasks()
+
+    def destroy(self) -> None:
+        try: self.window.destroy()
+        except tk.TclError: pass
+
+    def update_idletasks(self) -> None:
+        self.window.update_idletasks()
+
+    def wait_until_visible_for(self, minimum_seconds: float) -> None:
+        """Keep the painted startup window responsive for a minimum duration."""
+        remaining = self._painted_at + max(0.0, minimum_seconds) - time.monotonic()
+        if remaining <= 0:
+            return
+        elapsed = tk.BooleanVar(master=self.root, value=False)
+        self.root.after(int(remaining * 1000) + 1, elapsed.set, True)
+        self.root.wait_variable(elapsed)
+
+
+def _startup_splash(root: tk.Tk, language: str = "en", details_expanded: bool = False) -> StartupWindow:
+    """Create the detailed modal startup window."""
+    return StartupWindow(root, language, details_expanded)
+
+
+def _close_boot_splash() -> None:
     try:
-        splash.attributes("-topmost", True)
-    except tk.TclError:
+        import pyi_splash
+        if pyi_splash.is_alive(): pyi_splash.close()
+    except (ImportError, RuntimeError):
         pass
-    width, height = 820, 450
-    screen_w, screen_h = splash.winfo_screenwidth(), splash.winfo_screenheight()
-    splash.geometry(f"{width}x{height}+{max(0, (screen_w - width) // 2)}+{max(0, (screen_h - height) // 2)}")
-    canvas = tk.Canvas(splash, width=width, height=height, highlightthickness=0, bg="#0b111b")
-    canvas.pack(fill="both", expand=True)
-    hero_path = _runtime_asset_path("assets/long_jump_splash.png")
-    if hero_path.exists():
-        with Image.open(hero_path) as source:
-            source = source.convert("RGB")
-            scale = max(width / source.width, height / source.height)
-            resized = source.resize((round(source.width * scale), round(source.height * scale)), Image.Resampling.LANCZOS)
-            left = max(0, (resized.width - width) // 2)
-            top = max(0, (resized.height - height) // 2)
-            photo = ImageTk.PhotoImage(resized.crop((left, top, left + width, top + height)), master=splash)
-        canvas.create_image(0, 0, image=photo, anchor="nw")
-        splash._splash_photo = photo  # keep the Tk image alive
-    canvas.create_rectangle(0, 0, 430, height, fill="#08111d", outline="")
-    canvas.create_rectangle(0, height - 3, width, height, fill="#4f8cff", outline="")
-    canvas.create_rectangle(40, 52, 112, 56, fill="#4f8cff", outline="")
-    tk.Label(canvas, text=f"LJR  /  {VERSION_SHORT}", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=72)
-    canvas.create_text(38, 98, text="LONG JUMP", anchor="nw", fill="#f4f7fb", font=("Segoe UI Semibold", 29))
-    canvas.create_text(38, 148, text="REPLAY", anchor="nw", fill="#4f8cff", font=("Segoe UI Semibold", 29))
-    subtitle = "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ" if language == "cs" else "FOUL REVIEW STATION"
-    preparing = "Připravuji stanoviště rozhodčího…" if language == "cs" else "Preparing judge station…"
-    tk.Label(canvas, text=subtitle, bg="#08111d", fg="#8fa6c4", font=("Segoe UI", 10)).place(x=42, y=207)
-    tk.Label(canvas, text="PRECISION REVIEW  ·  LIVE CAPTURE  ·  EVIDENCE", bg="#08111d", fg="#607b9f", font=("Consolas", 8)).place(x=42, y=236)
-    tk.Label(canvas, text="STARTUP", bg="#162944", fg="#a9c8ff", font=("Consolas", 8, "bold"), padx=8, pady=3).place(x=42, y=282)
-    status = tk.Label(canvas, text=preparing, bg="#08111d", fg="#d4e0ef", font=("Segoe UI", 10), anchor="w")
-    status.place(x=42, y=328)
-    style = ttk.Style(root)
-    style.configure("Startup.Horizontal.TProgressbar", troughcolor="#1e2b3d", background="#4f8cff", lightcolor="#78a8ff", darkcolor="#245fc7", borderwidth=0)
-    progress = ttk.Progressbar(canvas, mode="determinate", maximum=100, value=0, length=330, style="Startup.Horizontal.TProgressbar")
-    progress.place(x=42, y=360)
-    action = tk.Label(canvas, text="", bg="#0d1a2b", fg="#8faed1", font=("Consolas", 8), anchor="w", padx=10, pady=5, width=39)
-    action.place(x=42, y=394)
-    splash.update_idletasks()
-    _animate_splash_window(root, splash, width, height, opening=True)
-    root.update()
-    return splash, status, progress, action
 
 
 def _check_license_with_splash(
     root: tk.Tk,
-    splash: tk.Toplevel,
-    status: tk.Label,
-    progress: ttk.Progressbar,
-    action: tk.Label,
+    splash: StartupWindow,
     language: str,
-) -> StartupAuthorizationCheck:
+) -> object:
     """Run the network check off the Tk thread while keeping startup responsive."""
+    from src.activation import StartupAuthorizationCheck, check_startup_authorization
+    status, progress, action = splash.task_label, splash.task_bar, splash.detail_label
     results: queue.Queue[StartupAuthorizationCheck] = queue.Queue(maxsize=1)
 
     def check() -> None:
@@ -217,15 +316,12 @@ def _check_license_with_splash(
 
     worker = threading.Thread(target=check, name="license-startup-check", daemon=True)
     worker.start()
-    started = time.monotonic()
     is_cs = language == "cs"
     status.configure(text="Ověřuji licenci…" if is_cs else "Checking licence…")
     action.configure(text="Kontroluji zařízení a platnost plánu" if is_cs else "Confirming this device and plan status")
-    progress.configure(value=6.0)
+    progress.configure(value=25.0)
 
     while worker.is_alive():
-        elapsed = time.monotonic() - started
-        progress.configure(value=min(24.0, 6.0 + (elapsed / 15.0) * 18.0))
         splash.update_idletasks()
         root.update()
         time.sleep(0.025)
@@ -241,154 +337,120 @@ def _check_license_with_splash(
     else:
         status.configure(text="Je nutná aktivace" if is_cs else "Activation required")
         action.configure(text="Otevřu bezpečnou aktivaci e-mailem" if is_cs else "Opening secure email activation")
-    progress.configure(value=28.0)
+    progress.configure(value=75.0)
     splash.update_idletasks()
     return result
 
 
 def main() -> int:
+    """Start with real milestones and keep the boot splash until Tk has painted."""
+    from src.config import load_config, save_config
+    from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_path
+    from src.progress import ProgressState, StartupProgressEvent
+    from src.runtime_diagnostics import configure_runtime_logging, log_event
+
     args = parse_args()
     config_path = prepare_config_path(args.config)
     logger = configure_runtime_logging(runtime_log_path(config_path))
     log_event(logger, "application_start", synthetic=bool(args.synthetic), self_test=bool(args.self_test))
     previous_thread_hook = threading.excepthook
 
-    def thread_exception(args: threading.ExceptHookArgs) -> None:
+    def thread_exception(hook_args: threading.ExceptHookArgs) -> None:
         logger.error(
             "worker_thread_failure",
-            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
-            extra={"event_data": {"event": "worker_thread_failure", "thread_name": args.thread.name if args.thread else "unknown"}},
+            exc_info=(hook_args.exc_type, hook_args.exc_value, hook_args.exc_traceback),
+            extra={"event_data": {"event": "worker_thread_failure", "thread_name": hook_args.thread.name if hook_args.thread else "unknown"}},
         )
-        previous_thread_hook(args)
+        previous_thread_hook(hook_args)
 
     threading.excepthook = thread_exception
     if args.self_test:
+        _close_boot_splash()
         result = run_self_test(config_path, args.self_test_report)
         log_event(logger, "self_test_complete", exit_code=result)
         return result
+
+    root: tk.Tk | None = None
+    startup: StartupWindow | None = None
     try:
         config = load_config(config_path)
+        root = tk.Tk(); root.withdraw()
+        startup = _startup_splash(root, config.general.language, config.general.progress_details_expanded)
+        _close_boot_splash()
+        is_cs = config.general.language == "cs"
+
+        def remember_details(expanded: bool) -> None:
+            config.general.progress_details_expanded = expanded
+            save_config(config, config_path)
+
+        startup.set_preference_callback(remember_details)
+        startup.emit(StartupProgressEvent("settings", "Nastavuji protokolování a předvolby…" if is_cs else "Loading settings and logging…", 1, 1, .1, "Nastavení a protokolování připraveno" if is_cs else "Settings and logging ready"))
         if args.splash_preview:
-            root = tk.Tk()
-            root.withdraw()
-            splash, splash_status, preview_progress, preview_action = _startup_splash(root, config.general.language)
-            splash_status.configure(text="Splash preview — press Esc to close")
-            preview_progress.configure(value=68)
-            preview_action.configure(text="Preview mode  ·  press Esc to close")
-            def close_preview(_event=None) -> None:
-                _animate_splash_window(root, splash, 820, 450, opening=False)
-                root.destroy()
-            splash.bind("<Escape>", close_preview)
-            root.mainloop()
-            return 0
+            startup.emit(StartupProgressEvent("interface", "Náhled úvodního okna" if is_cs else "Startup window preview", 5, 8, .4, "Stisknutím Esc zavřete" if is_cs else "Press Esc to close"))
+            startup.window.bind("<Escape>", lambda _event: root.destroy())
+            root.mainloop(); return 0
+
+        startup.emit(StartupProgressEvent("components", "Načítám součásti aplikace…" if is_cs else "Loading application components…", 0, 1, .2))
+        # OpenCV, application controllers and the full UI are intentionally
+        # imported only after the detailed Tk startup window is visible.
+        from src.licensing import ensure_license_or_trial
+        from src.main_window import MainWindow
+        from src.updater import start_update_check
+        startup.emit(StartupProgressEvent("components", "Součásti aplikace načteny" if is_cs else "Application components loaded", 1, 1, .2, "Replay and interface modules ready" if not is_cs else "Moduly replaye a rozhraní jsou připraveny"))
+
         persistent_camera_source = config.camera.source_type if args.synthetic else None
         if args.synthetic: config.camera.source_type = "synthetic"
         if args.windowed: config.display.fullscreen = False
-        root = tk.Tk()
-        root.withdraw()
-        splash, splash_status, splash_progress, splash_action = _startup_splash(root, config.general.language)
-        update_task: UpdateCheckTask | None = None
-        try:
-            is_cs = config.general.language == "cs"
-            if getattr(sys, "frozen", False):
-                update_task = start_update_check()
-                splash_action.configure(text="Kontroluji aktualizace…" if is_cs else "Checking for updates…")
-                splash.update_idletasks()
-                startup_check = _check_license_with_splash(
-                    root,
-                    splash,
-                    splash_status,
-                    splash_progress,
-                    splash_action,
-                    config.general.language,
-                )
-                if not startup_check.allowed:
-                    try:
-                        splash.attributes("-topmost", False)
-                    except tk.TclError:
-                        pass
-                    splash.withdraw()
-                    if not ensure_license_or_trial(root, config.general.language, startup_check):
-                        root.destroy()
-                        return 2
-                    splash.deiconify()
-                    try:
-                        splash.attributes("-topmost", True)
-                    except tk.TclError:
-                        pass
-                    splash_status.configure(text="Aktivace dokončena" if is_cs else "Activation complete")
-                    splash_action.configure(text="Tento počítač je připraven" if is_cs else "This computer is ready")
-                    splash_progress.configure(value=30.0)
-                    splash.update_idletasks()
+        update_task = None
+        if getattr(sys, "frozen", False):
+            update_task = start_update_check()
+            startup_check = _check_license_with_splash(root, startup, config.general.language)
+            if not startup_check.allowed:
+                startup.wait_until_visible_for(ACTIVATION_STARTUP_MINIMUM_SECONDS)
+                try: startup.window.attributes("-topmost", False)
+                except tk.TclError: pass
+                startup.window.withdraw()
+                if not ensure_license_or_trial(root, config.general.language, startup_check):
+                    root.destroy(); return 2
+                startup.window.deiconify()
+                try: startup.window.attributes("-topmost", True)
+                except tk.TclError: pass
+            result = update_task.result()
+            detail = (f"Aktualizace {result.release.version} je připravena" if is_cs else f"Update {result.release.version} is ready") if result and result.status == "available" and result.release else ("Kontrola aktualizací pokračuje na pozadí" if is_cs else "Update check continuing in background")
+            startup.emit(StartupProgressEvent("licence_update", "Kontrola licence a aktualizací dokončena" if is_cs else "Licence and update checks complete", 4, 4, .2, detail))
+        else:
+            startup.emit(StartupProgressEvent("licence_update", "Kontroly při spuštění dokončeny" if is_cs else "Startup checks complete", 4, 4, .2, "Zdrojové spuštění" if is_cs else "Source launch"))
 
-                update_result = update_task.result()
-                if update_result and update_result.status == "available" and update_result.release:
-                    splash_action.configure(
-                        text=(
-                            f"Aktualizace {update_result.release.version} je připravena"
-                            if is_cs else f"Update {update_result.release.version} is ready"
-                        )
-                    )
-                elif update_result is None:
-                    splash_action.configure(
-                        text="Kontrola aktualizací pokračuje na pozadí" if is_cs else "Update check continuing in background"
-                    )
-                splash.update_idletasks()
-
-            actions = (
-                ("Načítám vizuální systém…", "Loading visual system…"),
-                ("Připravuji přehrávání…", "Preparing replay engine…"),
-                ("Kontroluji ovládací prvky…", "Checking operator controls…"),
-                ("Spouštím kamerové služby…", "Warming up camera services…"),
-            )
-            preparation_seconds = random.uniform(0.5, 2.0)
-            preparation_started = time.perf_counter()
-            while True:
-                elapsed = time.perf_counter() - preparation_started
-                ratio = min(1.0, elapsed / preparation_seconds)
-                splash_progress.configure(value=30.0 + ratio * 52.0)
-                index = min(len(actions) - 1, int(ratio * len(actions)))
-                splash_action.configure(text=actions[index][0 if is_cs else 1])
-                splash_status.configure(text="Připravuji stanoviště…" if is_cs else "Preparing judge station…")
-                splash.update_idletasks()
-                if ratio >= 1.0:
-                    break
-                time.sleep(0.025)
-
-            splash_progress.configure(value=86.0)
-            splash_action.configure(text="Dokončuji spuštění…" if is_cs else "Starting the judge station…")
-            splash.update_idletasks()
-            MainWindow(
-                root,
-                config,
-                config_path,
-                persistent_camera_source_type=persistent_camera_source,
-                startup_camera_index=args.startup_camera_index,
-                startup_update_task=update_task,
-            )
-            splash_status.configure(text="Připraveno" if is_cs else "Ready")
-            splash_action.configure(text="Hotovo  ·  otevírám stanoviště" if is_cs else "Ready  ·  opening judge station")
-            splash_progress.configure(value=100.0)
-            splash.update_idletasks()
-        finally:
-            try:
-                _animate_splash_window(root, splash, 820, 450, opening=False)
-                splash.destroy()
-            except tk.TclError:
-                pass
+        MainWindow(
+            root, config, config_path,
+            persistent_camera_source_type=persistent_camera_source,
+            startup_camera_index=args.startup_camera_index,
+            startup_update_task=update_task,
+            startup_progress=startup.emit,
+        )
         root.deiconify()
+        root.update_idletasks(); root.update()
+        startup.emit(StartupProgressEvent("services", "Připraveno" if is_cs else "Ready", 4, 4, .1, "Stanoviště rozhodčího je připraveno" if is_cs else "Judge station is ready", ProgressState.COMPLETED))
+        startup.destroy(); startup = None
         root.mainloop()
         log_event(logger, "application_exit", exit_code=0)
         return 0
-    except Exception as exc:
+    except Exception:
         details = traceback.format_exc()
         log_path = crash_log_path(config_path)
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text(details, encoding="utf-8")
-        except OSError: pass
-        _show_fatal(f"Long Jump Replay could not start.\n\n{exc}\n\nCrash details:\n{log_path}")
+        except OSError:
+            pass
         logger.exception("application_failure", extra={"event_data": {"event": "application_failure"}})
+        _close_boot_splash()
+        if startup is not None and root is not None:
+            startup.show_failure(log_path)
+            try: root.mainloop()
+            except tk.TclError: pass
+        else:
+            _show_fatal(f"Long Jump Replay could not start.\n\nOpen the crash log for details:\n{log_path}")
         return 1
 
 

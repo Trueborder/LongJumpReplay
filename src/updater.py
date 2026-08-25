@@ -42,6 +42,10 @@ class UpdateError(Exception):
     """A release could not be trusted, downloaded, or launched."""
 
 
+class UpdateCancelled(UpdateError):
+    """The download was safely cancelled and its partial file removed."""
+
+
 @dataclass(frozen=True)
 class ReleaseInfo:
     version: str
@@ -242,6 +246,8 @@ def download_update(
     opener: Callable[..., Any] = urlopen,
     destination_directory: Path | None = None,
     progress: Callable[[int, int], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    status: Callable[[Literal["downloading", "verifying", "preparing"]], None] | None = None,
 ) -> Path:
     directory = destination_directory or installer_directory()
     directory.mkdir(parents=True, exist_ok=True)
@@ -256,8 +262,12 @@ def download_update(
     digest = hashlib.sha256()
     received = 0
     try:
+        if status:
+            status("downloading")
         with opener(request, timeout=UPDATE_TIMEOUT) as response, partial.open("wb") as output:
             while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise UpdateCancelled("The update download was cancelled safely.")
                 chunk = response.read(1024 * 256)
                 if not chunk:
                     break
@@ -268,10 +278,16 @@ def download_update(
                 output.write(chunk)
                 if progress:
                     progress(received, release.size)
+        if cancel_event is not None and cancel_event.is_set():
+            raise UpdateCancelled("The update download was cancelled safely.")
+        if status:
+            status("verifying")
         if received != release.size:
             raise UpdateError("The downloaded installer size does not match the manifest.")
         if digest.hexdigest().upper() != release.sha256:
             raise UpdateError("The downloaded installer checksum does not match the signed manifest.")
+        if status:
+            status("preparing")
         partial.replace(destination)
         return destination
     except UpdateError:
@@ -282,30 +298,47 @@ def download_update(
         raise UpdateError("The installer download failed.") from error
 
 
-def schedule_installer_after_exit(installer: Path, *, process_id: int | None = None) -> None:
-    """Start a hidden helper that waits for this process, installs, and lets Inno relaunch."""
+def schedule_installer_after_exit(installer: Path) -> None:
+    """Confirm that Windows started Inno Setup before the application exits.
+
+    Inno Setup receives ``/FORCECLOSEAPPLICATIONS`` and therefore owns the
+    final hand-off from the still-running application. Waiting for our own PID
+    before launching Setup is unsafe: a stuck shutdown worker can leave the
+    window gone while preventing the installer from ever starting.
+    """
     resolved = installer.resolve()
     if not resolved.is_file() or resolved.suffix.lower() != ".exe":
         raise UpdateError("The verified installer file is missing.")
-    pid = process_id or os.getpid()
     escaped = str(resolved).replace("'", "''")
+    install_log = installer_directory() / "update-install.log"
+    escaped_arguments = (
+        "/SP- /SILENT /NORESTART /FORCECLOSEAPPLICATIONS "
+        f'/LOG="{install_log}"'
+    ).replace("'", "''")
     command = (
-        f"Wait-Process -Id {pid} -ErrorAction SilentlyContinue; "
-        f"Start-Process -FilePath '{escaped}' "
-        "-ArgumentList @('/SP-','/SILENT','/NORESTART','/CLOSEAPPLICATIONS','/UPDATE=1')"
+        "$ErrorActionPreference = 'Stop'; "
+        f"$installer = Start-Process -FilePath '{escaped}' "
+        f"-ArgumentList '{escaped_arguments}' -PassThru; "
+        "if ($null -eq $installer) { throw 'Windows did not start the installer.' }"
     )
     encoded = base64.b64encode(command.encode("utf-16le")).decode("ascii")
     creation_flags = 0
     if sys.platform == "win32":
-        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        subprocess.Popen(
+        result = subprocess.run(
             [
                 "powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
                 "-EncodedCommand", encoded,
             ],
             close_fds=True,
             creationflags=creation_flags,
+            capture_output=True,
+            timeout=60,
         )
-    except OSError as error:
+    except (OSError, subprocess.TimeoutExpired) as error:
         raise UpdateError("The update installer could not be scheduled.") from error
+    if result.returncode != 0:
+        raise UpdateError(
+            f"Windows did not start the update installer. Try again, or run it manually from:\n{resolved}"
+        )

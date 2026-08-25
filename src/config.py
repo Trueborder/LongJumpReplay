@@ -42,6 +42,10 @@ DEFAULT_HOTKEYS = {
 
 _LOGGER = logging.getLogger(__name__)
 
+MIN_ATTEMPTS_PANEL_WIDTH = 220
+MIN_TIMELINE_HEIGHT = 100
+MAX_TIMELINE_HEIGHT = 500
+
 
 @dataclass(slots=True)
 class GeneralConfig:
@@ -49,6 +53,7 @@ class GeneralConfig:
     confirm_destructive_actions: bool = True
     show_tooltips: bool = True
     onboarding_completed: bool = False
+    progress_details_expanded: bool = False
 
 
 @dataclass(slots=True)
@@ -169,6 +174,15 @@ class DisplayConfig:
     remember_geometry: bool = True
     window_maximized: bool = False
     window_geometry: str = "1360x820"
+
+
+def clamp_display_panel_sizes(display: DisplayConfig) -> None:
+    """Repair transient pane measurements before showing or saving settings."""
+    display.attempts_panel_width = max(MIN_ATTEMPTS_PANEL_WIDTH, int(display.attempts_panel_width))
+    display.timeline_height = min(
+        MAX_TIMELINE_HEIGHT,
+        max(MIN_TIMELINE_HEIGHT, int(display.timeline_height)),
+    )
 
 
 @dataclass(slots=True)
@@ -397,7 +411,7 @@ class AppConfig:
             raise ValueError("display.guide_width_px must be between 1 and 20")
         if not 1 <= self.display.comparison_offset_frames <= 100:
             raise ValueError("display.comparison_offset_frames must be between 1 and 100")
-        if self.display.attempts_panel_width < 220 or not 100 <= self.display.timeline_height <= 500:
+        if self.display.attempts_panel_width < MIN_ATTEMPTS_PANEL_WIDTH or not MIN_TIMELINE_HEIGHT <= self.display.timeline_height <= MAX_TIMELINE_HEIGHT:
             raise ValueError("Display panel sizes are outside supported limits")
         if not isinstance(self.display.window_maximized, bool):
             raise ValueError("display.window_maximized must be true or false")

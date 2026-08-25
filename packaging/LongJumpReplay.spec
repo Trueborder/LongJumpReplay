@@ -22,9 +22,20 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+splash = Splash(
+    os.path.join(project_root, 'assets/long_jump_splash.png'),
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=None,
+    minify_script=True,
+    always_on_top=True,
+    center='active',
+)
+
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
     [],
     name='LongJumpReplay',
     debug=False,
@@ -48,6 +59,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
+    splash.binaries,
     strip=False,
     upx=False,
     upx_exclude=[],

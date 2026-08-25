@@ -47,6 +47,7 @@ licensing-api/.dev.vars
 licensing-api/.dev.vars.*
 licensing-api/node_modules/
 licensing-api/.wrangler/
+scripts/release/.wrangler/
 licensing-api/key.txt
 licensing-api/.interop-crypto.mjs
 licensing-api/interop.json

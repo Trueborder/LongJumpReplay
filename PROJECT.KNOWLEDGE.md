@@ -1,5 +1,40 @@
 # Long Jump Replay — Project Knowledge
 
+## Stable customer downloads and immutable releases (2026-08-24)
+
+- Website installer buttons always keep the configured
+  `https://files.tomaspisar.cz/LJR_setup.exe` stable alias. The signed release
+  manifest may update the displayed version, but it must not replace manual
+  download links with the immutable versioned updater URL.
+- `Publish-Release.ps1` checks the public customer-facing versioned installer
+  before any upload. Matching bytes and their signed archived manifest may be
+  reused; different bytes abort publication and require a version increase.
+  All post-upload verification also uses the public URLs, so CDN-visible stale
+  bytes cannot pass merely because the R2 control path contains newer bytes.
+  Public verification requests use unique query strings so a pre-upload 404
+  cannot mask a newly uploaded immutable object at the edge.
+- Release 3.3.3 establishes a new immutable URL after two different 3.3.2
+  installers had previously been published under the same versioned key.
+- Release 3.3.4 was published on 2026-08-24 with installer SHA-256
+  `88D2C8075D5E99FE5A75F3DF09EFB634A5E4F5B85480D0EEFACC10FA0F73F6B4`.
+  The public signed stable manifest, immutable installer, and stable alias were
+  downloaded and hash-verified after publication.
+- Release 3.3.5 was published on 2026-08-24 with installer SHA-256
+  `62C0C6E7F11641EB49C53CA70473374408BAB36D14FC7D9D2B62AC35292BF898`.
+  It adds the Settings update-check action and preserves Settings modality for
+  available-update dialogs.
+- Release 3.3.6 was published on 2026-08-24 with installer SHA-256
+  `9EEC47E69A8140C3B2BE07B17181FE484B9FFC20169E758C5759AF16A552C50D`.
+  It also restores the Settings modal grab after current-version and update-error
+  messages close.
+- Release 3.3.7 was published on 2026-08-24 with installer SHA-256
+  `B235564A8739D8430EA1FDCBA4608CB9ACC865508C5546CB9B5FD3F1D232B490`.
+  It removes the unbounded pre-installer process wait.
+- Release 3.3.8 was published on 2026-08-24 with installer SHA-256
+  `AFDE4140A55A9F68100265F3D7B986603046DE04FF294F392713CEBABFBC6B16`.
+  It is a metadata-only update-system test and the current stable channel
+  release; it contains no application behaviour changes from 3.3.7.
+
 ## Reusable activation keys, device history, and replay-only evaluation (2026-08-23)
 
 - Email OTP remains the primary desktop activation method. The redesigned
@@ -124,7 +159,11 @@
   product, an exact HTTPS versioned installer path, a valid RSA manifest
   signature, and matching byte length and SHA-256. Install, Skip this version,
   and Ask later are available; only the exact skipped version is suppressed.
-  Update state is stored under `%LOCALAPPDATA%\LongJumpReplay`.
+  Update state is stored under `%LOCALAPPDATA%\LongJumpReplay`. The installer
+  is launched and confirmed before the app begins shutdown; Inno Setup uses
+  `/FORCECLOSEAPPLICATIONS`, writes `updates\update-install.log`, and relaunches
+  the installed app. If Windows rejects the launch, the app remains open and
+  shows the verified installer path for manual recovery.
 
 ## Specialized adjudication architecture (2026-08-13)
 
@@ -215,7 +254,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 3.3.2
+- **Current source version:** 3.3.8
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk
@@ -546,6 +585,7 @@ A webcam may negotiate a lower real rate. Requested FPS is not proof of actual F
 The main window is organized into stable task zones: application/camera/timer header, numbered-athlete context, video workspace, layered timeline, primary Freeze/Live and decision dock, and compact status reporting. Primary judging actions are visually stronger than layout, calibration, export, and maintenance controls. Both themes use the same hierarchy and semantic colors.
 
 Settings uses four navigation groups (Essentials, Judging workflow, Replay workspace, Controls & system), active-page highlighting, page-introduction cards, card-based setting rows, visible impact badges, and a fixed Apply footer. The underlying sixteen pages remain separate to avoid presenting one very long form.
+Licence & account includes a localized Check for updates action. It uses the same signed stable-channel checker as the Help menu; update results are parented to Settings and restore its modal grab and keyboard focus when dismissed.
 
 Every ordinary setting row follows the same three-column contract: Option (fixed width), Description (flexible), and Value (fixed width). Column headings are visible and localized. Every row has a useful localized description; `general.show_tooltips` immediately hides or restores the complete middle column, including its headings, without moving the Value column inconsistently. Checkboxes align to the same Value-column origin as entries, spinboxes, and selectors; individual label or description length must not move a control horizontally.
 
@@ -722,9 +762,11 @@ Tkinter GUI tests require a display. On Windows, run them normally in an interac
 
 ### Current handoff verification
 
-At the time this handoff was prepared, the Windows source suite passed **67 tests**, the synthetic pipeline self-test completed attempt MP4/export with no remaining workers, and the short 120 FPS diagnostic soak retained 600/600 frames with zero drops or failures. The .NET 10 Release solution built with zero warnings, all six native lifecycle/retention/config tests passed, and the self-contained published preview remained alive through its bounded startup/camera-enumeration smoke before closing. This does not replace visual GUI inspection, a four-hour soak, physical webcam/120 FPS camera, full native feature parity, and actual ShuttleXpress testing.
+For release 3.3.8, the Windows source suite passed **149 tests**, the 17 isolated GUI modules passed **56 tests**, the website suite passed **17 tests**, and the licensing Worker passed **19 tests** plus TypeScript checking. Source and frozen synthetic pipeline self-tests both completed attempt MP4/export with no remaining workers before the Inno Setup installer was built. This does not replace visual GUI inspection on the fresh VM, a four-hour soak, physical webcam/120 FPS camera, full native feature parity, and actual ShuttleXpress testing.
 
 ## 14. Build and release
+
+Wrangler state created under `scripts/release/.wrangler/` is machine-local deployment cache and must remain ignored; release scripts and manifests are versioned, but generated Cloudflare account cache is not.
 
 ### Collaboration authorization
 
@@ -865,19 +907,20 @@ Highest-value future work, in rough order:
 ## 19. Recent UI workflow changes
 
 - Video zoom rendering crops the source to the visible canvas region before resizing. The virtual full-image bounds still drive pan, guide, and ROI geometry, while OpenCV/Pillow temporary images remain approximately viewport-sized instead of growing with zoom up to 10×.
-- Every application start restores all View-menu workspace elements: recordings, Competition Board, timeline, live preview, and status bar. Timeline restoration clamps saved or newly shown panes to a 220 px usable target so its ruler, detail view, scrollbar, and hint do not reopen collapsed at the bottom; larger saved heights remain intact.
+- Every application start restores all View-menu workspace elements: recordings, Competition Board, timeline, live preview, and status bar. Timeline restoration waits until the main window has real mapped geometry, then clamps the pane to a 220 px usable target while preserving enough camera space; larger valid saved heights remain intact. Transient out-of-range sash measurements are repaired before Settings or persistence, and can never prevent bounded Exit.
 - The Competition Wizard opens directly into its five-step setup flow without a teaching or simulated-practice path. Setup uses Simple event, Qualification + final, and Judge-only replay templates; adapts its pages to the chosen format; validates dependencies inline; keeps optional judging as the default; requires an explicit Keep/Clear decision for existing temporary recordings; and shows non-blocking capture/buffer/cache readiness with Settings and camera-help handoffs. Wizard results contain only `CompetitionConfig`, which is merged into the latest `AppConfig` so Settings changes made while the wizard is open cannot be reverted.
 - Settings and Competition Board scrolling now handle Windows and Linux wheel/button events consistently, refresh scroll regions after content changes, and use themed scrollbar states. Settings Hotkeys puts Defaults above the table; double-click changes a row and the right-click menu restores one default with duplicate protection. A first-run guided tutorial is persisted in `general.onboarding_completed` and can be reopened from General settings. Applying camera/live-buffer changes asks whether to restart immediately; the relaunch preserves the script or frozen executable arguments. Board guide width is passed to all video canvases and evidence overlays instead of using a fixed preview width.
 
 - Judge controls are grouped into frame review and judging categories. Frame, verdict, and Board setup buttons use equal widths and square native ttk rendering; Board setup stays on the right edge.
 - Verdict controls are greyed whenever there is no active frozen attempt to judge (including Live and system-paused states).
 - Competition-board scrolling handles Windows and Linux wheel events, including horizontal Shift-wheel scrolling, while preserving keyboard cell navigation.
-- Export, cache clearing, and camera pause expose an indeterminate progress bar in the status bar while work is active.
-- Camera startup and resume use the same bounded status progress feedback. When no live frame arrives, the video workspace offers a themed Help button with source/index, permissions, competing-app, capture-mode, and diagnostic guidance. A branded splash screen keeps startup state visible while the judge station is prepared.
-- The splash uses the original `assets/long_jump_splash.png` hero image unchanged, with a high-contrast LONG JUMP / REPLAY header, startup badge, progress bar, and small `© 2026 · Developed by Tomáš Pisár` credit. PyInstaller build entry points include the image asset.
+- Attempt export uses one modeless status-bar indicator: it begins indeterminate while the requested attempt is still encoding, then switches to real copied/total bytes as soon as the temporary MP4 size is known. Camera pause/resume feedback is delayed briefly so fast transitions do not flash, and synchronous recording clearing has no progress bar.
+- Camera startup and resume use one modeless indeterminate overlay because frame-arrival progress cannot be measured. The status bar no longer animates at the same time. After the existing ten-second bound, the overlay is replaced by Try again and Help with source/index, permissions, competing-app, capture-mode, and diagnostic guidance.
+- The packaged application uses PyInstaller's boot splash with the unchanged `assets/long_jump_splash.png` artwork before Python initialization, then closes it only after the detailed Tk startup window paints. Source launches begin with the detailed Tk window after Python/Tk initialization.
 - `py app.py --splash-preview` opens that splash by itself for visual review and exits when the user presses Escape; it does not start camera, shuttle, buffer, or attempt workers.
-- Normal startup runs a randomized 0.5–2.0 second preparation sequence from 0% to 80%, updates a themed action-status strip beneath the bar, initializes the application at 80%, then advances to 100% and removes the splash as the main window becomes ready.
-- Splash presentation uses a centered fixed geometry and appears/disappears immediately; there is no startup resize animation.
+- Startup uses typed progress events and two determinate bars only for its real overall/current-task hierarchy: settings/logging 0–10%, components 10–30%, licence/update checks 30–50%, interface construction 50–90%, and services/readiness 90–100%. It never advances from elapsed time or reaches 100% before the main window paints and required workers start.
+- Startup phase history is available through a keyboard-reachable Details disclosure. Only `general.progress_details_expanded` is persisted; history and diagnostics are not. Fatal startup failures stop the bar and offer Open log and Exit without showing a stack trace in the window. Before activation opens, the painted startup window remains visible for at least two seconds; time already spent loading and checking the licence counts toward that minimum.
+- Email and reusable-key activation use modal indeterminate bars that visibly move while the server is processing because response duration cannot be measured truthfully. Update downloads use real bytes, checksum/preparation phases, stable rate/remaining-time details after a reliability window, and safe cancellation that removes `.partial` files and restores dialog controls.
 - The main control dock has one larger Freeze/Live toggle. Frame review and judging buttons are enabled only for a frozen attempt and use the same disabled/faded treatment; Not decided uses a neutral pending style rather than black. Board Setup is a matching labeled group, and the system pause button/mode badge share a fixed width.
 - The athlete countdown duration is managed in a dedicated Athlete timer settings category with a Low performance-impact badge.
 - On the Competition Board, Up/Down may move between athlete rows; Left/Right are reserved for replay frame stepping after Freeze and never change the selected attempt column.
@@ -932,6 +975,13 @@ A change is done only when:
 ## Account portal login fix (2026-08-20)
 
 - The login page must load `account-state.js` before `account.js`. The shared account script destructures `window.LJR_ACCOUNT_STATE` during startup; omitting this dependency prevents the submit handler from registering and leaves the email form visually unchanged.
+
+## Website light-theme material correction (2026-08-25)
+
+- The Apple material tokens in `website/tomaspisar.cz/overrides.css` must have explicit light-theme values. Reusing the dark translucent `--apple-surface` values in light mode produces broad muddy-gray gradients across product, signal, fact, contact, download, FAQ, and cookie surfaces.
+- Light mode uses ivory translucent surfaces, restrained teal-gray borders, and softer neutral shadows. Dark mode tokens, layout, typography, responsive rules, and the dark product screenshot remain unchanged.
+- The header theme control shows its current localized preference: System, Light, or Dark. The explicit choice is mirrored to session storage immediately so same-tab page navigation cannot reset it; accepted preference cookies additionally retain it across browser sessions and use the `tomaspisar.cz` domain so the main site and account portal share the choice. Every page with the control applies the cookie-or-session preference in its head before body paint.
+- The 2026-08-25 production deployment is main-site Worker version `f6f8a35b-6cf1-45d1-80c2-a8ed11e5b2a2` and account/API Worker version `87742899-4c14-41f6-98d5-8e9a3e8a2d36`. Cache-bypassed live CSS/JavaScript matched the local assets, `/login` contained the early theme bootstrap with the required account-state dependency order, and `/health` returned HTTP 200.
 
 ## Activation feedback and device deletion state (2026-08-23)
 

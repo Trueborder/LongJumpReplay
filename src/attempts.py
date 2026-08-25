@@ -382,16 +382,19 @@ class AttemptManager:
             if attempt.state in {AttemptState.COLLECTING, AttemptState.ENCODING}:
                 self._pending_exports[attempt_id] = output_directory
                 self.event_queue.put(("message", f"Attempt #{attempt_id:02d} will export after post-roll is complete."))
+                self.event_queue.put(("attempt_export_progress", (attempt_id, 0, None)))
                 return True
             if not attempt.temp_video_path or not attempt.temp_video_path.exists():
                 return False
             attempt.state = AttemptState.EXPORTING
             source = attempt.temp_video_path
             meta_source = attempt.temp_metadata_path
+            source_size = source.stat().st_size
             created = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(attempt.created_wall_time))
             destination = output_directory / f"attempt_{attempt_id:02d}_{created}{source.suffix}"
             meta_destination = destination.with_suffix(".json")
         name = f"attempt-export-{attempt_id}"
+        self.event_queue.put(("attempt_export_progress", (attempt_id, 0, source_size)))
         worker = Thread(target=self._copy_export, args=(attempt_id, source, destination, meta_source, meta_destination), name=name, daemon=True)
         with self._lock:
             self._workers[name] = worker
@@ -570,7 +573,17 @@ class AttemptManager:
         installed_metadata = False
         attempt: AttemptSession | None = None
         try:
-            shutil.copy2(source, video_temp)
+            total_bytes = source.stat().st_size
+            copied_bytes = 0
+            with source.open("rb") as source_file, video_temp.open("wb") as destination_file:
+                while True:
+                    chunk = source_file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    destination_file.write(chunk)
+                    copied_bytes += len(chunk)
+                    self.event_queue.put(("attempt_export_progress", (attempt_id, copied_bytes, total_bytes)))
+            shutil.copystat(source, video_temp)
             video_temp.replace(destination)
             installed_video = True
             if meta_source and meta_source.exists():

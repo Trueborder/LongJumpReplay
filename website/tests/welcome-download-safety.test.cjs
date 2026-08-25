@@ -43,6 +43,13 @@ test('every download page creates the warning dialog when its installer link is 
   assert.match(script, /installerLinks\.forEach\(\(element\) => \{/);
 });
 
+test('customer downloads keep the cache-safe stable installer alias', () => {
+  assert.match(downloadIndex, /data-installer-url href="https:\/\/files\.tomaspisar\.cz\/LJR_setup\.exe"/);
+  assert.match(downloadLjr, /data-installer-url href="https:\/\/files\.tomaspisar\.cz\/LJR_setup\.exe"/);
+  assert.match(script, /element\.href = product\.installerUrl/);
+  assert.doesNotMatch(script, /element\.href = installer\.href/);
+});
+
 test('purchase confirmation uses plural company voice', () => {
   assert.doesNotMatch(html, /(?:I will|writing to me|write to me|Email me)/i);
   assert.doesNotMatch(html, /(?:napište mi\b|vyřeším(?:\s|[.,]))/i);
