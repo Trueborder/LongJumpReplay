@@ -37,3 +37,12 @@ test('dashboard markup does not contain duplicate ids', () => {
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('dashboard keeps secondary guidance out of the primary content flow', () => {
+  assert.doesNotMatch(html, /class="information-(?:grid|card)"/);
+  assert.doesNotMatch(html, /Two ways to activate|Keep your slots tidy/);
+  assert.match(html, /<details class="guidance-disclosure">/);
+  assert.match(html, /How to use the activation key/);
+  assert.match(html, /Billing help/);
+  assert.match(html, /class="guidance-list"/);
+});

@@ -1,5 +1,17 @@
 # Long Jump Replay — Project Knowledge
 
+## Account portal readability redesign (2026-09-01)
+
+- The account portal keeps its existing passwordless login, dashboard routes,
+  API behavior, themes, and bilingual content while presenting a quieter,
+  more readable Evidence Desk layout.
+- Repeated informational card groups were removed from Overview, Licence,
+  Computers, and Billing. Secondary activation, billing, support, security,
+  and sign-in guidance is retained behind native keyboard-accessible
+  `<details>` disclosures.
+- The account portal test suite asserts that the removed information-card
+  pattern does not return; all website tests passed after the redesign.
+
 ## Stable customer downloads and immutable releases (2026-08-24)
 
 - Website installer buttons always keep the configured
