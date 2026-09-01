@@ -23,6 +23,9 @@
   optional `desktopicon` task. The installer is built and published through the
   standard release workflow after the source, GUI, frozen, and installer checks
   pass.
+- The shared public and account-site header is fixed to the viewport while
+  scrolling. The body reserves its desktop/mobile header space, and the mobile
+  navigation remains positioned below the fixed header.
 
 ## Account portal readability redesign (2026-09-01)
 

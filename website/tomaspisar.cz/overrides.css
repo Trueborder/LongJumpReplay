@@ -12,6 +12,7 @@
 
 /* Apple-inspired material layer: the product remains Evidence Desk, the shell becomes calmer and more physical. */
 :root {
+  --site-header-reserved-space: 76px;
   --apple-surface: rgba(18, 31, 36, .76);
   --apple-surface-raised: rgba(26, 43, 47, .88);
   --apple-border: rgba(190, 218, 214, .16);
@@ -34,6 +35,7 @@ html {
 }
 
 body {
+  padding-top: var(--site-header-reserved-space);
   background-color: var(--bg);
   background-image:
     radial-gradient(circle at 82% 4%, color-mix(in srgb, var(--cyan) 9%, transparent), transparent 28rem),
@@ -44,8 +46,10 @@ body {
 body::before { display: none; }
 
 .site-header {
-  position: sticky;
+  position: fixed;
   top: .75rem;
+  right: 0;
+  left: 0;
   z-index: 20;
   width: min(1320px, calc(100% - 2rem));
   min-height: 64px;
@@ -295,6 +299,7 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 }
 
 @media (max-width: 650px) {
+  :root { --site-header-reserved-space: 72px; }
   body { background-image: radial-gradient(circle at 50% 0, color-mix(in srgb, var(--cyan) 8%, transparent), transparent 22rem); }
   .section-shell,
   .signal-strip { width: calc(100% - 1.5rem); }
