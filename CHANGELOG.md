@@ -1,5 +1,13 @@
 # LongJumpReplay changelog
 
+## 3.3.9 - 2026-09-01
+
+- Rebuilds the free evaluation as a replay-only 72-hour showcase with three
+  standalone video exports and immediate expiry locking.
+- Adds the public contact form with Turnstile protection and email delivery.
+- Adds licence diagnostics and a safe support summary in Settings.
+- Makes the desktop shortcut unconditional in the Windows installer.
+
 ## 3.3.8 - 2026-08-24
 
 - Update-system test release with no application behaviour changes.

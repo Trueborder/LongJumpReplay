@@ -64,7 +64,7 @@ import {
   purgeOldDeviceActivity,
 } from "./db";
 import type { DeviceMetadata } from "./db";
-import { sendVerificationCode } from "./email";
+import { sendContactMessage, sendVerificationCode } from "./email";
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
   DEAD_SUBSCRIPTION_STATUSES,
@@ -79,6 +79,8 @@ const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const MAX_BODY_BYTES = 16_384;
 const PORTAL_SESSION_COOKIE = "ljr-portal-session";
+const CONTACT_ORIGIN = "https://tomaspisar.cz";
+const CONTACT_TOPICS = new Set(["support", "licence", "bug", "feedback", "general"]);
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
   const responseHeaders = new Headers({
@@ -158,6 +160,75 @@ function withPortalCors(response: Response, request: Request, env: Env): Respons
   const headers = new Headers(response.headers);
   portalCorsHeaders(request, env).forEach((value, key) => headers.set(key, value));
   return new Response(response.body, { status: response.status, headers });
+}
+
+function contactCorsHeaders(request: Request): Headers {
+  const headers = new Headers();
+  if (request.headers.get("Origin") === CONTACT_ORIGIN) {
+    headers.set("Access-Control-Allow-Origin", CONTACT_ORIGIN);
+    headers.set("Access-Control-Allow-Headers", "Content-Type");
+    headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    headers.set("Vary", "Origin");
+  }
+  return headers;
+}
+
+function withContactCors(response: Response, request: Request): Response {
+  const headers = new Headers(response.headers);
+  contactCorsHeaders(request).forEach((value, key) => headers.set(key, value));
+  return new Response(response.body, { status: response.status, headers });
+}
+
+async function verifyContactTurnstile(request: Request, env: Env, token: string): Promise<boolean> {
+  if (!env.CONTACT_TURNSTILE_SECRET) return false;
+  const body = new URLSearchParams({
+    secret: env.CONTACT_TURNSTILE_SECRET,
+    response: token,
+    ...(clientKey(request) !== "unknown" ? { remoteip: clientKey(request) } : {}),
+  });
+  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!response.ok) return false;
+  const result = await response.json() as { success?: boolean };
+  return result.success === true;
+}
+
+export async function contact(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== CONTACT_ORIGIN) return fail("forbidden", "This request is not allowed.", 403);
+  let data: Record<string, unknown>;
+  try {
+    data = await readJson(request);
+  } catch {
+    return fail("invalid_input", "Complete the form and try again.");
+  }
+
+  if (str(data.website)) return fail("invalid_input", "Complete the form and try again.");
+  const name = str(data.name);
+  const email = str(data.email).toLowerCase();
+  const topic = str(data.topic).toLowerCase();
+  const message = str(data.message);
+  const turnstileToken = str(data.turnstile_token);
+  if (name.length < 1 || name.length > 120 || !EMAIL_PATTERN.test(email) || email.length > 254
+      || !CONTACT_TOPICS.has(topic) || message.length < 10 || message.length > 5000
+      || turnstileToken.length < 1 || turnstileToken.length > 2048) {
+    return fail("invalid_input", "Complete the form and try again.");
+  }
+  const limits = rateLimits(env).contact;
+  if (!(await rateLimit(env.DB, `contactip:${clientKey(request)}`, ...limits))) {
+    return fail("rate_limited", "Please wait before sending another message.", 429);
+  }
+  if (!(await rateLimit(env.DB, `contactemail:${await sha256(email)}`, ...limits))) {
+    return fail("rate_limited", "Please wait before sending another message.", 429);
+  }
+  if (!(await verifyContactTurnstile(request, env, turnstileToken))) {
+    return fail("verification_failed", "Please complete the security check and try again.", 403);
+  }
+  await sendContactMessage(env, { name, email, topic, message });
+  return json({ sent: true });
 }
 
 function portalCookie(token: string, maxAge: number): string {
@@ -1076,6 +1147,12 @@ export default {
         if (page) return page;
         return env.ASSETS.fetch(request);
       }
+      if (request.method === "OPTIONS" && path === "/api/contact") {
+        if (request.headers.get("Origin") && request.headers.get("Origin") !== CONTACT_ORIGIN) {
+          return new Response(null, { status: 403 });
+        }
+        return withContactCors(new Response(null, { status: 204 }), request);
+      }
       if (request.method === "OPTIONS" && path.startsWith("/api/portal/")) {
         return withPortalCors(new Response(null, { status: 204 }), request, env);
       }
@@ -1087,6 +1164,9 @@ export default {
       }
       if (path === "/api/portal/device-details" && request.method === "GET") {
         return withPortalCors(await portalDeviceDetails(request, env), request, env);
+      }
+      if (path === "/api/contact" && request.method === "POST") {
+        return withContactCors(await contact(request, env), request);
       }
       if (request.method !== "POST") return fail("not_found", "Not found", 404);
 
@@ -1151,7 +1231,8 @@ export default {
       // Never surface internals. The message is logged, not returned.
       console.error("unhandled", error instanceof Error ? error.message : "unknown");
       const response = fail("server_error", "Something went wrong. Please try again.", 500);
-      return path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
+      return path === "/api/contact" ? withContactCors(response, request)
+        : path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
     }
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {

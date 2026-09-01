@@ -119,3 +119,32 @@ def test_settings_can_start_manual_update_check(monkeypatch):
     assert requested_from == [dialog]
 
     dialog.destroy(); root.destroy()
+
+
+def test_licence_page_shows_diagnostics_and_copies_safe_summary(monkeypatch):
+    monkeypatch.setattr(
+        "src.settings_dialog.enumerate_camera_devices",
+        lambda current: [CameraDevice(current, "Current camera")],
+    )
+    monkeypatch.setattr(
+        "src.activation.authorization_details",
+        lambda: (True, "authorization.accepted", {
+            "license_type": "lifetime", "expires_at": 1_900_000_000,
+            "max_devices": 2, "machine_id": "must-not-be-copied",
+        }, 1_800_000_000),
+    )
+    monkeypatch.setattr(
+        "src.trial.trial_status",
+        lambda: __import__("src.trial", fromlist=["TrialStatus"]).TrialStatus(True, False, 1, 2, 1_900_000_000),
+    )
+    monkeypatch.setattr("src.settings_dialog.show_themed_info", lambda *args: None)
+    root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
+    dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
+    dialog._copy_support_summary()
+    summary = dialog.clipboard_get()
+    assert "3.3.9" in summary
+    assert "lifetime" in summary
+    assert "must-not-be-copied" not in summary
+    assert "machine_id" not in summary
+    assert dialog.copy_support_button.instate(["!disabled"])
+    dialog.destroy(); root.destroy()

@@ -1,5 +1,29 @@
 # Long Jump Replay — Project Knowledge
 
+## Replay-only trial, contact form, and licence diagnostics (2026-09-01)
+
+- The local 72-hour evaluation is now governed by a centralized capability
+  policy: capture, freeze, replay, saved still frames, and three standalone
+  video exports are allowed; competition setup, rosters, judging, verdicts,
+  results, evidence, and competition packages are blocked. A live expiry poll
+  locks the workspace and opens paid activation; the consumed marker remains
+  non-resettable by the customer. See `docs/TRIAL_LICENSING.md`.
+- The public Contact page uses a labelled form with name, email, topic, and
+  message fields. `licensing-api` sends validated submissions to
+  `info@tomaspisar.cz` with the visitor as Reply-To, using origin checks,
+  Turnstile, a honeypot, and D1 rate-limit metadata without storing messages.
+  The public site key is configured in `website/tomaspisar.cz/site.config.js`
+  and the private `CONTACT_TURNSTILE_SECRET` Worker secret is present in the
+  production Worker configuration.
+- Settings > Licence & account now shows version, licence state, signed
+  authorization timing, device limit, last successful check, trial status,
+  and a safe support-summary clipboard action. Authorization files remain
+  backward-compatible when the new check timestamp is absent.
+- Release 3.3.9 creates the desktop shortcut unconditionally by removing the
+  optional `desktopicon` task. The installer is built and published through the
+  standard release workflow after the source, GUI, frozen, and installer checks
+  pass.
+
 ## Account portal readability redesign (2026-09-01)
 
 - The account portal keeps its existing passwordless login, dashboard routes,
@@ -787,7 +811,7 @@ Wrangler state created under `scripts/release/.wrangler/` is machine-local deplo
 ### Customer installer and updates
 
 - `scripts\build\BUILD_RELEASE.bat` is the supported 3.3 portable payload entry point. It runs source and GUI tests plus source/frozen self-tests before refreshing the exact `release` directory.
-- `scripts\build\BUILD_INSTALLER.bat` compiles `packaging\LongJumpReplay.iss` with Inno Setup. It preserves the 3.1 AppId and installs under `Program Files\LongJumpReplay` with Start Menu, optional Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
+- `scripts\build\BUILD_INSTALLER.bat` compiles `packaging\LongJumpReplay.iss` with Inno Setup. It preserves the 3.1 AppId and installs under `Program Files\LongJumpReplay` with Start Menu, Desktop, Add/Remove Programs, uninstall, and in-place upgrade support.
 - Frozen runtime state remains under `%LOCALAPPDATA%\LongJumpReplay`, so installation and upgrades do not require writing to Program Files.
 - The previous offline machine-bound customer key route is retired and is no
   longer reachable from startup. Paid customer activation uses email OTP or the

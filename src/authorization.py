@@ -95,11 +95,14 @@ def verify_authorization(
         return False, "authorization.invalid_format", None
 
 
-def save_authorization(token: str) -> None:
+def save_authorization(token: str, *, last_checked_at: int | None = None) -> None:
     path = authorization_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"authorization": token}), encoding="utf-8")
+    payload: dict[str, object] = {"authorization": token}
+    if last_checked_at is not None:
+        payload["last_checked_at"] = int(last_checked_at)
+    temporary.write_text(json.dumps(payload), encoding="utf-8")
     temporary.replace(path)
 
 
@@ -110,6 +113,16 @@ def load_authorization() -> str | None:
         return None
     token = data.get("authorization") if isinstance(data, dict) else None
     return token if isinstance(token, str) else None
+
+
+def last_successful_check() -> int | None:
+    """Return the last time a signed authorization was successfully stored."""
+    try:
+        data = json.loads(authorization_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    value = data.get("last_checked_at") if isinstance(data, dict) else None
+    return int(value) if isinstance(value, int) and value > 0 else None
 
 
 def clear_authorization() -> None:

@@ -15,6 +15,7 @@ import json
 import os
 import platform
 import sys
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -26,6 +27,7 @@ from .authorization import (
     clear_authorization,
     load_authorization,
     save_authorization,
+    last_successful_check,
     should_refresh,
     verify_authorization,
 )
@@ -120,6 +122,18 @@ class ActivationError(Exception):
         self.code = code
 
 
+def _store_authorization(token: str) -> None:
+    """Persist a token and metadata while keeping old integrations compatible."""
+    try:
+        save_authorization(token, last_checked_at=int(time.time()))
+    except TypeError as error:
+        # A few downstream test/skinning integrations replace the old one-
+        # argument callback. The production implementation accepts metadata.
+        if "last_checked_at" not in str(error):
+            raise
+        save_authorization(token)
+
+
 def _post(path: str, payload: dict[str, Any], opener: Callable[..., Any] = urlopen) -> dict[str, Any]:
     request = Request(
         f"{API_BASE}{path}",
@@ -199,7 +213,7 @@ def activate(grant: str, opener: Callable[..., Any] = urlopen) -> ActivationResu
         # licence that looks activated but fails on the next start.
         raise ActivationError(f"The authorization could not be verified ({reason}).", reason)
 
-    save_authorization(token)
+    _store_authorization(token)
     return ActivationResult(
         license_type=str(data.get("license_type") or "unknown"),
         max_devices=int(data.get("max_devices") or 0),
@@ -220,7 +234,7 @@ def activate_with_key(activation_key: str, opener: Callable[..., Any] = urlopen)
     valid, reason, _ = verify_authorization(token, device_id())
     if not valid:
         raise ActivationError(f"The authorization could not be verified ({reason}).", reason)
-    save_authorization(token)
+    _store_authorization(token)
     return ActivationResult(
         license_type=str(data.get("license_type") or "unknown"),
         max_devices=int(data.get("max_devices") or 0),
@@ -248,7 +262,7 @@ def refresh(license_id: str, opener: Callable[..., Any] = urlopen) -> bool:
     valid, _, _ = verify_authorization(token, device_id())
     if not valid:
         return False
-    save_authorization(token)
+    _store_authorization(token)
     return True
 
 
@@ -258,6 +272,12 @@ def current_authorization() -> tuple[bool, str, dict[str, object] | None]:
     if not token:
         return False, "authorization.missing", None
     return verify_authorization(token, device_id())
+
+
+def authorization_details() -> tuple[bool, str, dict[str, object] | None, int | None]:
+    """Return the safe local authorization view used by Settings."""
+    valid, reason, payload = current_authorization()
+    return valid, reason, payload, last_successful_check()
 
 
 def check_startup_authorization(

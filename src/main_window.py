@@ -31,6 +31,7 @@ from .adjudication import (
     parse_wind_metres_per_second,
 )
 from . import VERSION_SHORT, __version__
+from .activation import current_authorization
 from .attempts import AttemptManager
 from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
 from .capture import CaptureEngine, OpenCVCameraSource
@@ -61,7 +62,7 @@ from .shuttle_hid import ShuttleHIDPoller, list_shuttle_devices
 from .takeoff_assist import detect_takeoff_candidate
 from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed_info
 from .timeline import ProfessionalTimeline
-from .trial import record_successful_export, trial_exports_remaining, trial_is_active
+from .trial import capabilities_for, record_successful_export, trial_exports_remaining, trial_is_active, trial_status
 from .video_canvas import VideoCanvas
 from .update_ui import UpdateDialog
 from .updater import (
@@ -117,7 +118,14 @@ class MainWindow:
         report("Preparing application state…", 0, 8)
         self.root = root
         self.config = config
-        self._evaluation_mode = trial_is_active()
+        initial_trial = capabilities_for()
+        paid_authorized = current_authorization()[0]
+        self._evaluation_mode = initial_trial.active and not paid_authorized
+        self._trial_expired = False
+        self._trial_expiry_job: str | None = None
+        self._trial_expiry_dialog_open = False
+        self._trial_competition_before_lock = deepcopy(config.competition)
+        self._trial_show_decisions_before_lock = config.display.show_decision_controls
         if self._evaluation_mode:
             # The evaluation demonstrates capture, freeze, replay and up to
             # three standalone exports. It must never become a competition tool.
@@ -250,6 +258,8 @@ class MainWindow:
         self.shuttle.start()
         report("Starting background services…", 3, 4, "Input services started", phase="services")
         self._schedule_tick()
+        if self._evaluation_mode:
+            self._schedule_trial_expiry_check()
         if not self.config.general.onboarding_completed:
             self.root.after(350, self.show_onboarding)
         if self._startup_update_task is not None:
@@ -335,14 +345,15 @@ class MainWindow:
         # A lightweight in-window menu replaces the native root menubar. The
         # popup menus are created once and never rebuilt by the video loop.
         self.file_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
-        self.file_menu.add_command(label=self._t("menu.wizard") + "\tCtrl+N", command=self.start_competition_wizard)
-        self.file_menu.add_command(label=self._t("menu.import_roster"), command=self.import_roster)
+        restricted_state = "disabled" if self._evaluation_mode and not capabilities_for().permits("competition_setup") else "normal"
+        self.file_menu.add_command(label=self._t("menu.wizard") + "\tCtrl+N", command=self.start_competition_wizard, state=restricted_state)
+        self.file_menu.add_command(label=self._t("menu.import_roster"), command=self.import_roster, state=restricted_state)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.export") + "\tE", command=self.export_current_attempt)
         self.file_menu.add_command(label=self._t("menu.save_frame") + "\tP", command=self.save_current_frame)
-        self.file_menu.add_command(label=self._t("menu.export_evidence"), command=self.export_adjudication_package)
+        self.file_menu.add_command(label=self._t("menu.export_evidence"), command=self.export_adjudication_package, state=restricted_state)
         if self.config.competition.event_export_enabled:
-            self.file_menu.add_command(label=self._t("menu.export_event"), command=self.export_competition_package)
+            self.file_menu.add_command(label=self._t("menu.export_event"), command=self.export_competition_package, state=restricted_state)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.clear") + "\tCtrl+Delete", command=self.clear_all_recordings)
         self.file_menu.add_separator()
@@ -351,10 +362,6 @@ class MainWindow:
         self.file_menu.add_command(label=self._t("menu.settings"), command=self.open_settings)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.exit"), command=self.close)
-        if self._evaluation_mode:
-            for index in (0, 1, 5):
-                self.file_menu.entryconfigure(index, state="disabled")
-
         self.view_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.layout_menu = tk.Menu(self.view_menu, tearoff=False, postcommand=self._begin_menu_interaction)
         layouts = [
@@ -367,7 +374,7 @@ class MainWindow:
         self.view_menu.add_cascade(label=self._t("menu.layout"), menu=self.layout_menu)
         self.view_menu.add_checkbutton(label=self._t("menu.attempts") + "\tA", variable=self.var_show_attempts, command=self.toggle_attempts_panel)
         self.var_show_board = getattr(self, "var_show_board", tk.BooleanVar(value=self.config.competition.show_competition_board))
-        self.view_menu.add_checkbutton(label=self._t("menu.board") + "\tB", variable=self.var_show_board, command=self.toggle_competition_board)
+        self.view_menu.add_checkbutton(label=self._t("menu.board") + "\tB", variable=self.var_show_board, command=self.toggle_competition_board, state=restricted_state)
         self.view_menu.add_checkbutton(label=self._t("menu.timeline") + "\tT", variable=self.var_show_timeline, command=self.toggle_timeline)
         self.view_menu.add_checkbutton(label=self._t("menu.live") + "\tL", variable=self.var_show_live, command=self.toggle_live_preview)
         self.view_menu.add_checkbutton(label=self._t("menu.status"), variable=self.var_show_status, command=self.toggle_status_bar)
@@ -846,6 +853,73 @@ class MainWindow:
         interval = max(4, round(1000 / hz))
         self._tick_job = self.root.after(interval, self._tick)
 
+    def _schedule_trial_expiry_check(self) -> None:
+        if self._closing or not self._evaluation_mode:
+            return
+        self._trial_expiry_job = self.root.after(1000, self._check_trial_expiry)
+
+    def _check_trial_expiry(self) -> None:
+        self._trial_expiry_job = None
+        if self._closing or not self._evaluation_mode:
+            return
+        status = trial_status()
+        if not status.active and not self._trial_expired:
+            self._trial_expired = True
+            self._lock_trial_configuration()
+            if hasattr(self, "evaluation_banner"):
+                self.evaluation_banner.configure(
+                    text="Evaluation expired — activate LongJumpReplay to continue"
+                    if self.config.general.language != "cs"
+                    else "Zkušební režim vypršel — pro pokračování aktivujte LongJumpReplay"
+                )
+            self._build_menu()
+            self.file_menu_button.configure(menu=self.file_menu)
+            self.view_menu_button.configure(menu=self.view_menu)
+            self._update_judging_controls()
+            self.root.after_idle(self._show_trial_expiry_dialog)
+        self._schedule_trial_expiry_check()
+
+    def _lock_trial_configuration(self) -> None:
+        self.config.competition.enabled = False
+        self.config.competition.show_competition_board = False
+        self.config.competition.decision_controls_enabled = False
+        self.config.competition.event_export_enabled = False
+        self.config.competition.auto_save_evidence = False
+        self.config.display.show_decision_controls = False
+        if hasattr(self, "var_show_board"):
+            self.var_show_board.set(False)
+        self._apply_visibility()
+        if hasattr(self, "freeze_button"):
+            self._set_system_paused_ui()
+
+    def _show_trial_expiry_dialog(self) -> None:
+        if self._closing or self._trial_expiry_dialog_open:
+            return
+        self._trial_expiry_dialog_open = True
+        try:
+            from .licensing import ensure_license_or_trial
+            accepted = ensure_license_or_trial(self.root, self.config.general.language)
+        finally:
+            self._trial_expiry_dialog_open = False
+        if accepted:
+            self._evaluation_mode = False
+            self._trial_expired = False
+            self.config.competition = deepcopy(self._trial_competition_before_lock)
+            self.config.display.show_decision_controls = self._trial_show_decisions_before_lock
+            self.competition.update_config(self.config.competition)
+            self.var_show_board.set(self.config.competition.show_competition_board)
+            if hasattr(self, "evaluation_banner"):
+                self.evaluation_banner.destroy()
+            self._build_menu()
+            self.file_menu_button.configure(menu=self.file_menu)
+            self.view_menu_button.configure(menu=self.view_menu)
+            self._apply_visibility()
+            self.wizard_button.configure(state="normal")
+            self._set_system_paused_ui()
+            self._update_judging_controls()
+        elif not self._closing:
+            self._show_message("The evaluation is locked. Activate a paid licence or exit LongJumpReplay.", 12)
+
     def _preview_frame(self, frame: np.ndarray) -> np.ndarray:
         scale = float(self.config.performance.preview_scale)
         if scale >= .995:
@@ -1278,7 +1352,7 @@ class MainWindow:
             style="SystemResume.TButton" if self._system_paused and not self._system_pause_transition else "SystemPause.TButton",
         )
         self.system_pause_button.state(["disabled"] if self._system_pause_transition else ["!disabled"])
-        state = ["disabled"] if paused_or_stopping else ["!disabled"]
+        state = ["disabled"] if paused_or_stopping or self._trial_expired else ["!disabled"]
         for button in (
             self.freeze_button, self.board_setup_button,
         ):
@@ -1309,7 +1383,11 @@ class MainWindow:
             self._selected_action_attempt_id is not None
             and self.attempts.get_attempt(self._selected_action_attempt_id) is not None
         )
-        export_allowed = not trial_is_active() or trial_exports_remaining() > 0
+        trial_policy = capabilities_for() if self._evaluation_mode else None
+        export_allowed = (
+            (not self._evaluation_mode and not trial_is_active())
+            or bool(trial_policy and trial_policy.permits("video_export") and trial_policy.exports_remaining > 0)
+        )
         self.export_button.state(["!disabled"] if selected_attempt and export_allowed else ["disabled"])
         self.delete_button.state(["!disabled"] if selected_attempt else ["disabled"])
         self.export_button.configure(style="Control.TButton" if selected_attempt and export_allowed else "MutedAction.TButton")
@@ -2015,7 +2093,18 @@ class MainWindow:
         return dialog
 
     # --------------------------------------------------------- core controls
+    def _trial_action_allowed(self, capability: str, *, announce: bool = True) -> bool:
+        if not self._evaluation_mode:
+            return True
+        if capabilities_for().permits(capability):
+            return True
+        if announce:
+            self._show_message("The evaluation is locked. Activate a paid licence to continue.", 8)
+        return False
+
     def toggle_freeze(self) -> None:
+        if not self._trial_action_allowed("freeze"):
+            return
         self._cancel_scheduled_review()
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5)
@@ -2109,6 +2198,8 @@ class MainWindow:
         return True
 
     def return_live(self) -> None:
+        if not self._trial_action_allowed("replay"):
+            return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
         if self._measurement_record_id:
@@ -2118,11 +2209,15 @@ class MainWindow:
         self._enter_live(complete_rotation=True)
 
     def step_frame(self, delta: int) -> None:
+        if not self._trial_action_allowed("replay"):
+            return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
         self._cancel_scheduled_review(); self.playback.step(delta); self._last_replay_key = None
 
     def select_relative_attempt(self, delta: int) -> None:
+        if not self._trial_action_allowed("replay"):
+            return
         self._cancel_scheduled_review()
         if self.playback.select_relative_attempt(delta):
             self._selected_action_attempt_id = self.playback.attempt_id
@@ -2132,9 +2227,13 @@ class MainWindow:
                 self._show_message(f"{self._attempt_roster_display(attempt)} · {self._decision_display(attempt.decision)}", 2)
 
     def seek_timeline(self, timestamp_ns: int) -> None:
+        if not self._trial_action_allowed("replay"):
+            return
         self._cancel_scheduled_review(); self.playback.seek_timestamp(timestamp_ns); self._last_replay_key = None
 
     def add_marker(self) -> None:
+        if not self._trial_action_allowed("replay"):
+            return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
         if self.playback.mode is PlaybackMode.LIVE: self.toggle_freeze()
@@ -2144,7 +2243,7 @@ class MainWindow:
             self._show_message("Marker added.", 3); self._last_timeline_update = 0
 
     def mark_decision(self, decision: AttemptDecision) -> None:
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("judging", announce=False):
             self._show_message("Competition verdicts are disabled in the evaluation.", 6); return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
@@ -2190,7 +2289,7 @@ class MainWindow:
             self._finish_decision_workflow(attempt_id)
 
     def mark_special_result(self, decision: AttemptDecision) -> None:
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("results", announce=False):
             self._show_message("Competition results are disabled in the evaluation.", 6); return
         if self._system_paused:
             self._show_message(self._t("system.paused_message"), 5); return
@@ -2213,7 +2312,7 @@ class MainWindow:
             self._show_next_athlete_overlay(next_assignment)
 
     def grant_reattempt(self) -> None:
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("judging", announce=False):
             self._show_message("Competition verdicts are disabled in the evaluation.", 6); return
         if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
             self._show_message("Select the attempt that should be repeated.", 5); return
@@ -2297,6 +2396,9 @@ class MainWindow:
         self.root.after(1400, lambda: self.center_overlay.place_forget() if self.center_overlay.winfo_exists() else None)
 
     def save_current_frame(self) -> None:
+        if self._evaluation_mode and not capabilities_for().permits("save_frame"):
+            self._show_message("The evaluation is locked. Activate a paid licence to continue.", 8)
+            return
         if self._displayed_bgr is None:
             self._show_message("No frame is available yet.", 4); return
         try:
@@ -2386,7 +2488,7 @@ class MainWindow:
         cv2.putText(frame, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), (25, 70), cv2.FONT_HERSHEY_SIMPLEX, .52, (190, 200, 215), 1, cv2.LINE_AA)
 
     def export_current_attempt(self) -> None:
-        if trial_is_active() and trial_exports_remaining() <= 0:
+        if self._evaluation_mode and not capabilities_for().permits("video_export"):
             self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
             return
         attempt_id = self._selected_action_attempt_id
@@ -2636,6 +2738,10 @@ class MainWindow:
     def toggle_attempts_panel(self) -> None:
         self.config.display.show_attempts_panel = bool(self.var_show_attempts.get()); self._apply_visibility(); self._save_config_safely()
     def toggle_competition_board(self) -> None:
+        if self._evaluation_mode:
+            self.var_show_board.set(False)
+            self._show_message("The competition board is disabled in the evaluation.", 6)
+            return
         self.config.competition.show_competition_board = bool(self.var_show_board.get())
         self._apply_visibility(); self._save_config_safely()
     def toggle_timeline(self) -> None:
@@ -2936,7 +3042,7 @@ class MainWindow:
 
     # ------------------------------------------------------ competition setup
     def start_competition_wizard(self) -> None:
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("competition_setup", announce=False):
             self._show_message("Competition setup is disabled in the evaluation.", 6); return
         CompetitionWizard(
             self.root,
@@ -3025,7 +3131,7 @@ class MainWindow:
             )
 
     def export_competition_package(self) -> None:
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("competition_package", announce=False):
             self._show_message("Competition packages are disabled in the evaluation.", 7); return
         if trial_is_active() and trial_exports_remaining() <= 0:
             self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
@@ -3092,7 +3198,7 @@ class MainWindow:
 
     def export_adjudication_package(self) -> None:
         """Create an explicit, standalone evidence and decision package."""
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("evidence_package", announce=False):
             self._show_message("Evidence packages are disabled in the evaluation.", 7); return
         if trial_is_active() and trial_exports_remaining() <= 0:
             self._show_message("The free trial allows 3 successful exports. Activate a paid license for more.", 8)
@@ -3144,7 +3250,7 @@ class MainWindow:
 
     def import_roster(self) -> None:
         """Preview and atomically commit a generic roster into the active group."""
-        if self._evaluation_mode:
+        if not self._trial_action_allowed("competition_setup", announce=False):
             self._show_message("Roster import is disabled in the evaluation.", 6); return
         selected = filedialog.askopenfilename(
             parent=self.root,

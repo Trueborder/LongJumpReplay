@@ -62,6 +62,38 @@ class TrialStatus:
     reason: str = ""
 
 
+TRIAL_ALLOWED_CAPABILITIES = frozenset({
+    "capture",
+    "freeze",
+    "replay",
+    "save_frame",
+    "video_export",
+})
+
+
+@dataclass(frozen=True, slots=True)
+class TrialCapabilities:
+    """The single capability policy used by the desktop UI and guards."""
+
+    active: bool
+    expired: bool
+    allowed: frozenset[str]
+    exports_remaining: int
+
+    def permits(self, capability: str) -> bool:
+        return self.active and capability in self.allowed
+
+
+def capabilities_for(status: TrialStatus | None = None) -> TrialCapabilities:
+    current = status or trial_status()
+    return TrialCapabilities(
+        active=current.active,
+        expired=current.expired,
+        allowed=TRIAL_ALLOWED_CAPABILITIES if current.active else frozenset(),
+        exports_remaining=current.exports_remaining,
+    )
+
+
 def _urlsafe_encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 

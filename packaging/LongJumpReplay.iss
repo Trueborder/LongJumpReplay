@@ -68,9 +68,6 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "slovak"; MessagesFile: "compiler:Languages\Slovak.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-
 [InstallDelete]
 Type: files; Name: "{app}\{#MyAppExeName}"
 Type: filesandordirs; Name: "{app}\_internal"
@@ -86,7 +83,7 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; Value
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

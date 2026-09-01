@@ -8,6 +8,8 @@ import webbrowser
 from collections.abc import Callable
 
 from .config import AppConfig, DEFAULT_HOTKEYS, PERFORMANCE_PRESETS, apply_low_resource_mode, apply_performance_preset, clamp_display_panel_sizes
+from . import __version__
+from .authorization import seconds_until_expiry
 from .camera_devices import enumerate_camera_devices
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
@@ -438,6 +440,7 @@ class SettingsDialog(tk.Toplevel):
 
     def _build_licence(self, f: ttk.Frame) -> None:
         from . import activation as activation_api
+        from .trial import trial_status
 
         ttk.Label(f, text=self._txt("Licence and customer account", "Licence a zákaznický účet"), style="Heading.TLabel").pack(anchor="w")
         ttk.Label(
@@ -451,20 +454,37 @@ class SettingsDialog(tk.Toplevel):
             justify="left",
         ).pack(anchor="w", pady=(6, 18))
 
-        valid, reason, payload = activation_api.current_authorization()
+        valid, reason, payload, last_checked_at = activation_api.authorization_details()
         if payload:
             license_type = str(payload.get("license_type") or "unknown")
             expires_at = payload.get("expires_at")
             expiry = datetime.fromtimestamp(int(expires_at)).astimezone().strftime("%Y-%m-%d %H:%M") if isinstance(expires_at, int) else "—"
             status = self._txt("Active" if valid else f"Unavailable ({reason})", "Aktivní" if valid else f"Nedostupná ({reason})")
+            remaining = seconds_until_expiry(payload) if valid else 0
             values = [
+                (self._txt("Application version", "Verze aplikace"), __version__),
                 (self._txt("Licence type", "Typ licence"), self._txt("Lifetime" if license_type == "lifetime" else "Monthly subscription", "Doživotní" if license_type == "lifetime" else "Měsíční předplatné")),
                 (self._txt("Status", "Stav"), status),
                 (self._txt("Authorization valid until", "Autorizace platná do"), expiry),
+                (self._txt("Offline time remaining", "Zbývající offline čas"), self._format_duration(remaining) if valid else "—"),
                 (self._txt("Device limit", "Limit zařízení"), str(payload.get("max_devices") or "—")),
             ]
         else:
-            values = [(self._txt("Status", "Stav"), self._txt("Not activated", "Neaktivováno"))]
+            values = [
+                (self._txt("Application version", "Verze aplikace"), __version__),
+                (self._txt("Status", "Stav"), self._txt("Not activated", "Neaktivováno")),
+            ]
+        if last_checked_at:
+            values.append((self._txt("Last successful check", "Poslední úspěšná kontrola"), datetime.fromtimestamp(last_checked_at).astimezone().strftime("%Y-%m-%d %H:%M")))
+
+        trial = trial_status()
+        if trial.expires_at is not None:
+            trial_expiry = datetime.fromtimestamp(trial.expires_at).astimezone().strftime("%Y-%m-%d %H:%M")
+            trial_label = self._txt("Active" if trial.active else "Expired", "Aktivní" if trial.active else "Vypršelo")
+            values.extend([
+                (self._txt("72-hour trial", "72hodinové hodnocení"), trial_label),
+                (self._txt("Trial video exports remaining", "Zbývající video exporty hodnocení"), f"{trial.exports_remaining} · {trial_expiry}"),
+            ])
 
         card = ttk.Frame(f, style="Panel.TFrame", padding=14)
         card.pack(fill="x", pady=(0, 18))
@@ -489,6 +509,13 @@ class SettingsDialog(tk.Toplevel):
             state="normal" if self.on_check_updates else "disabled",
         )
         self.check_updates_button.pack(side="left", padx=(10, 0))
+        self.copy_support_button = ttk.Button(
+            actions,
+            text=self._txt("Copy support summary", "Kopírovat souhrn pro podporu"),
+            style="Control.TButton",
+            command=self._copy_support_summary,
+        )
+        self.copy_support_button.pack(side="left", padx=(10, 0))
         ttk.Label(
             f,
             text=self._txt(
@@ -499,6 +526,40 @@ class SettingsDialog(tk.Toplevel):
             wraplength=700,
             justify="left",
         ).pack(anchor="w", pady=(14, 0))
+
+    @staticmethod
+    def _format_duration(seconds: int) -> str:
+        if seconds <= 0:
+            return "Expired"
+        days, remainder = divmod(seconds, 86400)
+        hours, minutes = divmod(remainder, 3600)
+        minutes //= 60
+        if days:
+            return f"{days}d {hours}h"
+        return f"{hours}h {minutes}m"
+
+    def _copy_support_summary(self) -> None:
+        from . import activation as activation_api
+        from .trial import trial_status
+
+        valid, reason, payload, last_checked_at = activation_api.authorization_details()
+        trial = trial_status()
+        license_type = str(payload.get("license_type") or "not activated") if payload else "not activated"
+        status = "active" if valid else reason
+        lines = [
+            "LongJumpReplay support summary",
+            f"App version: {__version__}",
+            f"Licence: {license_type}",
+            f"Status: {status}",
+            f"Authorization valid until: {datetime.fromtimestamp(int(payload['expires_at'])).astimezone().isoformat() if payload and isinstance(payload.get('expires_at'), int) else 'n/a'}",
+            f"Device limit: {payload.get('max_devices', 'n/a') if payload else 'n/a'}",
+            f"Last successful check: {datetime.fromtimestamp(last_checked_at).astimezone().isoformat() if last_checked_at else 'n/a'}",
+            f"Trial: {'active' if trial.active else 'inactive'} ({trial.exports_remaining} video exports remaining)",
+        ]
+        self.clipboard_clear()
+        self.clipboard_append("\n".join(lines))
+        self.update()
+        show_themed_info(self, self._txt("Support summary", "Souhrn pro podporu"), self._txt("A safe support summary was copied to the clipboard.", "Bezpečný souhrn pro podporu byl zkopírován do schránky."))
 
     def _build_general(self, f: ttk.Frame) -> None:
         r = self._title(f, "General", "Obecné", "Basic application behaviour.", "Základní chování aplikace.")

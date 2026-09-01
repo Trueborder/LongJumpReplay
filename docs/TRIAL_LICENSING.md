@@ -3,10 +3,17 @@
 The customer installer contains a local 72-hour evaluation mode. On first
 launch, the user chooses paid activation or starts the trial directly; no
 email address, registration API, Cloudflare route, or always-on computer is
-required. The trial allows the full capture/freeze/replay/judging workflow and
-three successful final exports. After expiry or the export limit, paid
-activation is required for further final exports; after expiry, the application
-remains at activation.
+required. The replay-only showcase allows camera capture, freeze, replay, saved
+still frames, and three successful standalone video exports. Competition setup,
+rosters, judging, verdicts, results, evidence packages, and competition package
+exports are disabled.
+
+The deadline is enforced locally from the machine-bound protected state. When
+the 72 hours pass, all trial actions lock immediately and the application asks
+the user to activate a paid licence or exit. The trial state is deliberately
+non-resettable by the customer; removing the visible state file does not make
+the same computer eligible again. Windows DPAPI is used when available, with
+the existing protected-state fallback on other platforms.
 
 ## Optional service deployment (legacy)
 
@@ -25,7 +32,7 @@ The matching public key is embedded in `src/trial.py`. Never commit the
 private key or trial database. Rotate keys by shipping a release that accepts
 both old and new public keys during the transition.
 
-The desktop client uses WorldTimeAPI for trusted UTC time. If it is
-unavailable, the trial continues using the last trusted local deadline and
-cannot be extended by moving the clock backward. This is intended to prevent
-casual abuse, not to provide DRM-level protection.
+Legacy signed service trials use WorldTimeAPI for trusted UTC time. Local
+trials remain offline by design and cannot be extended by moving the clock
+backward because the furthest-seen timestamp is persisted. This is intended to
+prevent casual abuse, not to provide DRM-level protection.

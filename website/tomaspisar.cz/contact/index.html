@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Contact Tomáš Pisár about software support, licensing, bugs, feedback, or general inquiries.">
+  <meta name="description" content="Contact Tomas Pisar about software support, licensing, bugs, feedback, or general inquiries.">
   <link rel="canonical" href="https://tomaspisar.cz/contact/">
-  <meta property="og:title" content="Contact — Tomáš Pisár">
+  <meta property="og:title" content="Contact - Tomas Pisar">
   <meta property="og:description" content="Software support, licensing, bug reports, and general inquiries.">
   <meta property="og:type" content="website">
-  <title>Contact — Tomáš Pisár</title>
+  <title>Contact - Tomas Pisar</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/overrides.css">
@@ -17,14 +17,15 @@
 <body>
   <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
   <header class="site-header">
-    <a class="brand" href="/"><span class="brand-mark">TP</span><span>Tomáš Pisár<small>Software / Development</small></span></a>
+    <a class="brand" href="/"><span class="brand-mark">TP</span><span>Tomas Pisar<small>Software / Development</small></span></a>
     <button class="menu-toggle" data-menu-toggle type="button" aria-label="Open menu">Menu</button>
     <nav class="main-nav" aria-label="Primary navigation">
       <a href="/software/" data-ui="software">Software</a>
       <a href="/download/" data-ui="downloads">Downloads</a>
       <a href="/about/" data-ui="about">About</a>
       <a href="/contact/" data-ui="contact">Contact</a>
-    <a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="Účet">Account</a></nav>
+      <a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="&#218;&#269;et">Account</a>
+    </nav>
     <div class="header-actions">
       <button class="icon-button" data-theme-toggle type="button" aria-label="Switch theme">Theme</button>
       <button class="language-button" data-lang-toggle data-lang-label type="button" aria-label="Switch to Czech">CZ</button>
@@ -33,21 +34,49 @@
   <main id="main">
     <section class="page-hero section-shell">
       <p class="eyebrow">TP / CONTACT</p>
-      <h1 data-en="Let’s talk." data-cs="Pojďme si napsat.">Let’s talk.</h1>
-      <p data-en="Use email for software support, licensing questions, bug reports, feedback, or a general inquiry." data-cs="E-mailem řeším podporu softwaru, licenční dotazy, hlášení chyb, zpětnou vazbu i obecné dotazy.">Use email for software support, licensing questions, bug reports, feedback, or a general inquiry.</p>
-      <p><a class="email-link" data-email href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
+      <h1 data-en="Let's talk." data-cs="Poj&#271;me si napsat.">Let's talk.</h1>
+      <p data-en="Send a message directly. Choose a topic and I will reply by email." data-cs="Po&#353;lete zpr&#225;vu p&#345;&#237;mo. Vyberte t&#233;ma a odpov&#237;m e-mailem.">Send a message directly. Choose a topic and I will reply by email.</p>
+    </section>
+    <section class="section-shell content-section contact-form-section" aria-labelledby="contact-form-title">
+      <div class="contact-form-card">
+        <div class="section-intro">
+          <p class="eyebrow">TP / MESSAGE</p>
+          <h2 id="contact-form-title" data-en="What can I help with?" data-cs="S &#269;&#237;m v&#225;m mohu pomoci?">What can I help with?</h2>
+          <p class="form-status" data-contact-status role="status" aria-live="polite"></p>
+        </div>
+        <form data-contact-form novalidate>
+          <div class="contact-form-grid">
+            <label><span data-en="Name" data-cs="Jm&#233;no">Name</span><input name="name" type="text" autocomplete="name" maxlength="120" required></label>
+            <label><span data-en="Email" data-cs="E-mail">Email</span><input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+            <label class="contact-form-wide"><span data-en="Topic" data-cs="T&#233;ma">Topic</span><select name="topic" required>
+              <option value="support" data-en="Software support" data-cs="Podpora softwaru">Software support</option>
+              <option value="licence" data-en="Licensing" data-cs="Licence">Licensing</option>
+              <option value="bug" data-en="Bug report" data-cs="Hl&#225;&#353;en&#237; chyby">Bug report</option>
+              <option value="feedback" data-en="Feedback and ideas" data-cs="Zp&#283;tn&#225; vazba a n&#225;pady">Feedback and ideas</option>
+              <option value="general" data-en="General question" data-cs="Obecn&#253; dotaz">General question</option>
+            </select></label>
+            <label class="contact-form-wide"><span data-en="Message" data-cs="Zpr&#225;va">Message</span><textarea name="message" rows="7" minlength="10" maxlength="5000" required></textarea></label>
+            <label class="contact-form-trap" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off"></label>
+          </div>
+          <div class="cf-turnstile" data-contact-turnstile aria-hidden="true"></div>
+          <p class="contact-privacy" data-en="Your message is sent by email only. See the &lt;a href=&quot;/privacy/&quot;&gt;privacy notice&lt;/a&gt; for details." data-cs="Zpr&#225;va se ode&#353;le pouze e-mailem. Podrobnosti najdete v &lt;a href=&quot;/privacy/&quot;&gt;z&#225;sad&#225;ch ochrany soukrom&#237;&lt;/a&gt;.">Your message is sent by email only. See the <a href="/privacy/">privacy notice</a> for details.</p>
+          <button class="button button-primary" type="submit" data-en="Send message" data-cs="Odeslat zpr&#225;vu">Send message</button>
+        </form>
+      </div>
     </section>
     <section class="section-shell content-section" aria-label="Contact topics">
       <div class="contact-grid">
-        <article class="contact-card"><h2 data-en="Software support" data-cs="Podpora softwaru">Software support</h2><p data-en="Installation, setup, or deployment questions." data-cs="Dotazy k instalaci, nastavení nebo nasazení.">Installation, setup, or deployment questions.</p><a class="text-link" data-mail-subject="LongJumpReplay support" href="mailto:info@tomaspisar.cz">Email →</a></article>
-        <article class="contact-card"><h2 data-en="Licensing" data-cs="Licence">Licensing</h2><p data-en="Questions about a LongJumpReplay license." data-cs="Dotazy k licenci LongJumpReplay.">Questions about a LongJumpReplay license.</p><a class="text-link" data-mail-subject="License inquiry" href="mailto:info@tomaspisar.cz">Email →</a></article>
-        <article class="contact-card"><h2 data-en="Bug reports" data-cs="Hlášení chyb">Bug reports</h2><p data-en="Tell me what happened and what you expected." data-cs="Napište, co se stalo a co jste očekávali.">Tell me what happened and what you expected.</p><a class="text-link" data-mail-subject="LongJumpReplay bug report" href="mailto:info@tomaspisar.cz">Email →</a></article>
-        <article class="contact-card"><h2 data-en="Feedback & ideas" data-cs="Zpětná vazba a nápady">Feedback &amp; ideas</h2><p data-en="Suggestions for the current product or future tools." data-cs="Návrhy pro současný produkt nebo budoucí nástroje.">Suggestions for the current product or future tools.</p><a class="text-link" data-mail-subject="General inquiry" href="mailto:info@tomaspisar.cz">Email →</a></article>
+        <article class="contact-card"><h2 data-en="Software support" data-cs="Podpora softwaru">Software support</h2><p data-en="Installation, setup, or deployment questions." data-cs="Dotazy k instalaci, nastaven&#237; nebo nasazen&#237;.">Installation, setup, or deployment questions.</p></article>
+        <article class="contact-card"><h2 data-en="Licensing" data-cs="Licence">Licensing</h2><p data-en="Questions about a LongJumpReplay licence." data-cs="Dotazy k licenci LongJumpReplay.">Questions about a LongJumpReplay licence.</p></article>
+        <article class="contact-card"><h2 data-en="Bug reports" data-cs="Hl&#225;&#353;en&#237; chyb">Bug reports</h2><p data-en="Tell me what happened and what you expected." data-cs="Napi&#353;te, co se stalo a co jste o&#269;ek&#225;vali.">Tell me what happened and what you expected.</p></article>
+        <article class="contact-card"><h2 data-en="Feedback &amp; ideas" data-cs="Zp&#283;tn&#225; vazba a n&#225;pady">Feedback &amp; ideas</h2><p data-en="Suggestions for the current product or future tools." data-cs="N&#225;vrhy pro sou&#269;asn&#253; produkt nebo budouc&#237; n&#225;stroje.">Suggestions for the current product or future tools.</p></article>
       </div>
     </section>
   </main>
-  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><span>tomaspisar.cz</span></footer>
+  <footer class="site-footer"><span>&copy; 2026 Tomas Pisar</span><span data-ui="footer">Independent software development from the Czech Republic.</span><span>tomaspisar.cz</span></footer>
   <script src="/site.config.js"></script>
   <script src="/script.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+  <script src="/contact-form.js" defer></script>
 </body>
 </html>

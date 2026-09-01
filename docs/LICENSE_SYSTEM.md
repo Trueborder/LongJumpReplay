@@ -60,6 +60,10 @@ Non-secret values, in `licensing-api/wrangler.jsonc`:
 | `STRIPE_PRICE_SUBSCRIPTION` | (empty) | Stripe price ID for the monthly product |
 | `RATE_LIMIT_*` | see `src/config.ts` | Overrides; omit in production |
 
+The public website Contact form posts to `/api/contact`. Its public Turnstile
+site key is configured in `website/tomaspisar.cz/site.config.js`; the matching
+private secret must be added to the Worker as `CONTACT_TURNSTILE_SECRET`.
+
 The website reads matching values from `website/tomaspisar.cz/site.config.js`
 (`licensing.deviceLimit`, `offlineGraceDays`, `updateMonths`). **These two are
 not automatically linked** - changing a Worker value means changing the site
@@ -78,6 +82,7 @@ Set with `wrangler secret put <NAME>` from `licensing-api/`. Never in
 | `ACTIVATION_KEY_ENCRYPTION_KEY` | Encrypts reusable portal activation keys with AES-GCM. Use a separate high-entropy secret. |
 | `AUTHORIZATION_PRIVATE_KEY` | PKCS#8 RSA private key signing authorizations. |
 | `MAIL_API_KEY` | Transactional email provider key. |
+| `CONTACT_TURNSTILE_SECRET` | Server-side verification secret for the public contact form. |
 
 ## Database
 

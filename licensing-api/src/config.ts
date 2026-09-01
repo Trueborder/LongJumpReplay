@@ -29,6 +29,7 @@ export interface Env {
   RATE_LIMIT_ACTIVATE?: string;
   RATE_LIMIT_ACTIVATION_KEY?: string;
   RATE_LIMIT_VERIFY?: string;
+  RATE_LIMIT_CONTACT?: string;
 
   // Secrets - set with `wrangler secret put`, never in wrangler.jsonc.
   STRIPE_WEBHOOK_SECRET: string;
@@ -37,6 +38,7 @@ export interface Env {
   ACTIVATION_KEY_ENCRYPTION_KEY?: string;
   AUTHORIZATION_PRIVATE_KEY: string;
   MAIL_API_KEY: string;
+  CONTACT_TURNSTILE_SECRET?: string;
 }
 
 export type LicenseType = "lifetime" | "subscription";
@@ -102,5 +104,6 @@ export function rateLimits(env: Env) {
     activate: [int(env.RATE_LIMIT_ACTIVATE, 20), window] as [number, number],
     activationKey: [int(env.RATE_LIMIT_ACTIVATION_KEY, 30), window] as [number, number],
     verify: [int(env.RATE_LIMIT_VERIFY, 120), window] as [number, number],
+    contact: [int(env.RATE_LIMIT_CONTACT, 3), window] as [number, number],
   };
 }

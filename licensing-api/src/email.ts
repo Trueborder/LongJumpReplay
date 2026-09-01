@@ -18,6 +18,7 @@ export interface VerificationEmail {
   subject: string;
   text: string;
   html: string;
+  replyTo?: string;
 }
 
 export function verificationEmail(
@@ -103,6 +104,7 @@ function resendMailer(env: Env): Mailer {
           subject: message.subject,
           text: message.text,
           html: message.html,
+          ...(message.replyTo ? { reply_to: message.replyTo } : {}),
         }),
       });
       if (!response.ok) {
@@ -138,4 +140,37 @@ export async function sendVerificationCode(
   purpose: "activation" | "portal" = "activation",
 ): Promise<void> {
   await mailer(env).send(to, verificationEmail(code, ttlMinutes, purpose));
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character] ?? character);
+}
+
+export function contactEmail(fields: { name: string; email: string; topic: string; message: string }): VerificationEmail {
+  const subject = `[Website contact] ${fields.topic}`;
+  const text = [
+    "LongJumpReplay website contact form",
+    `Name: ${fields.name}`,
+    `Email: ${fields.email}`,
+    `Topic: ${fields.topic}`,
+    "",
+    fields.message,
+  ].join("\n");
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head><body>
+    <h1>Website contact form</h1>
+    <p><strong>Name:</strong> ${escapeHtml(fields.name)}</p>
+    <p><strong>Email:</strong> ${escapeHtml(fields.email)}</p>
+    <p><strong>Topic:</strong> ${escapeHtml(fields.topic)}</p>
+    <hr><p style="white-space:pre-wrap">${escapeHtml(fields.message)}</p>
+  </body></html>`;
+  return { subject, text, html, replyTo: fields.email };
+}
+
+export async function sendContactMessage(
+  env: Env,
+  fields: { name: string; email: string; topic: string; message: string },
+): Promise<void> {
+  await mailer(env).send("info@tomaspisar.cz", contactEmail(fields));
 }
