@@ -1,5 +1,14 @@
 # LongJumpReplay changelog
 
+## 3.3.10 - 2026-09-01
+
+- Removes manual width and height settings for resizable panels; drag the
+  dividers directly and keep the layout remembered.
+- Fixes competition-board athlete labels and makes the board instructions
+  responsive when the window is resized.
+- Adds a truthful modal progress indicator while checking for updates.
+- Keeps licence-key copy confirmation private with the shorter “Copied” message.
+
 ## 3.3.9 - 2026-09-01
 
 - Rebuilds the free evaluation as a replay-only 72-hour showcase with three
