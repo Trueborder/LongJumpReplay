@@ -70,6 +70,12 @@
   `AFDE4140A55A9F68100265F3D7B986603046DE04FF294F392713CEBABFBC6B16`.
   It is a metadata-only update-system test and the current stable channel
   release; it contains no application behaviour changes from 3.3.7.
+- Release 3.3.9 was published on 2026-09-01 with installer SHA-256
+  `2430865CA2D95315713DC86629DD334305C88672DB2AEA0AEC7C499F54DCF643`.
+  It includes the replay-only trial policy, public contact form, licence
+  diagnostics, and unconditional desktop shortcut. The production licensing
+  Worker deployment is `2db96058-9faf-4ca6-82ed-e75068dddf0b`; the main-site
+  Worker deployment is `d6367f96-5eb7-4b03-9da6-0f8f2d63170f`.
 
 ## Reusable activation keys, device history, and replay-only evaluation (2026-08-23)
 
