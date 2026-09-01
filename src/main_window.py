@@ -64,7 +64,7 @@ from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed
 from .timeline import ProfessionalTimeline
 from .trial import capabilities_for, record_successful_export, trial_exports_remaining, trial_is_active, trial_status
 from .video_canvas import VideoCanvas
-from .update_ui import UpdateDialog
+from .update_ui import UpdateCheckDialog, UpdateDialog
 from .updater import (
     UpdateCheckResult,
     UpdateCheckTask,
@@ -227,6 +227,7 @@ class MainWindow:
         self._startup_update_task = startup_update_task
         self._manual_update_task: UpdateCheckTask | None = None
         self._manual_update_parent: tk.Misc | None = None
+        self._update_check_dialog: UpdateCheckDialog | None = None
         self._update_dialog: UpdateDialog | None = None
 
         self._build_variables()
@@ -314,6 +315,15 @@ class MainWindow:
     def _group_internal(self, display: str) -> str:
         return "Boys" if display in {"Boys", "Chlapci", self._t("competition.boys")} else "Girls"
 
+    def _resize_board_navigation(self, _event: tk.Event | None = None) -> None:
+        """Wrap board instructions to the available width after every resize."""
+        try:
+            width = max(160, self.board_navigation.winfo_width() - 20)
+            if int(self.board_keyboard_hint.cget("wraplength") or 0) != width:
+                self.board_keyboard_hint.configure(wraplength=width)
+        except tk.TclError:
+            return
+
     @staticmethod
     def _geometry_nearly_fills_screen(geometry: str, screen_width: int, screen_height: int) -> bool:
         try:
@@ -399,10 +409,14 @@ class MainWindow:
 
     def check_for_updates(self, parent: tk.Misc | None = None) -> None:
         if self._manual_update_task is not None and not self._manual_update_task.done:
-            self._show_message(self._t("update.checking"), 4)
+            if self._update_check_dialog is not None:
+                try:
+                    self._update_check_dialog.window.lift()
+                except tk.TclError:
+                    pass
             return
-        self._show_message(self._t("update.checking"), 8)
         self._manual_update_parent = parent or self.root
+        self._update_check_dialog = UpdateCheckDialog(self._manual_update_parent, self.config.general.language)
         self._manual_update_task = start_update_check(respect_skip=False)
         self.root.after(80, lambda: self._poll_update_task(self._manual_update_task, manual=True))
 
@@ -415,6 +429,9 @@ class MainWindow:
             return
         if manual and task is self._manual_update_task:
             self._manual_update_task = None
+            if self._update_check_dialog is not None:
+                self._update_check_dialog.close()
+                self._update_check_dialog = None
         self._handle_update_result(result, manual=manual)
 
     def _handle_update_result(self, result: UpdateCheckResult, *, manual: bool) -> None:
@@ -720,9 +737,11 @@ class MainWindow:
 
         self.board_navigation = ttk.Frame(self.board_tab, style="Toolbar.TFrame", padding=(10, 7))
         self.board_navigation.pack(fill="x", pady=(0, 5))
+        self.board_navigation.columnconfigure(0, weight=1)
         self.board_target_title_label = ttk.Label(self.board_navigation, text=self._t("board.next_target"), style="ContextTitle.TLabel")
-        self.board_target_title_label.pack(anchor="w")
-        ttk.Label(self.board_navigation, textvariable=self.board_target_var, style="ContextValue.TLabel").pack(side="left", anchor="w")
+        self.board_target_title_label.grid(row=0, column=0, sticky="w")
+        self.board_target_label = ttk.Label(self.board_navigation, textvariable=self.board_target_var, style="ContextValue.TLabel")
+        self.board_target_label.grid(row=1, column=0, sticky="w")
         self.special_result_button = ttk.Menubutton(self.board_navigation, text=self._t("button.more"))
         self.special_result_menu = tk.Menu(self.special_result_button, tearoff=False)
         self.special_result_menu.add_command(label=self._t("status.passed"), command=lambda: self.mark_special_result(AttemptDecision.PASSED))
@@ -730,9 +749,17 @@ class MainWindow:
         self.special_result_menu.add_command(label=self._t("status.withdrawn"), command=lambda: self.mark_special_result(AttemptDecision.WITHDRAWN))
         self.special_result_menu.add_separator(); self.special_result_menu.add_command(label=self._t("status.reattempt"), command=self.grant_reattempt)
         self.special_result_button.configure(menu=self.special_result_menu); self.theme.style_menu(self.special_result_menu)
-        self.special_result_button.pack(side="right")
-        self.board_keyboard_hint = ttk.Label(self.board_navigation, text=self._t("board.keyboard_hint"), style="ContextTitle.TLabel")
-        self.board_keyboard_hint.pack(side="right", padx=(0, 8))
+        self.special_result_button.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(10, 0))
+        self.board_keyboard_hint = ttk.Label(
+            self.board_navigation,
+            text=self._t("board.keyboard_hint"),
+            style="ContextTitle.TLabel",
+            justify="left",
+            anchor="w",
+            wraplength=640,
+        )
+        self.board_keyboard_hint.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(7, 0))
+        self.board_navigation.bind("<Configure>", self._resize_board_navigation, add="+")
 
         self.competition_board = CompetitionBoard(
             self.board_tab, self.palette, self._open_attempt_from_board, self._select_cell_from_board,
@@ -1501,9 +1528,14 @@ class MainWindow:
             self.competition_banner_var.set("")
         if display_assignment:
             limit = self.competition.attempt_limit(display_assignment.group, display_assignment.competitor_number)
-            athlete_context = self.adjudication.athlete_for(display_assignment.group, display_assignment.competitor_number)
-            identity = " · ".join(value for value in (athlete_context.bib, athlete_context.name) if value) or str(display_assignment.competitor_number)
-            self.board_target_var.set(self._t("board.target", athlete=identity, attempt=display_assignment.attempt_number, limit=limit))
+            self.board_target_var.set(
+                self._t(
+                    "board.target",
+                    athlete=int(display_assignment.competitor_number),
+                    attempt=display_assignment.attempt_number,
+                    limit=limit,
+                )
+            )
         else:
             self.board_target_var.set(self._t("competition.roster_disabled"))
         self._refresh_competition_board(attempts, assignment)

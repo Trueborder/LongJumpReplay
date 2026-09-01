@@ -92,8 +92,8 @@ def test_settings_repairs_invalid_runtime_panel_measurements(monkeypatch):
     root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
     dialog = SettingsDialog(root, config, lambda _updated: None)
 
-    assert dialog._vars["attempts_width"].get() == 220
-    assert dialog._vars["timeline_height"].get() == 500
+    assert "attempts_width" not in dialog._vars
+    assert "timeline_height" not in dialog._vars
     dialog._apply_vars().validate()
 
     dialog.destroy(); root.destroy()

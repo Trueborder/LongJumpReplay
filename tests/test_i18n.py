@@ -54,3 +54,8 @@ def test_first_available_camera_prefers_camera_zero_and_waits_for_probe_results(
     assert first_available_camera({0: True, 1: True}) == 0
     assert first_available_camera({0: False, 1: True}) == 1
     assert first_available_camera({0: False, 1: None}) is None
+
+
+def test_board_target_formats_numeric_athlete_number():
+    assert Translator("en")("board.target", athlete=7, attempt=1, limit=3) == "Athlete #07  ·  Attempt 1/3"
+    assert Translator("cs")("board.target", athlete=7, attempt=1, limit=3) == "Závodník #07  ·  Pokus 1/3"

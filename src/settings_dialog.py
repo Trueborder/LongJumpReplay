@@ -1007,7 +1007,6 @@ class SettingsDialog(tk.Toplevel):
             "show_live": tk.BooleanVar(value=d.show_live_preview), "show_decisions": tk.BooleanVar(value=d.show_decision_controls),
             "show_warnings": tk.BooleanVar(value=d.show_capture_warnings), "show_assist_badge": tk.BooleanVar(value=d.show_takeoff_assist_badge),
             "comparison_enabled": tk.BooleanVar(value=d.comparison_enabled), "comparison_offset": tk.IntVar(value=d.comparison_offset_frames),
-            "attempts_width": tk.IntVar(value=d.attempts_panel_width), "timeline_height": tk.IntVar(value=d.timeline_height),
         }
         self._vars.update(vals)
         self._row(f, r, "Default video layout", "Výchozí rozložení videa", vals["layout"], "combo", ("replay_pip", "side_by_side", "board_detail", "comparison", "replay_only", "live_only"), impact="medium"); r += 1
@@ -1020,8 +1019,18 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Show Take-off Assist badge", "Zobrazit stav asistenta odrazu", vals["show_assist_badge"], "check", impact="low"); r += 1
         self._row(f, r, "Enable frame comparison view", "Zapnout porovnání snímků", vals["comparison_enabled"], "check", impact="high"); r += 1
         self._row(f, r, "Comparison frame offset", "Odstup porovnávaných snímků", vals["comparison_offset"], impact="medium"); r += 1
-        self._row(f, r, "Recordings panel width", "Šířka panelu záznamů", vals["attempts_width"], impact="low"); r += 1
-        self._row(f, r, "Timeline height", "Výška časové osy", vals["timeline_height"], impact="low")
+        resize_help = ttk.Label(
+            f,
+            text=self._txt(
+                "Drag the dividers between panels to resize them. The layout is remembered automatically.",
+                "Tažením za oddělovače mezi panely změníte jejich velikost. Rozložení se automaticky zapamatuje.",
+            ),
+            style="SettingsRowDesc.TLabel",
+            wraplength=640,
+            justify="left",
+        )
+        resize_help.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(10, 4))
+        self._bind_responsive_wrap(resize_help)
 
     def _build_assist(self, f: ttk.Frame) -> None:
         r = self._title(f, "Take-off Assist", "Asistent odrazu", "Finds a local motion peak inside the board ROI. It never decides Valid or Foul.", "Vyhledá lokální vrchol pohybu uvnitř oblasti prkna. Nikdy sám nerozhodne platný pokus nebo přešlap.")
@@ -1200,7 +1209,7 @@ class SettingsDialog(tk.Toplevel):
         e.evidence_include_overlay = bool(self._vars["evidence_overlay"].get()); e.evidence_save_raw = bool(self._vars["evidence_raw"].get())
         d.layout = str(self._vars["layout"].get()); d.show_attempts_panel = bool(self._vars["show_attempts"].get()); d.show_timeline = bool(self._vars["show_timeline"].get()); d.show_status_bar = bool(self._vars["show_status"].get())
         d.show_live_preview = bool(self._vars["show_live"].get()); d.show_decision_controls = bool(self._vars["show_decisions"].get()); d.show_capture_warnings = bool(self._vars["show_warnings"].get()); d.show_takeoff_assist_badge = bool(self._vars["show_assist_badge"].get())
-        d.comparison_enabled = bool(self._vars["comparison_enabled"].get()); d.comparison_offset_frames = int(self._vars["comparison_offset"].get()); d.attempts_panel_width = int(self._vars["attempts_width"].get()); d.timeline_height = int(self._vars["timeline_height"].get())
+        d.comparison_enabled = bool(self._vars["comparison_enabled"].get()); d.comparison_offset_frames = int(self._vars["comparison_offset"].get())
         ta = w.takeoff_assist
         ta.enabled = bool(self._vars["assist_enabled"].get()); ta.auto_seek_after_freeze = bool(self._vars["assist_auto_seek"].get()); ta.quick_review_enabled = bool(self._vars["quick_review"].get()); ta.quick_review_speed = float(self._vars["quick_speed"].get())
         ta.analysis_seconds_before_freeze = float(self._vars["assist_before"].get()); ta.analysis_seconds_after_freeze = float(self._vars["assist_after"].get()); ta.minimum_confidence = float(self._vars["assist_confidence"].get()); ta.downscale_width = int(self._vars["assist_width"].get())

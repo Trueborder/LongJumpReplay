@@ -30,7 +30,7 @@ test('activation key can be copied while the displayed value stays hidden', () =
   assert.doesNotMatch(html, /id="activation-key-copy"[^>]*disabled/);
   assert.match(script, /const copyActivationKey = async \(\) =>/);
   assert.match(script, /value = data\.key;[\s\S]*?writeClipboard\(value\)/);
-  assert.match(script, /Key copied without revealing it\./);
+  assert.match(script, /state\.lang === 'cs' \? 'Zkopírováno' : 'Copied'/);
 });
 
 test('dashboard markup does not contain duplicate ids', () => {

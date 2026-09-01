@@ -15,6 +15,70 @@ from .theme import configure_popup
 from .updater import ReleaseInfo, UpdateCancelled, UpdateError, download_update, skip_version
 
 
+class UpdateCheckDialog:
+    """Modal feedback while the update manifest is being checked."""
+
+    def __init__(self, parent: tk.Misc, language: str) -> None:
+        self.parent = parent
+        self.language = language
+        try:
+            self._previous_grab = parent.grab_current()
+        except tk.TclError:
+            self._previous_grab = None
+        self.window = tk.Toplevel(parent)
+        configure_popup(self.window, parent)
+        self.window.title(self._txt("Checking for updates", "Kontroluji aktualizace"))
+        self.window.geometry("430x170")
+        self.window.resizable(False, False)
+        self.window.transient(parent)
+        # The check is already running and cannot be rolled back. Keep the
+        # popup present until its real network task reports a result.
+        self.window.protocol("WM_DELETE_WINDOW", lambda: None)
+        body = ttk.Frame(self.window, style="Dialog.TFrame", padding=(24, 22))
+        body.pack(fill="both", expand=True)
+        self.label = ttk.Label(
+            body,
+            text=self._txt("Checking for updates…", "Kontroluji aktualizace…"),
+            style="DialogTitle.TLabel",
+        )
+        self.label.pack(anchor="w")
+        self.detail = ttk.Label(
+            body,
+            text=self._txt("Contacting the update service.", "Spojuji se se službou aktualizací."),
+            style="DialogBody.TLabel",
+            wraplength=380,
+            justify="left",
+        )
+        self.detail.pack(anchor="w", pady=(7, 12))
+        self.progress = ttk.Progressbar(body, mode="indeterminate", length=260, takefocus=False)
+        self.progress.pack(anchor="w")
+        self.progress.start(12)
+        self.window.update_idletasks()
+        screen_w, screen_h = self.window.winfo_screenwidth(), self.window.winfo_screenheight()
+        width, height = self.window.winfo_width(), self.window.winfo_height()
+        self.window.geometry(f"{width}x{height}+{max(0, (screen_w - width) // 2)}+{max(0, (screen_h - height) // 2)}")
+        self.window.grab_set()
+        self.window.lift()
+
+    def _txt(self, english: str, czech: str) -> str:
+        return czech if self.language == "cs" else english
+
+    def close(self) -> None:
+        try:
+            self.progress.stop()
+            self.window.grab_release()
+            self.window.destroy()
+        except tk.TclError:
+            pass
+        if self._previous_grab is not None:
+            try:
+                if self._previous_grab.winfo_exists():
+                    self._previous_grab.grab_set()
+                    self._previous_grab.lift()
+            except tk.TclError:
+                pass
+
+
 class UpdateDialog:
     def __init__(self, parent: tk.Misc, release: ReleaseInfo, language: str, on_install_ready: Callable[[Path], None]) -> None:
         self.parent, self.release, self.language = parent, release, language

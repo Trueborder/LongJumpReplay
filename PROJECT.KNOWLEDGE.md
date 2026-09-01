@@ -1,5 +1,18 @@
 # Long Jump Replay — Project Knowledge
 
+## Panel sizing, competition-board feedback, and update checking (2026-09-01)
+
+- The Settings > Views page no longer exposes recordings-panel width or
+  timeline-height inputs. Users resize both panes directly with their dividers;
+  the measured sash positions remain persisted for compatibility and are still
+  restored on startup.
+- Competition-board instructions now wrap below the target controls as the
+  window narrows. The board target formats the numeric athlete number before
+  applying the `02d` translation placeholder.
+- Manual update checks use a modal, single indeterminate horizontal progress
+  bar until the real background check returns. Download progress remains a
+  separate determinate bar with its existing cancellation behavior.
+
 ## Replay-only trial, contact form, and licence diagnostics (2026-09-01)
 
 - The local 72-hour evaluation is now governed by a centralized capability

@@ -7,7 +7,7 @@ import time
 import tkinter as tk
 
 from src.theme import ThemeManager, show_themed_info
-from src.update_ui import UpdateDialog
+from src.update_ui import UpdateCheckDialog, UpdateDialog
 from src.updater import ReleaseInfo
 from src.updater import UpdateCancelled
 
@@ -22,6 +22,18 @@ def release() -> ReleaseInfo:
         size=len(content),
         notes=("Update dialog test",),
     )
+
+
+def test_update_check_uses_one_indeterminate_bar_until_closed():
+    root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
+    settings = tk.Toplevel(root); settings.grab_set()
+    dialog = UpdateCheckDialog(settings, "en")
+    try:
+        assert str(dialog.progress.cget("mode")) == "indeterminate"
+        assert dialog.progress.winfo_manager() == "pack"
+        assert str(root.grab_current()) == str(dialog.window)
+    finally:
+        dialog.close(); settings.destroy(); root.destroy()
 
 
 def test_update_dialog_has_all_customer_choices(monkeypatch, tmp_path):

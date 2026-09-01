@@ -356,7 +356,7 @@
         value = data.key;
       }
       await writeClipboard(value);
-      setStatus(state.lang === 'cs' ? 'Klíč byl zkopírován, aniž by se zobrazil.' : 'Key copied without revealing it.');
+      setStatus(state.lang === 'cs' ? 'Zkopírováno' : 'Copied');
     } catch {
       setStatus(state.lang === 'cs' ? 'Klíč se nepodařilo zkopírovat.' : 'The key could not be copied.');
     } finally {
