@@ -94,7 +94,7 @@
   document.querySelectorAll('[data-en]').forEach((element) => {
     if (element.dataset.en === 'Activation uses the email address you buy with - there is no license key to keep safe. If you would rather test first, the installer includes a free 72-hour trial.') {
       element.dataset.en = 'Activation is email-first. A reusable alternative key is available in the customer portal. The installer also includes a replay-only 72-hour evaluation.';
-      element.dataset.cs = 'Aktivace probíhá primárně e-mailem. Opakovaně použitelný alternativní klíč najdete v zákaznickém portálu. Instalátor obsahuje také 72hodinové hodnocení pouze pro přehrávání.';
+      element.dataset.cs = 'Aktivace probíhá primárně e-mailem. Opakovaně použitelný alternativní klíč najdete v zákaznickém portálu. Instalátor obsahuje také 72hodinové testování pouze pro přehrávání.';
     }
   });
 

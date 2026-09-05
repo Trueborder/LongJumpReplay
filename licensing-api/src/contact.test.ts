@@ -44,13 +44,14 @@ describe("public contact endpoint", () => {
     const response = await handler.fetch(new Request("https://api.example.com/api/contact", {
       method: "POST",
       headers: { "Origin": "https://tomaspisar.cz", "CF-Connecting-IP": "192.0.2.10" },
-      body: JSON.stringify({ name: "Ada", email: "ada@example.com", topic: "support", message: "Please help with setup.", turnstile_token: "token" }),
+      body: JSON.stringify({ name: "Ada", email: "ada@example.com", topic: "club", message: "Please quote a club licence.", turnstile_token: "token" }),
     }), env());
 
     expect(response.status).toBe(200);
     expect(requests.some((request) => request.url.includes("siteverify"))).toBe(true);
     const mail = requests.find((request) => request.url.includes("resend.com"));
     expect(mail?.body).toContain("ada@example.com");
+    expect(mail?.body).toContain("Topic: club");
     expect(mail?.body).toContain("reply_to");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://tomaspisar.cz");
   });

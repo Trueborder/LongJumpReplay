@@ -16,6 +16,7 @@ test('contact page uses a labelled form and no direct mail links', () => {
   assert.match(html, /name="website"/);
   assert.match(html, /data-contact-turnstile/);
   assert.doesNotMatch(html, /mailto:/);
+  assert.match(html, /<option value="club" data-en="Club licence \/ better price" data-cs="Klubová licence \/ lepší cena">/);
 });
 
 test('contact client posts to configured API and requests invisible Turnstile', () => {

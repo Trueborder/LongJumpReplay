@@ -59,7 +59,7 @@
       form.reset();
       token = '';
       if (turnstileId !== null && window.turnstile?.reset) window.turnstile.reset(turnstileId);
-      setStatus(copy('Message sent. Thank you — I will reply by email.', 'Zpráva byla odeslána. Děkuji — odpovím e-mailem.'), 'success');
+      setStatus(copy('Message sent. Thank you — we will reply by email.', 'Zpráva byla odeslána. Děkujeme — odpovíme e-mailem.'), 'success');
     } catch (_) {
       setStatus(copy('The message could not be sent. Please try again later.', 'Zprávu se nepodařilo odeslat. Zkuste to prosím později.'), 'error');
       token = '';

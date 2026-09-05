@@ -22,7 +22,8 @@
   locks the workspace and opens paid activation; the consumed marker remains
   non-resettable by the customer. See `docs/TRIAL_LICENSING.md`.
 - The public Contact page uses a labelled form with name, email, topic, and
-  message fields. `licensing-api` sends validated submissions to
+  message fields, including a dedicated club-licence / better-price topic.
+  `licensing-api` sends validated submissions to
   `info@tomaspisar.cz` with the visitor as Reply-To, using origin checks,
   Turnstile, a honeypot, and D1 rate-limit metadata without storing messages.
   The public site key is configured in `website/tomaspisar.cz/site.config.js`
@@ -39,6 +40,9 @@
 - The shared public and account-site header is fixed to the viewport while
   scrolling. The body reserves its desktop/mobile header space, and the mobile
   navigation remains positioned below the fixed header.
+- Customer-facing support, product, licensing, privacy, and contact copy now
+  uses a consistent plural company voice in English and Czech. The About page
+  remains intentionally personal because it describes Tomáš directly.
 
 ## Account portal readability redesign (2026-09-01)
 

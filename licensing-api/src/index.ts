@@ -80,7 +80,7 @@ const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const MAX_BODY_BYTES = 16_384;
 const PORTAL_SESSION_COOKIE = "ljr-portal-session";
 const CONTACT_ORIGIN = "https://tomaspisar.cz";
-const CONTACT_TOPICS = new Set(["support", "licence", "bug", "feedback", "general"]);
+const CONTACT_TOPICS = new Set(["support", "licence", "club", "bug", "feedback", "general"]);
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
   const responseHeaders = new Headers({
