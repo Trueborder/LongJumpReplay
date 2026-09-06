@@ -13,6 +13,7 @@ class FramePacket:
     jpeg: bytes
     width: int
     height: int
+    wall_time_ns: int = 0
 
     @property
     def size_bytes(self) -> int:
@@ -101,6 +102,7 @@ class AttemptSession:
     takeoff_confidence: float = 0.0
     media_start_timestamp_ns: int = 0
     media_end_timestamp_ns: int = 0
+    media_start_wall_time_ns: int = 0
     width: int = 0
     height: int = 0
     markers: list[AttemptMarker] = field(default_factory=list)
@@ -163,3 +165,4 @@ class TimelineModel:
     available_start_ns: int | None = None
     available_end_ns: int | None = None
     is_live: bool = False
+    wall_start_ns: int = 0

@@ -54,6 +54,7 @@ class GeneralConfig:
     show_tooltips: bool = True
     onboarding_completed: bool = False
     progress_details_expanded: bool = False
+    recording_mode_prompted: bool = False
 
 
 @dataclass(slots=True)
@@ -78,6 +79,12 @@ class BufferConfig:
     encoder_queue_size: int = 128
     max_memory_mb: int = 4096
     store_every_nth_frame: int = 1
+
+
+@dataclass(slots=True)
+class CaptureConfig:
+    mode: str = "buffer"  # buffer | capture
+    max_duration_seconds: float = 600.0
 
 
 @dataclass(slots=True)
@@ -254,8 +261,8 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
 @dataclass(slots=True)
 class TimelineConfig:
     detail_window_seconds: float = 2.0
-    min_detail_seconds: float = 0.1
-    max_detail_seconds: float = 60.0
+    min_detail_seconds: float = 0.5
+    max_detail_seconds: float = 600.0
     show_frame_ticks: bool = True
     snap_to_frames: bool = True
 
@@ -302,11 +309,10 @@ class ShuttleConfig:
     shuttle_debounce_ms: int = 250
     button_map: dict[str, int] = field(
         default_factory=lambda: {
-            "freeze_toggle": 1,
-            "return_live": 2,
-            "decision_valid": 3,
-            "decision_foul": 4,
-            "decision_review": 5,
+            "return_live": 1,
+            "freeze_toggle": 2,
+            "select_latest_capture": 4,
+            "hold_playback": 5,
         }
     )
     keyboard_fallback: bool = True
@@ -317,6 +323,7 @@ class AppConfig:
     general: GeneralConfig = field(default_factory=GeneralConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     buffer: BufferConfig = field(default_factory=BufferConfig)
+    capture: CaptureConfig = field(default_factory=CaptureConfig)
     attempts: AttemptsConfig = field(default_factory=AttemptsConfig)
     athlete_timer: AthleteTimerConfig = field(default_factory=AthleteTimerConfig)
     competition: CompetitionConfig = field(default_factory=CompetitionConfig)
@@ -353,6 +360,10 @@ class AppConfig:
             raise ValueError("buffer.max_memory_mb must be at least 128")
         if isinstance(self.buffer.store_every_nth_frame, bool) or not isinstance(self.buffer.store_every_nth_frame, int) or not 1 <= self.buffer.store_every_nth_frame <= 100:
             raise ValueError("buffer.store_every_nth_frame must be an integer between 1 and 100")
+        if self.capture.mode not in {"buffer", "capture"}:
+            raise ValueError("capture.mode must be buffer or capture")
+        if not 1 <= self.capture.max_duration_seconds <= 3600:
+            raise ValueError("capture.max_duration_seconds must be between 1 and 3600")
         if self.attempts.pre_seconds < 0 or self.attempts.post_seconds < 0:
             raise ValueError("Attempt pre/post roll cannot be negative")
         if self.attempts.retention_minutes < 0.5:

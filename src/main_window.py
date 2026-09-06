@@ -61,7 +61,7 @@ from .settings_dialog import SettingsDialog
 from .shuttle_hid import ShuttleHIDPoller, list_shuttle_devices
 from .takeoff_assist import detect_takeoff_candidate
 from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed_info
-from .timeline import ProfessionalTimeline
+from .timeline import ProfessionalTimeline, format_wall_time_ns
 from .trial import capabilities_for, record_successful_export, trial_exports_remaining, trial_is_active, trial_status
 from .video_canvas import VideoCanvas
 from .update_ui import UpdateCheckDialog, UpdateDialog
@@ -150,7 +150,12 @@ class MainWindow:
         self.action_queue: Queue[tuple[str, int]] = Queue()
         self.event_queue: Queue[tuple[str, object]] = Queue()
         self.buffer = TimeRingBuffer(config.buffer.duration_seconds, config.buffer.max_memory_mb)
-        self.capture = CaptureEngine(config.camera, config.buffer, self.buffer)
+        self.capture = CaptureEngine(
+            config.camera,
+            config.buffer,
+            self.buffer,
+            buffer_enabled=config.capture.mode == "buffer",
+        )
         self.attempts = AttemptManager(
             self.buffer,
             config.attempts,
@@ -158,6 +163,7 @@ class MainWindow:
             resolve_user_path(config_path, config.attempts.cache_directory),
             self.event_queue,
         )
+        self.capture.set_packet_listener(self.attempts.append_recording_packet)
         self.adjudication = AdjudicationSessionStore(config_path.parent / "adjudication", writable_data_directory() / "adjudication-recovery")
         self.playback = PlaybackController(self.buffer, self.attempts)
         self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
@@ -222,6 +228,9 @@ class MainWindow:
         self._measurement_continue_attempt_id: int | None = None
         self._measurement_popup: tk.Toplevel | None = None
         self._measurement_popup_save_button: ttk.Button | None = None
+        self._recording_auto_stop_job: str | None = None
+        self._hold_playback = False
+        self._hold_playback_job: str | None = None
         self._telemetry = RuntimeTelemetry()
         self._logger = logging.getLogger("long_jump_replay")
         self._startup_update_task = startup_update_task
@@ -263,6 +272,10 @@ class MainWindow:
             self._schedule_trial_expiry_check()
         if not self.config.general.onboarding_completed:
             self.root.after(350, self.show_onboarding)
+        if not self.config.general.recording_mode_prompted:
+            # Let startup actions, camera readiness, and the onboarding card
+            # settle before presenting this non-blocking mode choice.
+            self.root.after(5000, self._prompt_recording_mode)
         if self._startup_update_task is not None:
             self.root.after(700, lambda: self._poll_update_task(self._startup_update_task, manual=False))
         report("Judge station ready", 4, 4, "Required workers are running", phase="services")
@@ -296,6 +309,7 @@ class MainWindow:
         self.status_var = tk.StringVar(value="Initialising…")
         self.message_var = tk.StringVar(value="")
         self.warning_var = tk.StringVar(value="")
+        self.recording_var = tk.StringVar(value="")
         self.attempt_summary_var = tk.StringVar(value=self._t("attempts.none"))
         self.competition_banner_var = tk.StringVar(value="")
         self.group_var = tk.StringVar(value=self.config.competition.active_group)
@@ -577,7 +591,7 @@ class MainWindow:
         self.comparison_prev_canvas = VideoCanvas(self.video_host, self.palette, compact=True, guide_enabled=False, board_roi_enabled=False, board_roi_visible=False, language=self.config.general.language)
         self.comparison_next_canvas = VideoCanvas(self.video_host, self.palette, compact=True, guide_enabled=False, board_roi_enabled=False, board_roi_visible=False, language=self.config.general.language)
 
-        self.timeline_wrap = ttk.Frame(self.workspace, style="Panel.TFrame", padding=(8, 7), height=max(176, self.config.display.timeline_height))
+        self.timeline_wrap = ttk.Frame(self.workspace, style="Panel.TFrame", padding=(5, 4), height=max(176, self.config.display.timeline_height))
         self.timeline_wrap.rowconfigure(0, weight=1)
         self.timeline_wrap.columnconfigure(0, weight=1)
         self.timeline = ProfessionalTimeline(
@@ -599,7 +613,7 @@ class MainWindow:
         self.root.after_idle(self._set_timeline_sash)
         self.root.after(180, self._set_timeline_sash)
 
-        self.controls = ttk.Frame(self.workspace, style="ControlDock.TFrame", padding=(10, 8))
+        self.controls = ttk.Frame(self.workspace, style="ControlDock.TFrame", padding=(7, 5))
         self.controls.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), width=14, style="PrimaryJudge.TButton", command=self.toggle_freeze)
         self.freeze_button.pack(side="left")
@@ -607,6 +621,8 @@ class MainWindow:
         # alias for integrations, but do not create a second visible button.
         self.live_button = self.freeze_button
         self.freeze_button.pack(side="left", padx=(0, 12))
+        self.recording_status_label = ttk.Label(self.controls, textvariable=self.recording_var, style="Warning.TLabel")
+        self.recording_status_label.pack(side="left", padx=(0, 12))
         self.frame_group = ttk.Frame(self.controls, style="ControlDock.TFrame")
         self.frame_group_label = ttk.Label(self.frame_group, text=self._t("controls.frame_review"), style="ContextTitle.TLabel")
         self.frame_group_label.pack(anchor="w")
@@ -642,7 +658,7 @@ class MainWindow:
         self.board_setup_button.pack(side="left")
         self.board_setup_frame.pack(side="right", padx=(6, 0))
 
-        self.measurement_frame = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(10, 7))
+        self.measurement_frame = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(7, 5))
         self.measurement_title_label = ttk.Label(self.measurement_frame, text=self._t("measurement.title"), style="ContextTitle.TLabel")
         self.measurement_title_label.pack(side="left", padx=(0, 12))
         self.measurement_distance_label = ttk.Label(self.measurement_frame, text=self._t("measurement.distance"), style="Muted.TLabel")
@@ -710,7 +726,7 @@ class MainWindow:
         self.side_notebook.pack(fill="both", expand=True)
         self.recordings_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
         self.board_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
-        self.side_notebook.add(self.recordings_tab, text=self._t("attempts.title").title())
+        self.side_notebook.add(self.recordings_tab, text=self._t("captures.title").title())
         self.side_notebook.add(self.board_tab, text=self._t("board.title").title())
 
         tree = ttk.Treeview(self.recordings_tab, columns=("group", "athlete", "try", "result", "distance", "wind", "time", "media", "keep"), show="headings", selectmode="browse")
@@ -1091,6 +1107,14 @@ class MainWindow:
     def _update_video_labels(self) -> None:
         self._update_judging_controls()
         p = self.palette; stats = self.capture.stats()
+        if self.config.capture.mode == "capture":
+            self.freeze_button.configure(text="Stop recording" if self.attempts.is_recording else "Record")
+            if self.attempts.is_recording:
+                self.recording_var.set(f"● RECORDING {self.attempts.recording_elapsed_seconds():05.1f}s")
+            elif self.recording_var.get().startswith("●"):
+                self.recording_var.set("")
+        else:
+            self.freeze_button.configure(text=self._t("button.live") if self.playback.mode is not PlaybackMode.LIVE else self._t("button.freeze"))
         if self._system_paused:
             self.camera_waiting_frame.place_forget(); self.camera_action_frame.place_forget()
             self.mode_var.set(self._t("mode.paused")); self.mode_badge.configure(bg=p["muted"], fg="#ffffff")
@@ -1124,7 +1148,9 @@ class MainWindow:
             if attempt:
                 rel = (self._displayed_timestamp_ns - attempt.freeze_timestamp_ns) / 1e9
                 assist = f" · {self._t("overlay.assist")} {attempt.takeoff_confidence:.0%}" if attempt.takeoff_candidate_index is not None and self.config.display.show_takeoff_assist_badge else ""
-                secondary = f"{self._attempt_roster_display(attempt)} · {self._t("overlay.frame")} {self.playback.attempt_frame_index + 1}/{max(1, attempt.frame_count)} · {rel:+.3f} s · {self._decision_display(attempt.decision)}{assist}"
+                wall_ns = attempt.media_start_wall_time_ns + max(0, self._displayed_timestamp_ns - attempt.start_timestamp_ns) if attempt.media_start_wall_time_ns else 0
+                wall = format_wall_time_ns(wall_ns) if wall_ns else f"+{rel:.3f}s"
+                secondary = f"{self._attempt_roster_display(attempt)} · {wall} · {self._t("overlay.frame")} {self.playback.attempt_frame_index + 1}/{max(1, attempt.frame_count)} · {self._decision_display(attempt.decision)}{assist}"
                 color = self._decision_color(attempt.decision)
                 self.replay_canvas.set_status(label, color, secondary)
 
@@ -1138,9 +1164,12 @@ class MainWindow:
         capture, buffer = self.capture.stats(), self.buffer.stats()
         cache_gb = self.attempts.cache_size_bytes() / 1024 ** 3
         self.camera_var.set(capture.source_description); self.clock_var.set(time.strftime("%H:%M:%S"))
+        if self.config.capture.mode == "capture":
+            capture_text = f"CAP {capture.capture_fps:5.1f} fps  ·  CAPTURE MODE"
+        else:
+            capture_text = f"CAP {capture.capture_fps:5.1f} fps  ·  BUFFER {capture.encode_fps:5.1f} fps / {buffer.duration_seconds:4.1f} s"
         self.status_var.set(
-            f"CAP {capture.capture_fps:5.1f} fps  ·  BUFFER {capture.encode_fps:5.1f} fps / {buffer.duration_seconds:4.1f} s  ·  "
-            f"RAM {buffer.memory_bytes / 1024 ** 2:,.0f} MB  ·  drops {capture.queue_drops}  ·  cache {cache_gb:.2f} GB"
+            f"{capture_text}  ·  RAM {buffer.memory_bytes / 1024 ** 2:,.0f} MB  ·  drops {capture.queue_drops}  ·  cache {cache_gb:.2f} GB"
         )
         warning = self._capture_quality_warning(capture)
         if self.config.display.show_capture_warnings and warning:
@@ -1473,14 +1502,32 @@ class MainWindow:
             markers = [m.timestamp_ns for m in attempt.markers]
             if attempt.takeoff_candidate_index is not None:
                 markers.append(attempt.start_timestamp_ns + int(attempt.takeoff_candidate_index / max(1.0, attempt.fps) * 1e9))
-            model = TimelineModel(attempt.start_timestamp_ns, max(attempt.start_timestamp_ns + 1, attempt.end_timestamp_ns), playhead,
-                                  attempt.freeze_timestamp_ns, attempt.freeze_timestamp_ns, tuple(markers),
-                                  attempt.start_timestamp_ns, attempt.end_timestamp_ns, False)
+            model = TimelineModel(
+                attempt.start_timestamp_ns,
+                max(attempt.start_timestamp_ns + 1, attempt.end_timestamp_ns),
+                playhead,
+                attempt.freeze_timestamp_ns,
+                attempt.freeze_timestamp_ns,
+                tuple(markers),
+                attempt.start_timestamp_ns,
+                attempt.end_timestamp_ns,
+                False,
+                attempt.media_start_wall_time_ns or int(attempt.created_wall_time * 1_000_000_000),
+            )
         elif oldest and newest:
             packet = newest if self.playback.mode is PlaybackMode.LIVE else self.buffer.get(self.playback.live_seq)
-            model = TimelineModel(oldest.timestamp_ns, newest.timestamp_ns, packet.timestamp_ns if packet else newest.timestamp_ns,
-                                  newest.timestamp_ns, None, (), oldest.timestamp_ns, newest.timestamp_ns,
-                                  self.playback.mode is PlaybackMode.LIVE)
+            model = TimelineModel(
+                oldest.timestamp_ns,
+                newest.timestamp_ns,
+                packet.timestamp_ns if packet else newest.timestamp_ns,
+                newest.timestamp_ns,
+                None,
+                (),
+                oldest.timestamp_ns,
+                newest.timestamp_ns,
+                self.playback.mode is PlaybackMode.LIVE,
+                oldest.wall_time_ns,
+            )
         else: model = None
         self.timeline.set_model(model)
 
@@ -1882,6 +1929,8 @@ class MainWindow:
             elif action == "select_attempt": self.select_relative_attempt(amount)
             elif action == "freeze_toggle": self.toggle_freeze()
             elif action == "return_live": self.return_live()
+            elif action == "select_latest_capture": self.select_latest_capture()
+            elif action == "hold_playback": self._set_hold_playback(bool(amount))
             elif action == "decision_not_decided": self.mark_decision(AttemptDecision.NOT_DECIDED)
             elif action == "decision_valid": self.mark_decision(AttemptDecision.VALID)
             elif action == "decision_foul": self.mark_decision(AttemptDecision.FOUL)
@@ -2134,7 +2183,99 @@ class MainWindow:
             self._show_message("The evaluation is locked. Activate a paid licence to continue.", 8)
         return False
 
+    def _recording_assignment(self) -> RosterAssignment | None:
+        assignment = self.competition.assignment_for_current(self.attempts.attempts())
+        if self.config.competition.enabled and assignment is None and self._maybe_start_final_round():
+            assignment = self.competition.assignment_for_current(self.attempts.attempts())
+        return assignment
+
+    def toggle_recording(self) -> None:
+        if not self._trial_action_allowed("freeze") or self._system_paused:
+            return
+        self._cancel_scheduled_review()
+        if self.attempts.is_recording:
+            assignment = self._recording_assignment()
+            attempt_id = self.attempts.stop_recording(
+                competitor_group=assignment.group if assignment else "",
+                competitor_number=assignment.competitor_number if assignment else 0,
+                competitor_attempt_number=assignment.attempt_number if assignment else 0,
+                competition_phase=assignment.phase if assignment else "qualification",
+            )
+            self._cancel_recording_auto_stop()
+            self.recording_var.set("")
+            if attempt_id is None:
+                self._show_message("No encoded frames were available for this capture.", 5)
+                return
+            self._selected_action_attempt_id = attempt_id
+            self.playback.select_attempt(attempt_id, at_freeze=False)
+            attempt = self.attempts.get_attempt(attempt_id)
+            if attempt is not None:
+                try:
+                    self._ensure_adjudication_record(attempt)
+                    self._durability_blocked_attempt_id = None
+                except DurabilityError as exc:
+                    self._durability_blocked_attempt_id = attempt_id
+                    self._show_message(f"Capture saved, but result storage is unavailable: {exc}", 10)
+            self.competition_board.clear_focus()
+            self.athlete_timer.stop(); self._update_athlete_timer_display()
+            self._last_replay_key = None; self._last_board_signature = None
+            self._refresh_attempts(); self._refresh_current_try()
+            return
+        assignment = self._recording_assignment()
+        if self.config.competition.enabled and assignment is None:
+            self._show_message("The selected athlete has completed all configured attempts. Select another athlete or configure the final round.", 7)
+            return
+        if not self.attempts.start_recording():
+            return
+        self.recording_var.set("● RECORDING")
+        self._recording_auto_stop_job = self.root.after(
+            max(1000, int(self.config.capture.max_duration_seconds * 1000)),
+            self._auto_stop_recording,
+        )
+        self._show_message("Capture recording started.", 3)
+
+    def _auto_stop_recording(self) -> None:
+        self._recording_auto_stop_job = None
+        if self.attempts.is_recording:
+            self._show_message("Maximum capture duration reached; recording stopped.", 6)
+            self.toggle_recording()
+
+    def _cancel_recording_auto_stop(self) -> None:
+        if self._recording_auto_stop_job:
+            try: self.root.after_cancel(self._recording_auto_stop_job)
+            except tk.TclError: pass
+            self._recording_auto_stop_job = None
+
+    def select_latest_capture(self) -> None:
+        attempts = self.attempts.attempts()
+        if attempts:
+            self._open_attempt_from_board(attempts[-1].attempt_id)
+            try: self.side_notebook.select(self.recordings_tab)
+            except tk.TclError: pass
+
+    def _set_hold_playback(self, pressed: bool) -> None:
+        self._hold_playback = pressed
+        if pressed:
+            if self.playback.mode is not PlaybackMode.ATTEMPT:
+                self.select_latest_capture()
+            if self._hold_playback_job is None:
+                self._hold_playback_tick()
+        elif self._hold_playback_job:
+            try: self.root.after_cancel(self._hold_playback_job)
+            except tk.TclError: pass
+            self._hold_playback_job = None
+
+    def _hold_playback_tick(self) -> None:
+        self._hold_playback_job = None
+        if not self._hold_playback or self.playback.mode is not PlaybackMode.ATTEMPT:
+            return
+        self.step_frame(1)
+        self._hold_playback_job = self.root.after(33, self._hold_playback_tick)
+
     def toggle_freeze(self) -> None:
+        if self.config.capture.mode == "capture":
+            self.toggle_recording()
+            return
         if not self._trial_action_allowed("freeze"):
             return
         self._cancel_scheduled_review()
@@ -2888,6 +3029,33 @@ class MainWindow:
             self.check_for_updates,
         )
 
+    def _prompt_recording_mode(self) -> None:
+        if self._closing or self.config.general.recording_mode_prompted:
+            return
+        dialog = tk.Toplevel(self.root)
+        configure_popup(dialog, self.root)
+        dialog.title("Choose recording mode")
+        dialog.geometry("560x330")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        body = ttk.Frame(dialog, style="App.TFrame", padding=24)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Choose how LongJumpReplay records", style="SettingsHeroTitle.TLabel").pack(anchor="w")
+        ttk.Label(body, text="This choice controls whether the live rolling buffer is used. You can change it later in Settings; a restart is required.", style="SettingsHeroDesc.TLabel", wraplength=500, justify="left").pack(anchor="w", pady=(6, 16))
+        mode = tk.StringVar(dialog, value=self.config.capture.mode)
+        ttk.Radiobutton(body, text="Buffer mode — keep the current rolling replay and Freeze workflow", variable=mode, value="buffer").pack(anchor="w", pady=5)
+        ttk.Radiobutton(body, text="Capture mode — no rolling buffer; use Record and Stop", variable=mode, value="capture").pack(anchor="w", pady=5)
+        actions = ttk.Frame(body, style="App.TFrame")
+        actions.pack(fill="x", pady=(20, 0))
+        def finish() -> None:
+            self.config.capture.mode = mode.get()
+            self.config.general.recording_mode_prompted = True
+            save_config(self._config_for_persistence(self.config), self.config_path)
+            dialog.destroy()
+            self._show_message("Recording mode saved. Restart LongJumpReplay to apply it.", 8)
+        ttk.Button(actions, text="Save choice", style="Accent.TButton", command=finish).pack(side="right")
+        dialog.protocol("WM_DELETE_WINDOW", finish)
+
     def restart_now(self, startup_camera_index: int | None = None) -> None:
         """Launch the same command line again, then use the normal bounded shutdown."""
         self._save_config_safely()
@@ -2998,7 +3166,7 @@ class MainWindow:
         self.measurement_save_button.configure(text=self._t("measurement.save"))
         self.measurement_skip_button.configure(text=self._t("measurement.skip"))
         try:
-            self.side_notebook.tab(self.recordings_tab, text=self._t("attempts.title").title())
+            self.side_notebook.tab(self.recordings_tab, text=self._t("captures.title").title())
             self.side_notebook.tab(self.board_tab, text=self._t("board.title").title())
         except tk.TclError:
             pass
@@ -3012,6 +3180,14 @@ class MainWindow:
         self._refresh_attempts()
 
     def apply_settings(self, new_config: AppConfig) -> None:
+        preserved_timeline_height: int | None = None
+        try:
+            if self._timeline_pane_added and self.media_pane.winfo_height() > 10:
+                measured = self.media_pane.winfo_height() - int(self.media_pane.sashpos(0))
+                if MIN_TIMELINE_HEIGHT <= measured <= MAX_TIMELINE_HEIGHT:
+                    preserved_timeline_height = measured
+        except tk.TclError:
+            pass
         if self._evaluation_mode:
             new_config.competition.enabled = False
             new_config.competition.show_competition_board = False
@@ -3020,11 +3196,18 @@ class MainWindow:
             new_config.competition.auto_save_evidence = False
             new_config.display.show_decision_controls = False
         camera_changed = new_config.camera != self.config.camera or new_config.buffer != self.config.buffer
+        requested_capture_mode = new_config.capture.mode
+        capture_mode_changed = requested_capture_mode != self.config.capture.mode
         language_changed = new_config.general.language != self.config.general.language
         timer_duration_changed = new_config.athlete_timer.duration_seconds != self.config.athlete_timer.duration_seconds
         if self._persistent_camera_source_type is not None and new_config.camera.source_type != self.config.camera.source_type:
             self._persistent_camera_source_type = new_config.camera.source_type
+        if capture_mode_changed:
+            new_config = deepcopy(new_config)
+            new_config.capture.mode = self.config.capture.mode
         self.config = new_config
+        if preserved_timeline_height is not None:
+            self.config.display.timeline_height = preserved_timeline_height
         if timer_duration_changed:
             self.athlete_timer.set_duration(new_config.athlete_timer.duration_seconds)
             self._update_athlete_timer_display()
@@ -3052,12 +3235,20 @@ class MainWindow:
             self.view_menu_button.configure(menu=self.view_menu)
             self.help_menu_button.configure(menu=self.help_menu)
         self._refresh_competitor_selector()
-        self.root.after_idle(self._set_timeline_sash)
+        # _apply_visibility positions the sash when the timeline is newly
+        # shown. Leave an already-visible sash untouched so merely applying
+        # Settings cannot resize the operator's timeline.
         self._install_hotkeys()
         self.shuttle.stop()
         self.shuttle = ShuttleHIDPoller(new_config.shuttle, self.action_queue)
         self.shuttle.start()
-        save_config(self._config_for_persistence(new_config), self.config_path)
+        persisted_config = self._config_for_persistence(new_config)
+        if capture_mode_changed:
+            persisted_config.capture.mode = requested_capture_mode
+            persisted_config.general.recording_mode_prompted = True
+        save_config(persisted_config, self.config_path)
+        if capture_mode_changed:
+            self._show_message("Recording mode changed in Settings. Restart LongJumpReplay to apply it.", 8)
         if camera_changed:
             language_is_en = new_config.general.language != "cs"
             restart = ask_themed_yes_no(
@@ -3489,6 +3680,9 @@ class MainWindow:
     def close(self) -> None:
         if self._closing: return
         self._closing = True; self._cancel_scheduled_review()
+        self._cancel_recording_auto_stop()
+        if self.attempts.is_recording:
+            self.attempts.stop_recording()
         self._camera_probe_generation += 1
         self._camera_probe_stop.set()
         log_event(self._logger, "shutdown_requested", playback_mode=self.playback.mode.value)

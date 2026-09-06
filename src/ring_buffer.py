@@ -25,11 +25,11 @@ class TimeRingBuffer:
         self._next_seq = 0
         self._lock = RLock()
 
-    def append(self, timestamp_ns: int, jpeg: bytes, width: int, height: int) -> FramePacket:
+    def append(self, timestamp_ns: int, jpeg: bytes, width: int, height: int, wall_time_ns: int = 0) -> FramePacket:
         if not jpeg:
             raise ValueError("JPEG data cannot be empty")
         with self._lock:
-            packet = FramePacket(self._next_seq, timestamp_ns, bytes(jpeg), width, height)
+            packet = FramePacket(self._next_seq, timestamp_ns, bytes(jpeg), width, height, wall_time_ns)
             self._next_seq += 1
             self._packets[packet.seq] = packet
             self._timestamps.append(timestamp_ns)

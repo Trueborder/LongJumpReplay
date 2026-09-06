@@ -56,6 +56,86 @@ class AttemptManager:
         self._cancelled_attempt_ids: set[int] = set()
         self._cache_size_value: int | None = None
         self._cache_size_checked_at = 0.0
+        self._recording_packets: list[FramePacket] | None = None
+        self._recording_started_wall_time = 0.0
+
+    @property
+    def is_recording(self) -> bool:
+        with self._lock:
+            return self._recording_packets is not None
+
+    def start_recording(self) -> bool:
+        with self._lock:
+            if self._recording_packets is not None:
+                return False
+            self._recording_packets = []
+            self._recording_started_wall_time = time.time()
+            return True
+
+    def append_recording_packet(self, packet: FramePacket) -> None:
+        with self._lock:
+            if self._recording_packets is not None:
+                self._recording_packets.append(packet)
+
+    def recording_elapsed_seconds(self) -> float:
+        with self._lock:
+            if self._recording_packets and len(self._recording_packets) > 1:
+                return max(0.0, (self._recording_packets[-1].timestamp_ns - self._recording_packets[0].timestamp_ns) / 1e9)
+            if self._recording_packets:
+                return max(0.0, time.time() - self._recording_started_wall_time)
+            return 0.0
+
+    def stop_recording(
+        self,
+        competitor_group: str = "",
+        competitor_number: int = 0,
+        competitor_attempt_number: int = 0,
+        competition_phase: str = "qualification",
+    ) -> int | None:
+        with self._lock:
+            packets = self._recording_packets
+            self._recording_packets = None
+            self._recording_started_wall_time = 0.0
+            if not packets:
+                return None
+            for existing in self._attempts:
+                existing.selected = False
+            first, last = packets[0], packets[-1]
+            now = first.wall_time_ns / 1e9 if first.wall_time_ns else time.time()
+            attempt = AttemptSession(
+                attempt_id=self._next_id,
+                created_monotonic_ns=time.monotonic_ns(),
+                created_wall_time=now,
+                freeze_timestamp_ns=last.timestamp_ns,
+                pre_seconds=0.0,
+                post_seconds=0.0,
+                expires_at_wall_time=now + self.config.retention_minutes * 60,
+                state=AttemptState.ENCODING,
+                packets=list(packets),
+                frame_count=len(packets),
+                freeze_frame_index=len(packets) - 1,
+                fps=estimate_fps(packets, fallback=30.0),
+                width=first.width,
+                height=first.height,
+                media_start_timestamp_ns=first.timestamp_ns,
+                media_end_timestamp_ns=last.timestamp_ns,
+                media_start_wall_time_ns=first.wall_time_ns,
+                markers=[
+                    AttemptMarker(first.timestamp_ns, "Record"),
+                    AttemptMarker(last.timestamp_ns, "Stop"),
+                ],
+                selected=self.config.auto_select_new,
+                competitor_group=competitor_group,
+                competitor_number=competitor_number,
+                competitor_attempt_number=competitor_attempt_number,
+                competition_phase=competition_phase,
+            )
+            self._next_id += 1
+            self._attempts.append(attempt)
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt.attempt_id))
+        self._submit_encode(attempt.attempt_id)
+        return attempt.attempt_id
 
     def start(self) -> None:
         self.cache_directory.mkdir(parents=True, exist_ok=True)
@@ -696,6 +776,7 @@ class AttemptManager:
             "height": attempt.height,
             "media_start_timestamp_ns": attempt.media_start_timestamp_ns,
             "media_end_timestamp_ns": attempt.media_end_timestamp_ns,
+            "media_start_wall_time_ns": attempt.media_start_wall_time_ns,
             "export_path": str(attempt.export_path) if attempt.export_path else None,
             "evidence_raw_path": str(attempt.evidence_raw_path) if attempt.evidence_raw_path else None,
             "evidence_annotated_path": str(attempt.evidence_annotated_path) if attempt.evidence_annotated_path else None,
@@ -756,6 +837,7 @@ class AttemptManager:
                     height=int(data.get("height", 0)),
                     media_start_timestamp_ns=int(data.get("media_start_timestamp_ns", 0)),
                     media_end_timestamp_ns=int(data.get("media_end_timestamp_ns", 0)),
+                    media_start_wall_time_ns=int(data.get("media_start_wall_time_ns", 0)),
                     markers=[AttemptMarker(int(m["timestamp_ns"]), str(m.get("label", "Marker"))) for m in data.get("markers", [])],
                     export_path=Path(data["export_path"]) if data.get("export_path") else None,
                     evidence_raw_path=Path(data["evidence_raw_path"]) if data.get("evidence_raw_path") else None,

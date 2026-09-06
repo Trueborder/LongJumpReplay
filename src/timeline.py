@@ -4,6 +4,7 @@ import math
 import time
 import tkinter as tk
 from collections.abc import Callable
+from datetime import datetime
 
 from .models import TimelineModel
 from .i18n import tr
@@ -25,6 +26,18 @@ def format_relative(seconds: float, detailed: bool = False) -> str:
         return f"{sign}{value:0.3f}s"
     minutes, sec = divmod(value, 60)
     return f"{sign}{int(minutes):02d}:{sec:04.1f}"
+
+
+def format_wall_time_ns(wall_time_ns: int) -> str:
+    if not wall_time_ns:
+        return "--:--:--.---"
+    return datetime.fromtimestamp(wall_time_ns / 1_000_000_000).astimezone().strftime("%H:%M:%S.%f")[:-3]
+
+
+def format_timeline_span(seconds: float) -> str:
+    if seconds >= 60:
+        return f"{seconds / 60:.1f} min view"
+    return f"{seconds:.1f} s view"
 
 
 def centered_window(playhead_ns: int, duration_seconds: float) -> tuple[int, int]:
@@ -92,6 +105,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._drag_start_playhead_ns = 0
         self._queued_seek_ns: int | None = None
         self._seek_job: str | None = None
+        self._zoom_dragging = False
 
         self._create_item_pool()
         self.bind("<Configure>", self._on_configure)
@@ -114,6 +128,8 @@ class ProfessionalTimeline(tk.Canvas):
         self._items["mode"] = self.create_text(self.SIDE_PAD, 12, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 8))
         self._items["timecode"] = self.create_text(1, 12, anchor="center", text="+0.000s", fill=p["text"], font=("Consolas", 10, "bold"))
         self._items["zoom"] = self.create_text(1, 12, anchor="e", text=tr(self.language, "timeline.view", seconds=2.0), fill=p["muted"], font=("Segoe UI", 8))
+        self._items["zoom_track"] = self.create_line(1, 23, 2, 23, fill=p["border"], width=3)
+        self._items["zoom_thumb"] = self.create_oval(1, 19, 2, 27, fill=p["accent"], outline=p["accent"])
 
         self._items["detail_bg"] = self.create_rectangle(1, self.DETAIL_TOP, 2, self.DETAIL_BOTTOM, fill=p["timeline"], outline=p["border"])
         self._items["detail_available"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 2, self.DETAIL_BOTTOM - 1, fill=p["surface2"], outline="")
@@ -156,6 +172,8 @@ class ProfessionalTimeline(tk.Canvas):
         self.itemconfigure(self._items["mode"], fill=p["muted"])
         self.itemconfigure(self._items["timecode"], fill=p["text"])
         self.itemconfigure(self._items["zoom"], fill=p["muted"])
+        self.itemconfigure(self._items["zoom_track"], fill=p["border"])
+        self.itemconfigure(self._items["zoom_thumb"], fill=p["accent"], outline=p["accent"])
         self.itemconfigure(self._items["detail_bg"], fill=p["timeline"], outline=p["border"])
         self.itemconfigure(self._items["detail_available"], fill=p["surface2"])
         self.itemconfigure(self._items["unavailable_left"], fill=p["bg"])
@@ -233,6 +251,10 @@ class ProfessionalTimeline(tk.Canvas):
         self.coords(self._items["mode"], x0, 12)
         self.coords(self._items["timecode"], cx, 12)
         self.coords(self._items["zoom"], x1, 12)
+        zoom_right = x1 - 2
+        zoom_left = max(x0 + 170, zoom_right - 112)
+        self.coords(self._items["zoom_track"], zoom_left, 23, zoom_right, 23)
+        self.coords(self._items["zoom_thumb"], self._zoom_x(zoom_left, zoom_right) - 4, 19, self._zoom_x(zoom_left, zoom_right) + 4, 27)
         self.coords(self._items["detail_bg"], x0, self.DETAIL_TOP, x1, self.DETAIL_BOTTOM)
         self.coords(self._items["overview_bg"], x0, self.OVERVIEW_TOP, x1, self.OVERVIEW_BOTTOM)
         self.coords(self._items["focus_band"], cx - 22, self.DETAIL_TOP + 1, cx + 22, self.DETAIL_BOTTOM - 1)
@@ -245,7 +267,7 @@ class ProfessionalTimeline(tk.Canvas):
         if model is None or model.end_ns <= model.start_ns:
             self.itemconfigure(self._items["mode"], text=tr(self.language, "timeline.title"))
             self.itemconfigure(self._items["timecode"], text=tr(self.language, "timeline.waiting"))
-            self.itemconfigure(self._items["zoom"], text=tr(self.language, "timeline.view", seconds=self.detail_seconds))
+            self.itemconfigure(self._items["zoom"], text=format_timeline_span(self.detail_seconds))
             self.coords(self._items["detail_available"], x0 + 1, self.DETAIL_TOP + 1, x0 + 1, self.DETAIL_BOTTOM - 1)
             self.coords(self._items["overview_available"], x0 + 1, self.OVERVIEW_TOP + 3, x0 + 1, self.OVERVIEW_BOTTOM - 3)
             self._hide_pools()
@@ -256,8 +278,9 @@ class ProfessionalTimeline(tk.Canvas):
         rel = (playhead - model.reference_ns) / 1e9
         mode_text = tr(self.language, "timeline.live_buffer") if model.is_live else (tr(self.language, "timeline.attempt_review") if model.freeze_ns is not None else tr(self.language, "timeline.buffer_review"))
         self.itemconfigure(self._items["mode"], text=mode_text)
-        self.itemconfigure(self._items["timecode"], text=format_relative(rel, True))
-        self.itemconfigure(self._items["zoom"], text=tr(self.language, "timeline.view", seconds=self.detail_seconds))
+        wall = model.wall_start_ns + max(0, playhead - model.start_ns) if model.wall_start_ns else 0
+        self.itemconfigure(self._items["timecode"], text=format_wall_time_ns(wall) if wall else format_relative(rel, True))
+        self.itemconfigure(self._items["zoom"], text=format_timeline_span(self.detail_seconds))
 
         # Available media is painted once as a broad band; unavailable space is dimmed.
         available_start = model.available_start_ns if model.available_start_ns is not None else model.start_ns
@@ -298,7 +321,8 @@ class ProfessionalTimeline(tk.Canvas):
                 self.coords(label, x, self.DETAIL_TOP + 16)
                 self.itemconfigure(line, state="normal")
                 if x0 + 31 <= x <= x1 - 31:
-                    self.itemconfigure(label, state="normal", text=format_relative(t, duration <= 4.0))
+                    wall = model.wall_start_ns + max(0, ts - model.start_ns) if model.wall_start_ns else 0
+                    self.itemconfigure(label, state="normal", text=format_wall_time_ns(wall) if wall else format_relative(t, duration <= 4.0))
                 else:
                     self.itemconfigure(label, state="hidden")
                 major_i += 1
@@ -405,6 +429,10 @@ class ProfessionalTimeline(tk.Canvas):
 
     def _on_press(self, event) -> str:
         model = self.model
+        if self._zoom_region(event.x, event.y):
+            self._zoom_dragging = True
+            self._set_zoom_from_x(event.x)
+            return "break"
         region = self._region_for_y(event.y)
         if model is None or region is None:
             return "break"
@@ -423,6 +451,9 @@ class ProfessionalTimeline(tk.Canvas):
 
     def _on_drag(self, event) -> str:
         model = self.model
+        if self._zoom_dragging:
+            self._set_zoom_from_x(event.x)
+            return "break"
         if model is None or self._drag_region is None:
             return "break"
         if self._drag_region == "overview":
@@ -436,7 +467,31 @@ class ProfessionalTimeline(tk.Canvas):
 
     def _on_release(self, _event) -> str:
         self._drag_region = None
+        self._zoom_dragging = False
         return "break"
+
+    def _zoom_bounds(self) -> tuple[float, float]:
+        return self.min_detail_seconds, self.max_detail_seconds
+
+    def _zoom_x(self, left: float, right: float) -> float:
+        low, high = self._zoom_bounds()
+        value = math.log(max(low, min(high, self.detail_seconds)) / low) / max(1e-9, math.log(high / low))
+        return left + value * (right - left)
+
+    def _zoom_region(self, x: int, y: int) -> bool:
+        if not 15 <= y <= 31:
+            return False
+        right = self.winfo_width() - self.SIDE_PAD - 2
+        left = max(self.SIDE_PAD + 170, right - 112)
+        return left - 10 <= x <= right + 10
+
+    def _set_zoom_from_x(self, x: int) -> None:
+        right = self.winfo_width() - self.SIDE_PAD - 2
+        left = max(self.SIDE_PAD + 170, right - 112)
+        fraction = max(0.0, min(1.0, (x - left) / max(1.0, right - left)))
+        low, high = self._zoom_bounds()
+        self.detail_seconds = low * ((high / low) ** fraction)
+        self.request_render(force=True)
 
     def _overview_time_at(self, x: int) -> int:
         assert self.model is not None

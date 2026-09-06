@@ -1,5 +1,17 @@
 # Long Jump Replay — Project Knowledge
 
+## LongJumpReplay 4.0 recording and timeline release (2026-09-06)
+
+- Version 4.0.0 adds explicit Record/Stop capture mode, ShuttleXpress capture
+  controls, timeline zoom and millisecond wall-clock labels, a denser operator
+  workspace, selectable video-file paths, and Windows friendly camera names.
+- Applying Settings does not reposition an already-visible timeline sash. The
+  release build generates a clean embedded default configuration and never
+  packages the development computer's mutable root `config.json`.
+- GUI release groups run in separate Python processes and receive one bounded
+  fresh-process retry for transient Tk/synthetic startup races. A group that
+  fails twice still stops the release.
+
 ## Panel sizing, competition-board feedback, and update checking (2026-09-01)
 
 - The Settings > Views page no longer exposes recordings-panel width or
@@ -316,7 +328,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 3.3.8
+- **Current source version:** 4.0.0
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk
@@ -610,6 +622,7 @@ The default file is `config.json`. Important sections:
 
 - `general`: language, confirmations, tooltips
 - `camera`: source, device index, dimensions, requested FPS, FOURCC, backend, reconnect
+- Camera settings show Windows friendly device names while retaining the OpenCV index internally. Selecting the File source enables a directly editable video path and a native file picker; the saved path is opened by `VideoFileSource` after restart.
 - `buffer`: rolling duration, JPEG quality, encoder queue, RAM cap
 - `attempts`: pre/post-roll, retention, max count/cache, temporary codec
 - `athlete_timer`: integer countdown duration from 1 to 600 seconds (default 60)
@@ -1050,3 +1063,10 @@ A change is done only when:
 - The portal distinguishes an inactive licence from an actually deactivated device. A stored active device on an inactive licence is labelled `Inactive licence` and must be deactivated before Delete is offered; only rows whose device status is `deactivated` may be deleted.
 - Email-code and reusable-key activation run blocking network work on daemon threads while Tk polls results on its own event loop. Their theme-aware `Modal.Horizontal.TProgressbar` indicators are 10px high and animate for the full `Working…` request; duplicate actions are disabled, and controls recover after an error.
 - Every `[data-installer-url]` button creates and opens the same focused browser/SmartScreen safety dialog immediately after the installer download begins, including `/welcome/`, `/download/`, and `/download/ljr/`. Closing the dialog restores focus to the button that started that download. The purchase-confirmation page also keeps the guidance visible beside its original button and uses a consistent plural company voice in English and Czech.
+
+## Recording modes and operator timeline (2026-09-06)
+
+- LongJumpReplay now supports a restart-applied `buffer` or `capture` recording mode. Buffer mode preserves rolling replay and Freeze; Capture mode disables ring-buffer persistence and saves only explicit Record/Stop sessions through the existing attempt/export pipeline.
+- Capture mode records the current competition assignment, auto-stops at the configurable maximum (default 10 minutes), finalizes safely on shutdown, and adds Record/Stop markers to the saved attempt timeline. Capture packets retain monotonic media time plus a wall-clock timestamp for local `HH:MM:SS.mmm` display.
+- The timeline has direct drag zoom from 0.5 seconds to 10 minutes, a visible span label, and local wall-clock playhead/tick labels. Applying Settings leaves an already-visible timeline sash untouched and only positions it when the timeline is newly shown.
+- ShuttleXpress defaults are Live, Record/Stop, unused, latest Capture, and hold-to-play from the current position; button mappings remain configurable. Compact operator styling reduces control/panel density so the camera remains dominant.

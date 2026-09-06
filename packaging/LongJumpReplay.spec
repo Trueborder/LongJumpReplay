@@ -8,7 +8,7 @@ a = Analysis(
     pathex=[project_root],
     binaries=[],
     datas=[
-        (os.path.join(project_root, 'config.json'), '.'),
+        (os.path.join(project_root, 'packaging/generated/config.json'), '.'),
         (os.path.join(project_root, 'assets/long_jump_replay.ico'), 'assets'),
         (os.path.join(project_root, 'assets/long_jump_splash.png'), 'assets'),
     ],

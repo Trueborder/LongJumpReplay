@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 import webbrowser
 from collections.abc import Callable
 
@@ -19,6 +19,8 @@ from .theme import ask_themed_yes_no, ask_themed_yes_no_cancel, configure_popup,
 
 ACTION_LABELS = {
     "freeze_toggle": ("Freeze / return to live", "Zmrazit / návrat živě"),
+    "select_latest_capture": ("Open latest capture", "Otevřít poslední záznam"),
+    "hold_playback": ("Hold to play", "Podržením přehrát"),
     "return_live": ("Return to live", "Návrat živě"),
     "previous_frame": ("Previous frame", "Předchozí snímek"),
     "next_frame": ("Next frame", "Následující snímek"),
@@ -48,7 +50,7 @@ ACTION_LABELS = {
 }
 
 SHUTTLE_ACTIONS = [
-    "freeze_toggle", "return_live", "decision_not_decided", "decision_valid", "decision_foul",
+    "freeze_toggle", "return_live", "select_latest_capture", "hold_playback", "decision_not_decided", "decision_valid", "decision_foul",
     "decision_review", "previous_athlete", "next_athlete", "mark_passed", "add_marker",
     "save_frame", "export_attempt", "none",
 ]
@@ -162,6 +164,8 @@ class SettingsDialog(tk.Toplevel):
         brand.pack(side="left")
         ttk.Label(brand, text=self.tr("settings.header"), style="Brand.TLabel").pack(anchor="w")
         ttk.Label(brand, text=self.tr("settings.subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(1, 0))
+        mode_label = "CAPTURE MODE" if self.working.capture.mode == "capture" else "BUFFER MODE"
+        ttk.Label(header, text=mode_label, style="SettingsDirty.TLabel").pack(side="right", padx=(14, 0))
         self.dirty_label = ttk.Label(header, text="", style="SettingsDirty.TLabel")
         self.dirty_label.pack(side="right", padx=(14, 0))
 
@@ -564,6 +568,20 @@ class SettingsDialog(tk.Toplevel):
     def _build_general(self, f: ttk.Frame) -> None:
         r = self._title(f, "General", "Obecné", "Basic application behaviour.", "Základní chování aplikace.")
         g = self.working.general
+        self._vars["capture_mode"] = tk.StringVar(value=self.working.capture.mode)
+        self._vars["capture_max_duration"] = tk.DoubleVar(value=self.working.capture.max_duration_seconds)
+        self._row(
+            f, r, "Recording mode", "Režim záznamu", self._vars["capture_mode"], "combo", ("buffer", "capture"),
+            desc_en="Buffer keeps the rolling live replay. Capture disables that buffer and saves only explicit Record/Stop sessions. Changes apply after restart.",
+            desc_cs="Buffer uchovává průběžný živý replay. Capture buffer vypne a ukládá pouze záznamy po stisku Záznam/Stop. Změna se použije po restartu.",
+            impact="very_high",
+        ); r += 1
+        self._row(
+            f, r, "Maximum capture duration (seconds)", "Maximální délka záznamu (sekundy)", self._vars["capture_max_duration"],
+            desc_en="Capture mode stops safely at this limit. Default: 600 seconds (10 minutes).",
+            desc_cs="Režim Capture se při tomto limitu bezpečně zastaví. Výchozí hodnota: 600 sekund (10 minut).",
+            impact="high",
+        ); r += 1
         self._vars["confirm_destructive"] = tk.BooleanVar(value=g.confirm_destructive_actions)
         self._vars["show_tooltips"] = tk.BooleanVar(value=g.show_tooltips)
         self._vars["fullscreen"] = tk.BooleanVar(value=self.working.display.fullscreen)
@@ -784,6 +802,7 @@ class SettingsDialog(tk.Toplevel):
         c = self.working.camera
         vals = {
             "source": tk.StringVar(value=c.source_type if c.source_type in {"camera", "file"} else "camera"), "device": tk.IntVar(value=c.device_index),
+            "file_path": tk.StringVar(value=c.file_path),
             "width": tk.IntVar(value=c.width), "height": tk.IntVar(value=c.height), "fps": tk.DoubleVar(value=c.fps),
             "backend": tk.StringVar(value=c.backend), "fourcc": tk.StringVar(value=c.fourcc), "reconnect": tk.DoubleVar(value=c.reconnect_seconds),
         }
@@ -796,19 +815,60 @@ class SettingsDialog(tk.Toplevel):
             lambda *_: vals["device"].set(self._camera_choice_to_index.get(str(vals["camera_device_choice"].get()), c.device_index)),
         )
         self._vars.update(vals)
-        self._row(f, r, "Source", "Zdroj", vals["source"], "combo", ("camera", "file"), impact="medium"); r += 1
+        self._row(
+            f, r, "Source", "Zdroj", vals["source"], "combo", ("camera", "file"),
+            desc_en="Use a connected Windows camera or play a video from a file.",
+            desc_cs="Použijte připojenou kameru ve Windows nebo přehrajte video ze souboru.",
+            impact="medium",
+        ); r += 1
         self.camera_device_combo = self._row(
             f, r, "Camera", "Kamera", vals["camera_device_choice"], "combo", tuple(self._camera_choice_to_index),
             desc_en="Available Windows camera names. The leading number is the OpenCV camera index; restart after changing it.",
             desc_cs="Dostupné názvy kamer ve Windows. Úvodní číslo je index kamery OpenCV; po změně aplikaci restartujte.",
             impact="low",
         ); r += 1
+        self.camera_file_entry = self._row(
+            f, r, "Video file", "Video soubor", vals["file_path"], width=34,
+            desc_en="Type a full path or choose a video file. The file is used when Source is set to file.",
+            desc_cs="Zadejte úplnou cestu nebo vyberte video soubor. Soubor se použije, když je Zdroj nastaven na file.",
+            impact="medium",
+        )
+        self.camera_file_browse_button = ttk.Button(
+            self.camera_file_entry.master,
+            text=self._txt("Browse…", "Procházet…"),
+            command=self._browse_camera_file,
+            style="TButton",
+        )
+        self.camera_file_browse_button.grid(row=0, column=3, sticky="w", padx=(8, 0))
+        vals["source"].trace_add("write", self._sync_camera_source_fields)
+        self._sync_camera_source_fields()
+        r += 1
         self._row(f, r, "Width", "Šířka", vals["width"], impact="very_high"); r += 1
         self._row(f, r, "Height", "Výška", vals["height"], impact="very_high"); r += 1
         self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate; the current status is shown after startup.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu; aktuální stav se zobrazí po spuštění.", impact="very_high"); r += 1
         self._row(f, r, "Windows backend", "Windows backend", vals["backend"], "combo", ("DSHOW", "MSMF", "ANY"), impact="medium"); r += 1
         self._row(f, r, "Camera FOURCC", "Formát FOURCC", vals["fourcc"], desc_en="MJPG often enables high FPS over USB.", desc_cs="MJPG často umožní vyšší FPS přes USB.", impact="high"); r += 1
         self._row(f, r, "Reconnect delay (seconds)", "Prodleva opětovného připojení", vals["reconnect"], impact="low")
+
+    def _browse_camera_file(self) -> None:
+        selected = filedialog.askopenfilename(
+            parent=self,
+            title=self._txt("Choose a video file", "Vyberte video soubor"),
+            filetypes=(
+                (self._txt("Video files", "Video soubory"), "*.mp4 *.avi *.mov *.mkv *.m4v *.wmv *.webm"),
+                (self._txt("All files", "Všechny soubory"), "*.*"),
+            ),
+        )
+        if selected:
+            self._vars["file_path"].set(selected)
+            self._vars["source"].set("file")
+
+    def _sync_camera_source_fields(self, *_args: object) -> None:
+        using_file = str(self._vars["source"].get()) == "file"
+        self.camera_device_combo.configure(state="disabled" if using_file else "readonly")
+        self.camera_file_entry.configure(state="normal" if using_file else "disabled")
+        self.camera_file_browse_button.configure(state="normal" if using_file else "disabled")
+
     def _build_board(self, f: ttk.Frame) -> None:
         r = self._title(f, "Board calibration", "Kalibrace prkna", "Calibrate the line and ROI directly on the main video. Numeric position fields are intentionally not duplicated here.", "Kalibraci čáry a ROI prováděj přímo v hlavním videu. Číselná pole pro polohu zde záměrně neopakujeme.")
         d = self.working.display
@@ -1172,6 +1232,8 @@ class SettingsDialog(tk.Toplevel):
         w.general.language = language_from_option(str(self._vars["language"].get()))
         w.general.confirm_destructive_actions = bool(self._vars["confirm_destructive"].get())
         w.general.show_tooltips = bool(self._vars["show_tooltips"].get())
+        w.capture.mode = str(self._vars["capture_mode"].get())
+        w.capture.max_duration_seconds = float(self._vars["capture_max_duration"].get())
         d = w.display
         d.theme = str(self._vars["theme"].get()); d.fullscreen = bool(self._vars["fullscreen"].get()); d.remember_geometry = bool(self._vars["remember_geometry"].get())
         p = w.performance
@@ -1184,6 +1246,7 @@ class SettingsDialog(tk.Toplevel):
         b = w.buffer; b.jpeg_quality = int(self._vars["jpeg_quality"].get())
         cam = w.camera
         cam.source_type = str(self._vars["source"].get()); cam.device_index = int(self._vars["device"].get())
+        cam.file_path = str(self._vars["file_path"].get()).strip()
         cam.width = int(self._vars["width"].get()); cam.height = int(self._vars["height"].get()); cam.fps = float(self._vars["fps"].get())
         cam.backend = str(self._vars["backend"].get()); cam.fourcc = str(self._vars["fourcc"].get()); cam.reconnect_seconds = float(self._vars["reconnect"].get())
         d.guide_enabled = bool(self._vars["guide_enabled"].get()); d.guide_width_px = int(self._vars["guide_width"].get())

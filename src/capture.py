@@ -6,13 +6,13 @@ from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
 import logging
 import time
-from typing import Protocol
+from typing import Callable, Protocol
 
 import cv2
 import numpy as np
 
 from .config import BufferConfig, CameraConfig
-from .models import CaptureStats
+from .models import CaptureStats, FramePacket
 from .ring_buffer import TimeRingBuffer
 
 
@@ -191,10 +191,12 @@ class VideoFileSource:
 
 
 class CaptureEngine:
-    def __init__(self, camera_config: CameraConfig, buffer_config: BufferConfig, ring_buffer: TimeRingBuffer) -> None:
+    def __init__(self, camera_config: CameraConfig, buffer_config: BufferConfig, ring_buffer: TimeRingBuffer, *, buffer_enabled: bool = True) -> None:
         self.camera_config, self.buffer_config, self.ring_buffer = camera_config, buffer_config, ring_buffer
+        self.buffer_enabled = bool(buffer_enabled)
+        self._packet_listener: Callable[[FramePacket], None] | None = None
         self.latest = LatestFrameStore()
-        self._raw_queue: Queue[tuple[int, int, np.ndarray]] = Queue(maxsize=buffer_config.encoder_queue_size)
+        self._raw_queue: Queue[tuple[int, int, int, np.ndarray]] = Queue(maxsize=buffer_config.encoder_queue_size)
         self._stop_event = Event()
         self._capture_thread: Thread | None = None
         self._encoder_thread: Thread | None = None
@@ -210,6 +212,12 @@ class CaptureEngine:
         self._encode_times: deque[float] = deque()
         self._encode_duration_sum_ms = 0.0
         self._logger = logging.getLogger("long_jump_replay.capture")
+
+    def set_buffer_enabled(self, enabled: bool) -> None:
+        self.buffer_enabled = bool(enabled)
+
+    def set_packet_listener(self, listener: Callable[[FramePacket], None] | None) -> None:
+        self._packet_listener = listener
 
     def _make_source(self) -> VideoSource:
         if self.camera_config.source_type == "synthetic":
@@ -288,6 +296,7 @@ class CaptureEngine:
                     if self._stop_event.is_set():
                         break
                     timestamp_ns = time.monotonic_ns()
+                    wall_time_ns = time.time_ns()
                     if not ok or frame is None:
                         consecutive_failures += 1
                         with self._stats_lock:
@@ -301,7 +310,7 @@ class CaptureEngine:
                     with self._stats_lock:
                         self._captured_frames += 1
                         self._capture_fps = self._rolling_fps(self._capture_times, time.perf_counter())
-                    item = (capture_index, timestamp_ns, frame)
+                    item = (capture_index, timestamp_ns, wall_time_ns, frame)
                     try:
                         self._raw_queue.put_nowait(item)
                     except Full:
@@ -339,7 +348,7 @@ class CaptureEngine:
         nth = self.buffer_config.store_every_nth_frame
         while not self._stop_event.is_set() or not self._raw_queue.empty():
             try:
-                capture_index, timestamp_ns, frame = self._raw_queue.get(timeout=.1)
+                capture_index, timestamp_ns, wall_time_ns, frame = self._raw_queue.get(timeout=.1)
             except Empty:
                 continue
             try:
@@ -352,7 +361,13 @@ class CaptureEngine:
                     with self._stats_lock: self._encode_failures += 1
                     continue
                 height, width = frame.shape[:2]
-                self.ring_buffer.append(timestamp_ns, encoded.tobytes(), width, height)
+                jpeg = encoded.tobytes()
+                packet = FramePacket(0, timestamp_ns, jpeg, width, height, wall_time_ns)
+                if self.buffer_enabled:
+                    packet = self.ring_buffer.append(timestamp_ns, jpeg, width, height, wall_time_ns)
+                listener = self._packet_listener
+                if listener is not None:
+                    listener(packet)
                 with self._stats_lock:
                     self._encoded_frames += 1
                     self._encode_duration_sum_ms += elapsed_ms

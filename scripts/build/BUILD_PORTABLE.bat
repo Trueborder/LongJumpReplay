@@ -41,6 +41,7 @@ python -m pip install -r requirements-build.txt || goto :fail
 call "%REPO_ROOT%\scripts\run\RUN_TESTS.bat" || goto :fail
 python app.py --self-test --self-test-report SELF_TEST_SOURCE.txt || goto :fail
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\scripts\build\Write-VersionInfo.ps1" || goto :fail
+python "%REPO_ROOT%\scripts\build\write_default_config.py" || goto :fail
 
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul

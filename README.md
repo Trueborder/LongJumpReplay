@@ -1,4 +1,4 @@
-# Long Jump Replay 3.3
+# Long Jump Replay 4.0
 
 ## Quick operator guide
 
@@ -77,12 +77,14 @@ The main header also contains a visible **Pause system** switch. Pausing release
 
 The timer is available in competition and judge-only modes and is never written into attempt metadata, evidence, or exports.
 
-## What is new in 3.3
+## What is new in 4.0
 
-- Signed automatic update checks run during startup without delaying the application.
-- Update prompts offer Install, Skip this version, and Ask later.
-- Downloads are verified by signed manifest, exact size, and SHA-256 before installation.
-- The customer installer now supports clean installation and in-place upgrades through Inno Setup.
+- Choose the existing rolling Buffer workflow or explicit Record/Stop Capture mode.
+- Open completed recordings from Captures and control recording, selection, and playback from ShuttleXpress.
+- Zoom the timeline from 0.5 seconds to 10 minutes and read local timestamps with millisecond precision.
+- Use a denser operator workspace that keeps more room available for the camera.
+- Choose a video-file source by typing its path or using Browse, and select cameras by their Windows device names.
+- Apply Settings without changing the timeline's current size.
 
 ## What was new in 3.2
 
@@ -256,7 +258,7 @@ scripts\build\BUILD_INSTALLER.bat
 
 After source tests and frozen self-tests pass, it replaces the existing `release` folder and creates:
 
-- `LongJumpReplay-Setup-3.3.0.exe` and its SHA-256 checksum;
+- `LongJumpReplay-Setup-4.0.0.exe` and its SHA-256 checksum;
 - the tested portable application folder used by the installer.
 
 The installer excludes private licensing and update-signing keys. Run it with
@@ -282,7 +284,7 @@ The builder:
 Output:
 
 ```text
-release\LongJumpReplay-3.3.0-Windows-x64.zip
+release\LongJumpReplay-4.0.0-Windows-x64.zip
 ```
 
 The recipient only extracts the ZIP and runs `LongJumpReplay.exe`.

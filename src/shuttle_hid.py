@@ -154,4 +154,8 @@ class ShuttleHIDPoller:
                 action = button_actions.get(pressed)
                 if action:
                     self.action_queue.put((action, 1))
+            for released in previous_buttons - current_buttons:
+                action = button_actions.get(released)
+                if action == "hold_playback":
+                    self.action_queue.put((action, 0))
             previous_buttons = current_buttons

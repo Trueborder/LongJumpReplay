@@ -1,6 +1,7 @@
 import time
 import tkinter as tk
 
+from src.camera_devices import CameraDevice
 from src.config import AppConfig, load_config, save_config
 from src.main_window import MainWindow
 
@@ -230,6 +231,48 @@ def test_withdrawn_startup_waits_for_real_geometry_before_positioning_timeline(t
     root.mainloop()
     assert sizes['video'] > 250
     assert 200 <= sizes['timeline'] <= 280
+
+
+def test_applying_unchanged_settings_preserves_timeline_size(monkeypatch, tmp_path):
+    config = AppConfig()
+    config.camera.source_type = 'file'
+    config.camera.file_path = str(tmp_path / 'missing-test-video.mp4')
+    config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
+    config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
+    config.display.window_geometry = '1100x700'
+    config.general.onboarding_completed = True
+    config.general.recording_mode_prompted = True
+    config.shuttle.enabled = False
+    monkeypatch.setattr(
+        'src.settings_dialog.enumerate_camera_devices',
+        lambda current: [CameraDevice(current, 'Current camera')],
+    )
+    path = tmp_path / 'config.json'
+    save_config(config, path)
+    root = tk.Tk()
+    app = MainWindow(root, config, path)
+    sizes = {}
+
+    def apply_without_changes():
+        root.update_idletasks()
+        sizes['before'] = app.timeline_wrap.winfo_height()
+        sizes['sash_before'] = app.media_pane.sashpos(0)
+        dialog = app.open_settings()
+        dialog.update_idletasks()
+        dialog._apply(True)
+        root.after(350, inspect)
+
+    def inspect():
+        root.update_idletasks()
+        sizes['after'] = app.timeline_wrap.winfo_height()
+        sizes['sash_after'] = app.media_pane.sashpos(0)
+        app.close()
+
+    root.after(700, apply_without_changes)
+    root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+
+    assert (sizes['after'], sizes['sash_after']) == (sizes['before'], sizes['sash_before'])
 
 
 def test_exit_survives_an_out_of_range_timeline_sash(tmp_path):

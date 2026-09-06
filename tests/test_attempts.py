@@ -6,7 +6,7 @@ import numpy as np
 
 from src.attempts import AttemptManager
 from src.config import AttemptsConfig, ExportConfig
-from src.models import AttemptState
+from src.models import AttemptState, FramePacket
 from src.ring_buffer import TimeRingBuffer
 
 
@@ -74,6 +74,24 @@ def test_selected_attempt_does_not_expire(tmp_path, jpeg_frame):
     assert attempt and manager.selected_attempt().attempt_id == attempt.attempt_id
     manager.clear_selection()
     assert manager.selected_attempt() is None
+    manager.stop()
+
+
+def test_explicit_recording_creates_marked_attempt(tmp_path, jpeg_frame):
+    jpeg, _ = jpeg_frame
+    ring = TimeRingBuffer(2, 128)
+    manager = AttemptManager(ring, AttemptsConfig(retention_minutes=1), ExportConfig(), tmp_path / 'cache', Queue())
+    manager.start()
+    base = time.monotonic_ns()
+    wall = time.time_ns()
+    assert manager.start_recording()
+    for index in range(4):
+        manager.append_recording_packet(FramePacket(index, base + index * 20_000_000, jpeg, 160, 90, wall + index * 20_000_000))
+    attempt_id = manager.stop_recording('Boys', 1, 1)
+    assert attempt_id is not None
+    attempt = manager.get_attempt(attempt_id)
+    assert attempt and attempt.media_start_wall_time_ns == wall
+    assert [marker.label for marker in attempt.markers] == ['Record', 'Stop']
     manager.stop()
 
 

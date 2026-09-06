@@ -16,6 +16,8 @@ license_service/data.json
 *.pfx
 packaging/.update-signing-private.pem
 packaging/windows_version_info.txt
+packaging/.default-config.json
+packaging/generated/
 
 # Local developer environments and generated build output
 .venv/

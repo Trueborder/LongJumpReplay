@@ -40,6 +40,8 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     }
     assert dialog._vars["athlete_timer_duration"].get() == 60
     assert str(dialog.camera_device_combo.cget("state")) == "readonly"
+    assert str(dialog.camera_file_entry.cget("state")) == "disabled"
+    assert dialog.camera_file_browse_button.instate(["disabled"])
     source_combos = [widget for _card, widget, _desc in dialog._setting_rows if isinstance(widget, ttk.Combobox) and "camera" in tuple(widget.cget("values"))]
     assert source_combos and "synthetic" not in tuple(source_combos[0].cget("values"))
     assert tuple(dialog.camera_device_combo.cget("values")) == ("0 · Lenovo Built-in", "1 · OBS Virtual Camera")
@@ -78,6 +80,30 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
         assert dialog.apply_close_button.winfo_manager() == "pack"
         assert dialog.footer.winfo_manager() == "grid"
         assert dialog._nav_buttons[page].instate(["selected"])
+    dialog.destroy(); root.destroy()
+
+
+def test_camera_file_source_can_be_typed_or_chosen(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "src.settings_dialog.enumerate_camera_devices",
+        lambda current: [CameraDevice(current, "Current camera")],
+    )
+    chosen = tmp_path / "jump replay.mp4"
+    monkeypatch.setattr("src.settings_dialog.filedialog.askopenfilename", lambda **_kwargs: str(chosen))
+    root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
+    dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
+
+    dialog._vars["source"].set("file")
+    assert str(dialog.camera_device_combo.cget("state")) == "disabled"
+    assert str(dialog.camera_file_entry.cget("state")) == "normal"
+    assert dialog.camera_file_browse_button.instate(["!disabled"])
+
+    dialog.camera_file_browse_button.invoke()
+    assert dialog._vars["file_path"].get() == str(chosen)
+    updated = dialog._apply_vars()
+    assert updated.camera.source_type == "file"
+    assert updated.camera.file_path == str(chosen)
+
     dialog.destroy(); root.destroy()
 
 
@@ -142,7 +168,7 @@ def test_licence_page_shows_diagnostics_and_copies_safe_summary(monkeypatch):
     dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
     dialog._copy_support_summary()
     summary = dialog.clipboard_get()
-    assert "3.3.10" in summary
+    assert "4.0.0" in summary
     assert "lifetime" in summary
     assert "must-not-be-copied" not in summary
     assert "machine_id" not in summary

@@ -20,6 +20,7 @@ echo [2/2] Validating the release payload...
 if not exist "%PORTABLE_DIR%\LongJumpReplay.exe" goto :missing_output
 if not exist "%PORTABLE_DIR%\_internal" goto :missing_output
 if not exist "%PORTABLE_DIR%\_internal\config.json" goto :missing_output
+if exist "%PORTABLE_DIR%\_internal\config.json\NUL" goto :missing_output
 if not exist "%PORTABLE_DIR%\README.txt" goto :missing_output
 if not exist "%PORTABLE_DIR%\SELF_TEST_FROZEN.txt" goto :missing_output
 

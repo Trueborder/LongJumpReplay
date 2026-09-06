@@ -1,5 +1,19 @@
 # LongJumpReplay changelog
 
+## 4.0.0 - 2026-09-06
+
+- Adds a recording workflow that can run without the rolling buffer: press
+  Record and Stop, then open the completed recording from Captures.
+- Adds timeline zoom from 0.5 seconds to 10 minutes, a visible-span readout,
+  and local clock timestamps with millisecond precision.
+- Adds ShuttleXpress actions for Record/Stop, latest Capture, and hold-to-play.
+- Makes the operator interface more compact so the camera remains dominant.
+- Adds an editable video-file source path with a native file picker and shows
+  Windows-detected friendly camera names while retaining camera indices
+  internally.
+- Keeps an already-visible timeline at exactly the same size when Settings is
+  applied without changing the layout.
+
 ## 3.3.10 - 2026-09-01
 
 - Removes manual width and height settings for resizable panels; drag the
