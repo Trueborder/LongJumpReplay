@@ -11,6 +11,13 @@
 - GUI release groups run in separate Python processes and receive one bounded
   fresh-process retry for transient Tk/synthetic startup races. A group that
   fails twice still stops the release.
+- Release 4.0.0 was published on 2026-09-06. The 50,827,748-byte installer has
+  SHA-256 `CCCCDCFAF65A52F7E6B6C310A93B54232920583324DB95DD42C398A5F390F3C3`.
+  The release gate passed 157 non-GUI tests, 60 GUI tests in 17 fresh-process
+  groups, source and frozen synthetic self-tests, installer construction, and
+  public post-upload hash verification. The production licensing Worker
+  deployment is `381c0b6e-3534-4866-819d-ae5b23ddaa40`; the main-site Worker
+  deployment is `3e6ad8ea-3ae6-4cf0-9570-4dda40f6cbda`.
 
 ## Panel sizing, competition-board feedback, and update checking (2026-09-01)
 
