@@ -2,23 +2,22 @@
 
 @layer legacy {
 :root {
-  --bg: #081018;
-  --bg-soft: #0b1720;
-  --surface: #0f1d27;
-  --surface-2: #152832;
-  --text: #f4f0e7;
-  --muted: #91a4af;
-  --line: #25404a;
-  --cyan: #7fe4d0;
-  --cyan-strong: #31c6b2;
-  --amber: #f4b860;
-  --coral: #f2795c;
-  --shadow: rgba(0, 0, 0, .32);
+  --bg: #f1eee7;
+  --bg-soft: #e9eee9;
+  --surface: #fbfaf5;
+  --surface-2: #e2ebe7;
+  --text: #15242b;
+  --muted: #65757b;
+  --line: #c9d4d0;
+  --cyan: #087a6e;
+  --cyan-strong: #056357;
+  --amber: #b96c20;
+  --coral: #bb4e39;
+  --shadow: rgba(40, 53, 57, .14);
   --display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --body: "Manrope", "Segoe UI", sans-serif;
   --mono: "DM Mono", Consolas, monospace;
 }
-html[data-theme="light"] { --bg: #f1eee7; --bg-soft: #e9eee9; --surface: #fbfaf5; --surface-2: #e2ebe7; --text: #15242b; --muted: #65757b; --line: #c9d4d0; --cyan: #087a6e; --cyan-strong: #056357; --amber: #b96c20; --coral: #bb4e39; --shadow: rgba(40, 53, 57, .14); }
 * { box-sizing: border-box; }
 html { max-width: 100vw; overflow-x: hidden; scroll-behavior: smooth; }
 body { max-width: 100vw; margin: 0; overflow-x: hidden; color: var(--text); background: var(--bg); font: 400 16px/1.55 var(--body); }

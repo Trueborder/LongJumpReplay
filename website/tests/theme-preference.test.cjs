@@ -5,7 +5,12 @@ const path = require('node:path');
 
 const siteRoot = path.join(__dirname, '..', 'tomaspisar.cz');
 const script = fs.readFileSync(path.join(siteRoot, 'script.js'), 'utf8');
-const css = fs.readFileSync(path.join(siteRoot, 'overrides.css'), 'utf8');
+const css = [
+  'styles.css',
+  'redesign.css',
+  'overrides.css',
+  path.join('account', 'account.css')
+].map((file) => fs.readFileSync(path.join(siteRoot, file), 'utf8')).join('\n');
 
 const htmlFiles = [];
 const collectHtml = (directory) => {
@@ -17,28 +22,25 @@ const collectHtml = (directory) => {
 };
 collectHtml(siteRoot);
 
-test('every page with a theme control restores cookie or session preference before body paint', () => {
-  const pages = htmlFiles.filter((file) => fs.readFileSync(file, 'utf8').includes('data-theme-toggle'));
-  assert.ok(pages.length >= 10);
-  for (const file of pages) {
+test('every page is explicitly light and exposes no theme control or resolver', () => {
+  assert.ok(htmlFiles.length >= 12);
+  for (const file of htmlFiles) {
     const html = fs.readFileSync(file, 'utf8');
-    assert.match(html, /sessionStorage\.getItem\('site-theme'\)/, path.relative(siteRoot, file));
-    assert.match(html, /dataset\.themePreference=p/, path.relative(siteRoot, file));
-    assert.doesNotMatch(html, /a&&m&&decodeURIComponent\(m\[1\]\)==='light'\?'light':'dark'/, path.relative(siteRoot, file));
+    assert.match(html, /<html\b[^>]*data-theme="light"/, path.relative(siteRoot, file));
+    assert.doesNotMatch(html, /data-theme-toggle|site-theme|prefers-color-scheme/, path.relative(siteRoot, file));
   }
 });
 
-test('theme control exposes localized System, Light, and Dark labels', () => {
-  assert.match(script, /themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark'/);
-  assert.match(script, /themeSystem: 'Systém', themeLight: 'Světlý', themeDark: 'Tmavý'/);
-  assert.match(script, /class="theme-label"/);
-  assert.match(css, /\.icon-button\[data-theme-toggle\][^{]*\{[^}]*width: auto;/);
+test('runtime has no dark or system appearance mode', () => {
+  assert.doesNotMatch(script, /data-theme-toggle|themePreference|prefers-color-scheme|themeSystem|themeLight|themeDark|setTheme/);
+  assert.doesNotMatch(css, /html\[data-theme|color-scheme:\s*dark|--bg:\s*#(?:0b1013|081018)/i);
+  assert.match(css, /color-scheme:\s*light/);
+  assert.match(css, /--bg:\s*#f2f0e9/i);
 });
 
-test('theme choices survive page navigation without optional preference cookies', () => {
-  assert.match(script, /sessionStorage\.setItem\(name, value\)/);
-  assert.match(script, /return readSessionPref\(name\)/);
-  assert.match(script, /current === 'system' \? 'light' : current === 'light' \? 'dark' : 'system'/);
+test('obsolete stored theme preferences are removed', () => {
+  assert.match(script, /deleteCookie\('site-theme'\)/);
+  assert.match(script, /sessionStorage\.removeItem\('site-theme'\)/);
 });
 
 test('accepted preferences are shared with the account subdomain', () => {

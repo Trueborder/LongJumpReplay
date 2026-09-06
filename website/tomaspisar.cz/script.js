@@ -2,9 +2,6 @@
   const ICONS = {
     menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"/></svg>',
     close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"/></svg>',
-    sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
-    moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.1A8.2 8.2 0 0 1 8.9 4a8.2 8.2 0 1 0 11.1 11.1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
-    system: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 20h8M12 16.5V20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>'
   };
 
@@ -20,8 +17,8 @@
   const product = cfg.products?.longJumpReplay || {};
 
   /* ---------------------------------------------------------------- cookies
-     Theme and language are stored in first-party cookies so the choice follows
-     the visitor across pages and survives a return visit.
+     Language is stored in a first-party cookie so the choice follows the
+     visitor across pages and survives a return visit.
 
      Consent model: these are preference cookies, set only after the visitor
      accepts. Declining is a real choice - preferences then live in session
@@ -82,10 +79,12 @@
     writeCookie(name, value, PREF_MAX_AGE);
   };
   const forgetPrefs = () => {
-    ['site-theme', 'site-language'].forEach((name) => {
-      deleteCookie(name);
-    });
+    deleteCookie('site-language');
   };
+
+  // Theme selection was retired when the website became permanently light.
+  deleteCookie('site-theme');
+  try { window.sessionStorage.removeItem('site-theme'); } catch (_) { /* unavailable storage */ }
 
   const storedLanguage = readPref('site-language');
   let lang = storedLanguage === 'cs' ? 'cs' : 'en';
@@ -114,12 +113,12 @@
   const ui = {
     en: {
       skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact', account: 'Account',
-      theme: 'Change theme', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark', menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
+      menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
       footer: 'Independent software development from the Czech Republic.', cookies: 'Cookie settings'
     },
     cs: {
       skip: 'Přejít na obsah', software: 'Software', downloads: 'Stažení', about: 'O mně', contact: 'Kontakt', account: 'Účet',
-      theme: 'Změnit motiv', themeSystem: 'Systém', themeLight: 'Světlý', themeDark: 'Tmavý', menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
+      menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
       footer: 'Nezávislý vývoj softwaru z České republiky.', cookies: 'Nastavení cookies'
     }
   };
@@ -169,36 +168,9 @@
       element.textContent = lang === 'en' ? 'CZ' : 'EN';
       element.setAttribute('aria-label', ui[lang].language);
     });
-    renderThemeControls();
     if (menu) menu.setAttribute('aria-label', document.body.classList.contains('menu-open') ? ui[lang].close : ui[lang].menu);
     document.querySelector('[data-lightbox-close]')?.setAttribute('aria-label', ui[lang].closeImage);
   };
-
-  const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
-  const renderThemeControls = () => {
-    const preference = document.documentElement.dataset.themePreference || 'system';
-    const labelKey = preference === 'light' ? 'themeLight' : preference === 'dark' ? 'themeDark' : 'themeSystem';
-    const label = ui[lang][labelKey];
-    const icon = preference === 'light' ? ICONS.sun : preference === 'dark' ? ICONS.moon : ICONS.system;
-    document.querySelectorAll('[data-theme-toggle]').forEach((element) => {
-      element.innerHTML = `${icon}<span class="theme-label">${label}</span>`;
-      element.title = `${ui[lang].theme}: ${label}`;
-      element.setAttribute('aria-label', `${ui[lang].theme}. ${label}.`);
-      element.setAttribute('aria-pressed', preference === 'system' ? 'false' : 'true');
-    });
-  };
-  const setTheme = (preference, persist = true) => {
-    const safePreference = ['system', 'light', 'dark'].includes(preference) ? preference : 'system';
-    const resolvedTheme = safePreference === 'system' ? (systemTheme.matches ? 'light' : 'dark') : safePreference;
-    document.documentElement.dataset.theme = resolvedTheme;
-    document.documentElement.dataset.themePreference = safePreference;
-    if (persist) writePref('site-theme', safePreference);
-    renderThemeControls();
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolvedTheme === 'dark' ? '#0b1013' : '#f2f0e9');
-  };
-  systemTheme.addEventListener?.('change', () => {
-    if (document.documentElement.dataset.themePreference === 'system') setTheme('system', false);
-  });
 
   const closeMenu = () => {
     document.body.classList.remove('menu-open');
@@ -331,11 +303,6 @@
     writePref('site-language', lang);
     renderLanguage();
   }));
-  document.querySelectorAll('[data-theme-toggle]').forEach((element) => element.addEventListener('click', () => {
-    const current = document.documentElement.dataset.themePreference || 'system';
-    setTheme(current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system');
-  }));
-
   const preview = document.querySelector('.product-image img');
   if (preview && product.screenshots?.[0]) {
     preview.src = product.screenshots[0];
@@ -432,14 +399,14 @@
      a choice is made, so there is no reason to hold the visitor hostage. */
   const CONSENT_COPY = {
     en: {
-      text: 'This site uses cookies only to remember your theme and language. No analytics or advertising cookies.',
+      text: 'This site uses cookies only to remember your language. No analytics or advertising cookies.',
       accept: 'Accept',
       decline: 'Decline',
       more: 'Privacy',
       label: 'Cookie choices'
     },
     cs: {
-      text: 'Tento web používá cookies pouze k zapamatování motivu a jazyka. Žádná analytika ani reklama.',
+      text: 'Tento web používá cookies pouze k zapamatování jazyka. Žádná analytika ani reklama.',
       accept: 'Přijmout',
       decline: 'Odmítnout',
       more: 'Soukromí',
@@ -473,7 +440,6 @@
       writeCookie(CONSENT_COOKIE, choice, CONSENT_MAX_AGE);
       if (choice === 'accepted') {
         // Persist whatever the visitor already chose this session.
-        writePref('site-theme', document.documentElement.dataset.themePreference || 'system');
         writePref('site-language', lang);
       } else {
         forgetPrefs();
@@ -499,7 +465,6 @@
     if (force) decline.focus();
   };
 
-  setTheme(readPref('site-theme') || 'system');
   renderLanguage();
   showConsentBanner();
 })();

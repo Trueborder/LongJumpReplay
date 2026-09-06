@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## Light-only website appearance (2026-09-06)
+
+- The public website and account portal use one permanent light appearance.
+  Theme controls, dark/system preference resolution, theme cookies, and dark
+  palette branches were removed; old stored theme preferences are discarded.
+
 ## LongJumpReplay 4.0 recording and timeline release (2026-09-06)
 
 - Version 4.0.0 adds explicit Record/Stop capture mode, ShuttleXpress capture

@@ -18,22 +18,7 @@ Use one take-off-line/timecode motif in the main hero. Elsewhere, prefer quiet r
 
 ## Tokens
 
-### Dark theme
-
-| Role | Value | Meaning |
-|---|---:|---|
-| Background | `#0B1013` | Timing black |
-| Soft background | `#10171B` | Track lane |
-| Surface | `#151E23` | Evidence panel |
-| Surface raised | `#1B282E` | Review panel |
-| Text | `#F3F0E8` | Chalk |
-| Muted text | `#A7B3B4` | Steel |
-| Border | `#34444A` | Lane rule |
-| Live | `#62D9C6` | Capture cyan |
-| Review | `#EFB84F` | Decision amber |
-| Warning | `#E56D54` | Foul-line coral |
-
-### Light theme
+### Light-only theme
 
 | Role | Value |
 |---|---:|
