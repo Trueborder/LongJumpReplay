@@ -68,29 +68,19 @@ class SettingsDialog(tk.Toplevel):
     """Scrollable category settings with a fixed action footer."""
 
     CATEGORY_DEFS = [
-        ("licence", "Licence & account", "Licence a účet"),
         ("general", "General", "Obecné"),
-        ("appearance", "Language & appearance", "Jazyk a vzhled"),
-        ("performance", "Performance", "Výkon"),
-        ("camera", "Camera", "Kamera"),
-        ("board", "Board calibration", "Kalibrace prkna"),
+        ("camera_recording", "Camera & recording", "Kamera a záznam"),
         ("competition", "Competition", "Soutěž"),
-        ("rounds", "Athletes & rounds", "Závodníci a kola"),
-        ("decisions", "Attempts & decisions", "Pokusy a rozhodnutí"),
-        ("timer", "Athlete timer", "Časomíra závodníka"),
-        ("final", "Final round", "Finále"),
-        ("replay", "Replay & storage", "Replay a úložiště"),
-        ("views", "Views", "Pohledy"),
-        ("assist", "Take-off Assist", "Asistent odrazu"),
-        ("hotkeys", "Hotkeys", "Klávesové zkratky"),
-        ("shuttle", "ShuttleXpress", "ShuttleXpress"),
+        ("judging", "Judging & evidence", "Rozhodování a důkazy"),
+        ("board_assist", "Board & Take-off Assist", "Prkno a asistent odrazu"),
+        ("workspace_controls", "Workspace & controls", "Pracovní plocha a ovládání"),
+        ("licence", "Licence & support", "Licence a podpora"),
+        ("advanced", "Advanced", "Pokročilé"),
     ]
     CATEGORY_GROUPS = [
-        ("account", "ACCOUNT", "ÚČET", ("licence",)),
-        ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "appearance", "camera")),
-        ("judging", "JUDGING WORKFLOW", "ROZHODOVÁNÍ", ("competition", "rounds", "decisions", "timer", "final")),
-        ("replay", "REPLAY WORKSPACE", "PRACOVNÍ PLOCHA", ("board", "replay", "views", "assist")),
-        ("system", "CONTROLS & SYSTEM", "OVLÁDÁNÍ A SYSTÉM", ("hotkeys", "shuttle", "performance")),
+        ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "camera_recording")),
+        ("event", "EVENT WORKFLOW", "PRŮBĚH SOUTĚŽE", ("competition", "judging", "board_assist")),
+        ("system", "WORKSPACE & SYSTEM", "PRACOVNÍ PLOCHA A SYSTÉM", ("workspace_controls", "licence", "advanced")),
     ]
 
     def __init__(
@@ -131,6 +121,9 @@ class SettingsDialog(tk.Toplevel):
         self.roster_tree: ttk.Treeview | None = None
         self.shuttle_vars: dict[int, tk.StringVar] = {}
         self._setting_rows: list[tuple[ttk.Frame, tk.Widget, ttk.Label | None]] = []
+        self._search_entries: list[dict[str, object]] = []
+        self._search_result_rows: list[dict[str, object]] = []
+        self._building_page = "general"
         self._description_headers: list[tuple[ttk.Frame, ttk.Label]] = []
         self._build()
         if "show_tooltips" in self._vars:
@@ -179,8 +172,13 @@ class SettingsDialog(tk.Toplevel):
         ttk.Label(sidebar, text=self.tr("settings.find_area"), style="SettingsGroup.TLabel").pack(anchor="w", padx=5, pady=(2, 5))
         self.search_var = tk.StringVar()
         search = ttk.Entry(sidebar, textvariable=self.search_var)
+        self.search_entry = search
         search.pack(fill="x", pady=(0, 10))
         search.insert(0, "")
+        search.bind("<Down>", lambda _event: self._move_search_selection(1))
+        search.bind("<Up>", lambda _event: self._move_search_selection(-1))
+        search.bind("<Return>", self._open_selected_search_result)
+        search.bind("<Escape>", self._clear_search)
         nav_wrapper = ttk.Frame(sidebar, style="Toolbar.TFrame")
         nav_wrapper.pack(fill="both", expand=True)
         nav_wrapper.rowconfigure(0, weight=1)
@@ -219,23 +217,50 @@ class SettingsDialog(tk.Toplevel):
             self._page_inners[key] = inner
             self._page_canvases[key] = self._pending_page_canvas
 
+        self.search_results = ttk.Frame(self.page_host, style="Panel.TFrame", padding=18)
+        ttk.Label(
+            self.search_results,
+            text=self._txt("Settings search", "Hledání v nastavení"),
+            style="SettingsHeroTitle.TLabel",
+        ).pack(anchor="w", pady=(0, 4))
+        self.search_results_summary = ttk.Label(self.search_results, text="", style="Muted.TLabel")
+        self.search_results_summary.pack(anchor="w", pady=(0, 10))
+        self.search_results_tree = ttk.Treeview(
+            self.search_results,
+            columns=("setting", "page"),
+            show="headings",
+            selectmode="browse",
+        )
+        self.search_results_tree.heading("setting", text=self._txt("Setting", "Nastavení"))
+        self.search_results_tree.heading("page", text=self._txt("Page", "Stránka"))
+        self.search_results_tree.column("setting", width=520, stretch=True)
+        self.search_results_tree.column("page", width=220, stretch=False)
+        self.search_results_tree.pack(fill="both", expand=True)
+        self.search_results_tree.bind("<Double-1>", self._open_selected_search_result)
+        self.search_results_tree.bind("<Return>", self._open_selected_search_result)
+        self.search_results_tree.bind("<Escape>", self._clear_search)
+
         self.search_var.trace_add("write", lambda *_: self._filter_navigation())
-        self._build_general(self._page_inners["general"])
-        self._build_licence(self._page_inners["licence"])
-        self._build_appearance(self._page_inners["appearance"])
-        self._build_performance(self._page_inners["performance"])
-        self._build_camera(self._page_inners["camera"])
-        self._build_board(self._page_inners["board"])
-        self._build_competition(self._page_inners["competition"])
-        self._build_rounds(self._page_inners["rounds"])
-        self._build_decisions(self._page_inners["decisions"])
-        self._build_timer(self._page_inners["timer"])
-        self._build_final(self._page_inners["final"])
-        self._build_replay(self._page_inners["replay"])
-        self._build_views(self._page_inners["views"])
-        self._build_assist(self._page_inners["assist"])
-        self._build_hotkeys(self._page_inners["hotkeys"])
-        self._build_shuttle(self._page_inners["shuttle"])
+        self._build_on_page("general", self._build_general)
+        self._build_on_page("general", self._build_appearance)
+        self._build_on_page("camera_recording", self._build_recording_mode)
+        self._build_on_page("camera_recording", self._build_camera)
+        self._build_on_page("camera_recording", self._build_replay)
+        self._build_on_page("competition", self._build_competition)
+        self._build_on_page("competition", self._build_rounds)
+        self._build_on_page("competition", self._build_timer)
+        self._build_on_page("competition", self._build_final)
+        self._build_on_page("judging", self._build_decisions)
+        self._build_on_page("judging", self._build_evidence)
+        self._build_on_page("board_assist", self._build_board)
+        self._build_on_page("board_assist", self._build_assist)
+        self._build_on_page("workspace_controls", self._build_views)
+        self._build_on_page("workspace_controls", self._build_hotkeys)
+        self._build_on_page("workspace_controls", self._build_shuttle)
+        self._build_on_page("licence", self._build_licence)
+        self._build_on_page("advanced", self._build_performance)
+        self._build_on_page("advanced", self._build_camera_advanced)
+        self._build_on_page("advanced", self._build_advanced)
         for page_key, inner in self._page_inners.items():
             canvas = self._page_canvases.get(page_key)
             if canvas:
@@ -252,6 +277,16 @@ class SettingsDialog(tk.Toplevel):
         self.apply_close_button.pack(side="right", padx=(0, 7))
         self.apply_button = ttk.Button(footer, text=self.tr("settings.apply"), style="Control.TButton", command=lambda: self._apply(False))
         self.apply_button.pack(side="right", padx=(0, 7))
+        self.bind("<Control-f>", self._focus_search)
+        self.bind("<Control-F>", self._focus_search)
+        self.bind("<Escape>", self._clear_search)
+
+    def _build_on_page(self, page_key: str, builder: Callable[[ttk.Frame], None]) -> None:
+        """Build one logical section inside one of the eight operator pages."""
+        host = ttk.Frame(self._page_inners[page_key], style="Panel.TFrame")
+        host.pack(fill="x", expand=True, pady=(0, 14))
+        self._building_page = page_key
+        builder(host)
 
     def _new_scroll_page(self) -> tuple[ttk.Frame, ttk.Frame]:
         wrapper = ttk.Frame(self.page_host, style="Panel.TFrame")
@@ -300,36 +335,111 @@ class SettingsDialog(tk.Toplevel):
         self.nav_canvas.itemconfigure(self._nav_window, width=event.width)
 
     def _show_page(self, key: str) -> None:
-        if key == self._current_page:
-            return
-        if self._current_page:
+        self.search_results.pack_forget()
+        if self._current_page and self._current_page != key:
             self._pages[self._current_page].pack_forget()
-        self._pages[key].pack(fill="both", expand=True)
+        if not self._pages[key].winfo_manager():
+            self._pages[key].pack(fill="both", expand=True)
         self._current_page = key
         for name, button in self._nav_buttons.items():
             button.state(["selected"] if name == key else ["!selected"])
 
     def _filter_navigation(self) -> None:
-        query = self.search_var.get().strip().lower()
+        query = self.search_var.get().strip().casefold()
         definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
-        visible_keys: list[str] = []
-        for label in self._nav_group_labels.values():
-            label.pack_forget()
-        for button in self._nav_buttons.values():
-            button.pack_forget()
-        for group_key, _en, _cs, keys in self.CATEGORY_GROUPS:
-            matches = [key for key in keys if not query or query in definitions[key][0].lower() or query in definitions[key][1].lower()]
-            if not matches:
+        if not query:
+            self.search_results.pack_forget()
+            if self._current_page:
+                self._show_page(self._current_page)
+            return
+
+        if self._current_page:
+            self._pages[self._current_page].pack_forget()
+        for item in self.search_results_tree.get_children():
+            self.search_results_tree.delete(item)
+        self._search_result_rows = []
+        for entry in self._search_entries:
+            page = str(entry["page"])
+            page_en, page_cs = definitions[page]
+            haystack = " ".join((
+                str(entry["label_en"]), str(entry["label_cs"]),
+                str(entry["desc_en"]), str(entry["desc_cs"]),
+                str(entry["keywords"]), page_en, page_cs,
+            )).casefold()
+            if query not in haystack:
                 continue
-            self._nav_group_labels[group_key].pack(fill="x", padx=5, pady=(10 if visible_keys else 2, 4))
-            for key in matches:
-                self._nav_buttons[key].pack(fill="x", pady=1)
-                visible_keys.append(key)
-        first = visible_keys[0] if visible_keys else None
-        if first and self._current_page not in visible_keys:
-            self._show_page(first)
-        self.nav_canvas.yview_moveto(0.0)
-        self.after_idle(self._update_navigation_scrollregion)
+            result_index = len(self._search_result_rows)
+            self._search_result_rows.append(entry)
+            self.search_results_tree.insert(
+                "", "end", iid=f"result-{result_index}",
+                values=(
+                    self._txt(str(entry["label_en"]), str(entry["label_cs"])),
+                    self._txt(page_en, page_cs),
+                ),
+            )
+        count = len(self._search_result_rows)
+        self.search_results_summary.configure(
+            text=self._txt(f"{count} matching settings", f"Počet nalezených nastavení: {count}")
+        )
+        self.search_results.pack(fill="both", expand=True)
+        children = self.search_results_tree.get_children()
+        if children:
+            self.search_results_tree.selection_set(children[0])
+            self.search_results_tree.focus(children[0])
+
+    def _focus_search(self, _event: tk.Event | None = None) -> str:
+        self.search_entry.focus_set()
+        self.search_entry.selection_range(0, "end")
+        return "break"
+
+    def _clear_search(self, _event: tk.Event | None = None) -> str:
+        if self.search_var.get():
+            self.search_var.set("")
+        return "break"
+
+    def _move_search_selection(self, direction: int) -> str:
+        children = self.search_results_tree.get_children()
+        if not children:
+            return "break"
+        selected = self.search_results_tree.selection()
+        current = children.index(selected[0]) if selected and selected[0] in children else (0 if direction > 0 else len(children) - 1)
+        target = max(0, min(len(children) - 1, current + direction))
+        self.search_results_tree.selection_set(children[target])
+        self.search_results_tree.focus(children[target])
+        self.search_results_tree.see(children[target])
+        self.search_results_tree.focus_set()
+        return "break"
+
+    def _open_selected_search_result(self, _event: tk.Event | None = None) -> str:
+        selected = self.search_results_tree.selection()
+        if not selected:
+            return "break"
+        index = int(selected[0].split("-", 1)[1])
+        entry = self._search_result_rows[index]
+        self.search_var.set("")
+        self._show_page(str(entry["page"]))
+        self.after_idle(lambda e=entry: self._reveal_search_entry(e))
+        return "break"
+
+    def _reveal_search_entry(self, entry: dict[str, object]) -> None:
+        page = str(entry["page"])
+        card = entry["card"]
+        widget = entry["widget"]
+        if not isinstance(card, ttk.Frame) or not isinstance(widget, tk.Widget):
+            return
+        self.update_idletasks()
+        inner = self._page_inners[page]
+        canvas = self._page_canvases[page]
+        content_height = max(1, inner.winfo_reqheight())
+        offset = max(0, card.winfo_rooty() - inner.winfo_rooty() - 24)
+        canvas.yview_moveto(min(1.0, offset / content_height))
+        try:
+            widget.focus_set()
+            card.configure(style="SettingsSearchHit.TFrame")
+            restore_style = str(entry.get("restore_style", "SettingsRow.TFrame"))
+            self.after(1400, lambda c=card, s=restore_style: c.winfo_exists() and c.configure(style=s))
+        except tk.TclError:
+            pass
 
     def _title(self, frame: ttk.Frame, title_en: str, title_cs: str, desc_en: str = "", desc_cs: str = "") -> int:
         hero = ttk.Frame(frame, style="SettingsHero.TFrame", padding=(18, 15))
@@ -365,6 +475,29 @@ class SettingsDialog(tk.Toplevel):
     def _impact_text(self, impact: str) -> str:
         return self.tr(f"settings.impact.{impact}")
 
+    def _register_search_entry(
+        self,
+        *,
+        label_en: str,
+        label_cs: str,
+        desc_en: str,
+        desc_cs: str,
+        card: ttk.Frame,
+        widget: tk.Widget,
+        keywords: str = "",
+    ) -> None:
+        self._search_entries.append({
+            "page": self._building_page,
+            "label_en": label_en,
+            "label_cs": label_cs,
+            "desc_en": desc_en,
+            "desc_cs": desc_cs,
+            "keywords": keywords,
+            "card": card,
+            "widget": widget,
+            "restore_style": str(card.cget("style")),
+        })
+
     def _row(
         self,
         frame: ttk.Frame,
@@ -378,6 +511,7 @@ class SettingsDialog(tk.Toplevel):
         desc_cs: str = "",
         impact: str = "none",
         width: int | None = None,
+        keywords: str = "",
     ) -> tk.Widget:
         card = ttk.Frame(frame, style="SettingsRow.TFrame", padding=(14, 11))
         card.grid(row=row, column=0, columnspan=4, sticky="ew", pady=4)
@@ -413,6 +547,12 @@ class SettingsDialog(tk.Toplevel):
         self._bind_responsive_wrap(description, minimum=180, maximum=520)
         widget.grid(row=0, column=2, sticky="w" if kind == "check" else "ew")
         self._setting_rows.append((card, widget, description))
+        self._register_search_entry(
+            label_en=label_en, label_cs=label_cs,
+            desc_en=desc_en, desc_cs=desc_cs,
+            card=card, widget=widget,
+            keywords=f"{keywords} {' '.join(values)} {kind}",
+        )
         return widget
 
     @staticmethod
@@ -499,12 +639,13 @@ class SettingsDialog(tk.Toplevel):
 
         actions = ttk.Frame(f)
         actions.pack(fill="x")
-        ttk.Button(
+        portal_button = ttk.Button(
             actions,
             text=self._txt("Open customer portal", "Otevřít zákaznický portál"),
             style="Accent.TButton",
             command=lambda: webbrowser.open(activation_api.PORTAL_LOGIN_URL),
-        ).pack(side="left")
+        )
+        portal_button.pack(side="left")
         self.check_updates_button = ttk.Button(
             actions,
             text=self.tr("menu.check_updates"),
@@ -520,6 +661,30 @@ class SettingsDialog(tk.Toplevel):
             command=self._copy_support_summary,
         )
         self.copy_support_button.pack(side="left", padx=(10, 0))
+        self._register_search_entry(
+            label_en="Application version", label_cs="Verze aplikace",
+            desc_en="Shows the currently installed LongJumpReplay version.",
+            desc_cs="Zobrazuje aktuálně nainstalovanou verzi LongJumpReplay.",
+            card=card, widget=portal_button, keywords=f"about build {__version__}",
+        )
+        self._register_search_entry(
+            label_en="Open customer portal", label_cs="Otevřít zákaznický portál",
+            desc_en="Manage billing, invoices, licence status and activated computers.",
+            desc_cs="Správa plateb, faktur, stavu licence a aktivovaných počítačů.",
+            card=actions, widget=portal_button, keywords="account subscription devices billing invoice",
+        )
+        self._register_search_entry(
+            label_en="Check for updates", label_cs="Zkontrolovat aktualizace",
+            desc_en="Checks whether a newer application version is available.",
+            desc_cs="Zkontroluje, zda je k dispozici novější verze aplikace.",
+            card=actions, widget=self.check_updates_button, keywords="version download",
+        )
+        self._register_search_entry(
+            label_en="Copy support summary", label_cs="Kopírovat souhrn pro podporu",
+            desc_en="Copies safe diagnostics without the machine identifier.",
+            desc_cs="Zkopíruje bezpečný souhrn diagnostiky bez identifikátoru počítače.",
+            card=actions, widget=self.copy_support_button, keywords="diagnostics help licence",
+        )
         ttk.Label(
             f,
             text=self._txt(
@@ -565,9 +730,12 @@ class SettingsDialog(tk.Toplevel):
         self.update()
         show_themed_info(self, self._txt("Support summary", "Souhrn pro podporu"), self._txt("A safe support summary was copied to the clipboard.", "Bezpečný souhrn pro podporu byl zkopírován do schránky."))
 
-    def _build_general(self, f: ttk.Frame) -> None:
-        r = self._title(f, "General", "Obecné", "Basic application behaviour.", "Základní chování aplikace.")
-        g = self.working.general
+    def _build_recording_mode(self, f: ttk.Frame) -> None:
+        r = self._title(
+            f, "Recording", "Záznam",
+            "Choose between continuous replay and explicit Record/Stop sessions.",
+            "Vyberte průběžný replay nebo samostatné záznamy spuštěné tlačítky Záznam/Stop.",
+        )
         self._vars["capture_mode"] = tk.StringVar(value=self.working.capture.mode)
         self._vars["capture_max_duration"] = tk.DoubleVar(value=self.working.capture.max_duration_seconds)
         self._row(
@@ -581,7 +749,11 @@ class SettingsDialog(tk.Toplevel):
             desc_en="Capture mode stops safely at this limit. Default: 600 seconds (10 minutes).",
             desc_cs="Režim Capture se při tomto limitu bezpečně zastaví. Výchozí hodnota: 600 sekund (10 minut).",
             impact="high",
-        ); r += 1
+        )
+
+    def _build_general(self, f: ttk.Frame) -> None:
+        r = self._title(f, "General", "Obecné", "Basic application behaviour.", "Základní chování aplikace.")
+        g = self.working.general
         self._vars["confirm_destructive"] = tk.BooleanVar(value=g.confirm_destructive_actions)
         self._vars["show_tooltips"] = tk.BooleanVar(value=g.show_tooltips)
         self._vars["fullscreen"] = tk.BooleanVar(value=self.working.display.fullscreen)
@@ -828,7 +1000,7 @@ class SettingsDialog(tk.Toplevel):
             impact="low",
         ); r += 1
         self.camera_file_entry = self._row(
-            f, r, "Video file", "Video soubor", vals["file_path"], width=34,
+            f, r, "Video file", "Video soubor", vals["file_path"], width=20,
             desc_en="Type a full path or choose a video file. The file is used when Source is set to file.",
             desc_cs="Zadejte úplnou cestu nebo vyberte video soubor. Soubor se použije, když je Zdroj nastaven na file.",
             impact="medium",
@@ -839,16 +1011,23 @@ class SettingsDialog(tk.Toplevel):
             command=self._browse_camera_file,
             style="TButton",
         )
-        self.camera_file_browse_button.grid(row=0, column=3, sticky="w", padx=(8, 0))
+        self.camera_file_browse_button.grid(row=1, column=2, sticky="e", pady=(4, 0))
         vals["source"].trace_add("write", self._sync_camera_source_fields)
         self._sync_camera_source_fields()
         r += 1
         self._row(f, r, "Width", "Šířka", vals["width"], impact="very_high"); r += 1
         self._row(f, r, "Height", "Výška", vals["height"], impact="very_high"); r += 1
-        self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate; the current status is shown after startup.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu; aktuální stav se zobrazí po spuštění.", impact="very_high"); r += 1
-        self._row(f, r, "Windows backend", "Windows backend", vals["backend"], "combo", ("DSHOW", "MSMF", "ANY"), impact="medium"); r += 1
-        self._row(f, r, "Camera FOURCC", "Formát FOURCC", vals["fourcc"], desc_en="MJPG often enables high FPS over USB.", desc_cs="MJPG často umožní vyšší FPS přes USB.", impact="high"); r += 1
-        self._row(f, r, "Reconnect delay (seconds)", "Prodleva opětovného připojení", vals["reconnect"], impact="low")
+        self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate; the current status is shown after startup.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu; aktuální stav se zobrazí po spuštění.", impact="very_high")
+
+    def _build_camera_advanced(self, f: ttk.Frame) -> None:
+        r = self._title(
+            f, "Camera diagnostics", "Diagnostika kamery",
+            "Low-level capture controls for troubleshooting a specific camera.",
+            "Nízkoúrovňové volby snímání pro řešení problémů s konkrétní kamerou.",
+        )
+        self._row(f, r, "Windows backend", "Windows backend", self._vars["backend"], "combo", ("DSHOW", "MSMF", "ANY"), impact="medium", keywords="DirectShow Media Foundation"); r += 1
+        self._row(f, r, "Camera FOURCC", "Formát FOURCC", self._vars["fourcc"], desc_en="MJPG often enables high FPS over USB.", desc_cs="MJPG často umožní vyšší FPS přes USB.", impact="high", keywords="codec MJPG"); r += 1
+        self._row(f, r, "Reconnect delay (seconds)", "Prodleva opětovného připojení", self._vars["reconnect"], impact="low")
 
     def _browse_camera_file(self) -> None:
         selected = filedialog.askopenfilename(
@@ -870,7 +1049,7 @@ class SettingsDialog(tk.Toplevel):
         self.camera_file_browse_button.configure(state="normal" if using_file else "disabled")
 
     def _build_board(self, f: ttk.Frame) -> None:
-        r = self._title(f, "Board calibration", "Kalibrace prkna", "Calibrate the line and ROI directly on the main video. Numeric position fields are intentionally not duplicated here.", "Kalibraci čáry a ROI prováděj přímo v hlavním videu. Číselná pole pro polohu zde záměrně neopakujeme.")
+        r = self._title(f, "Board calibration", "Kalibrace prkna", "The guided board editor opens after the camera is detected and can also be reopened from View. Numeric point fields are intentionally not duplicated here.", "Průvodce kalibrací se otevře po rozpoznání kamery a lze jej znovu otevřít z nabídky Zobrazení. Číselná pole bodů zde záměrně neopakujeme.")
         d = self.working.display
         values = {
             "guide_enabled": tk.BooleanVar(value=d.guide_enabled), "guide_width": tk.IntVar(value=d.guide_width_px),
@@ -881,12 +1060,12 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Line width", "Tloušťka čáry", values["guide_width"], impact="low"); r += 1
         self._row(f, r, "Enable board ROI", "Zapnout oblast prkna", values["roi_enabled"], "check", impact="low"); r += 1
         self._row(f, r, "Show ROI on main video", "Zobrazit ROI v hlavním videu", values["roi_visible"], "check", impact="low"); r += 1
-        guide_box = self._section(f, r + 1, "Calibrate on the main video", "Kalibruj v hlavním videu")
+        guide_box = self._section(f, r + 1, "Guided calibration", "Průvodce kalibrací")
         calibration_help = ttk.Label(
             guide_box,
             text=self._txt(
-                "Open View → Board calibration. Drag the red line centre to move it, drag the yellow handle to rotate it, and Shift-drag to draw or resize the ROI. Ctrl + mouse wheel fine-rotates the line. The calibrated values are saved automatically when calibration mode closes.",
-                "Otevři Zobrazení → Kalibrace prkna. Tažením středu červené čáry ji posuň, žlutým úchytem ji otoč a tažením se Shiftem nakresli nebo uprav ROI. Ctrl + kolečko čáru jemně otočí. Hodnoty se automaticky uloží po zavření kalibrace.",
+                "Open View → Board calibration. Drag the four yellow board corners and four red take-off-line corners, choose Preview, and confirm. The editor is skippable; both overlays can be hidden from View during competition.",
+                "Otevři Zobrazení → Kalibrace prkna. Přetáhni čtyři žluté rohy prkna a čtyři červené rohy odrazové čáry, zvol Náhled a potvrď. Průvodce lze přeskočit; oba obrysy lze během soutěže skrýt v nabídce Zobrazení.",
             ),
             style="SettingsRowDesc.TLabel", wraplength=640, justify="left",
         )
@@ -1054,9 +1233,16 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Attempt post-roll (seconds)", "Záznam po zmrazení (s)", vals["post"], impact="medium"); r += 1
         self._row(f, r, "Temporary retention (minutes)", "Doba uchování (min)", vals["retention"], impact="medium"); r += 1
         self._row(f, r, "Maximum temporary recordings", "Maximální počet dočasných záznamů", vals["max_attempts"], impact="high"); r += 1
-        self._row(f, r, "Maximum cache size (GB)", "Maximální velikost cache (GB)", vals["cache_gb"], impact="high"); r += 1
-        self._row(f, r, "Save annotated evidence", "Ukládat anotovaný důkaz", vals["evidence_overlay"], "check", impact="low"); r += 1
-        self._row(f, r, "Save untouched evidence PNG", "Ukládat původní důkazní PNG", vals["evidence_raw"], "check", impact="low")
+        self._row(f, r, "Maximum cache size (GB)", "Maximální velikost cache (GB)", vals["cache_gb"], impact="high")
+
+    def _build_evidence(self, f: ttk.Frame) -> None:
+        r = self._title(
+            f, "Evidence", "Důkazy",
+            "Choose which review images are preserved with an attempt.",
+            "Vyberte, které kontrolní snímky se uloží spolu s pokusem.",
+        )
+        self._row(f, r, "Save annotated evidence", "Ukládat anotovaný důkaz", self._vars["evidence_overlay"], "check", impact="low", keywords="overlay export"); r += 1
+        self._row(f, r, "Save untouched evidence PNG", "Ukládat původní důkazní PNG", self._vars["evidence_raw"], "check", impact="low", keywords="raw original export")
 
     def _build_views(self, f: ttk.Frame) -> None:
         r = self._title(f, "Views", "Pohledy", "Hidden panels can stop rendering when Pause hidden panels is enabled.", "Skryté panely mohou přestat vykreslovat, pokud je zapnuta volba Pozastavit skryté panely.")
@@ -1177,8 +1363,6 @@ class SettingsDialog(tk.Toplevel):
         r = self._title(f, "Advanced", "Pokročilé", "Change these only when troubleshooting a specific camera or codec.", "Měň pouze při řešení konkrétního problému s kamerou nebo kodekem.")
         self._vars["temp_codec"] = tk.StringVar(value=self.working.attempts.temp_codec)
         self._vars["export_codec"] = tk.StringVar(value=self.working.export.codec)
-        self._vars["queue_size"] = tk.IntVar(value=self.working.buffer.encoder_queue_size)
-        self._vars["store_nth"] = tk.IntVar(value=self.working.buffer.store_every_nth_frame)
         self._row(f, r, "Temporary video codec", "Kodek dočasného videa", self._vars["temp_codec"], impact="high"); r += 1
         self._row(f, r, "Export video codec", "Kodek exportovaného videa", self._vars["export_codec"], impact="high"); r += 1
         self._row(f, r, "JPEG encoder queue size", "Velikost fronty JPEG enkodéru", self._vars["queue_size"], impact="medium"); r += 1
@@ -1270,6 +1454,7 @@ class SettingsDialog(tk.Toplevel):
         b.duration_seconds = float(self._vars["buffer_seconds"].get()); b.max_memory_mb = int(self._vars["buffer_memory"].get())
         a.pre_seconds = float(self._vars["pre"].get()); a.post_seconds = float(self._vars["post"].get()); a.retention_minutes = float(self._vars["retention"].get()); a.max_attempts = int(self._vars["max_attempts"].get()); a.max_cache_gb = float(self._vars["cache_gb"].get())
         e.evidence_include_overlay = bool(self._vars["evidence_overlay"].get()); e.evidence_save_raw = bool(self._vars["evidence_raw"].get())
+        a.temp_codec = str(self._vars["temp_codec"].get()); e.codec = str(self._vars["export_codec"].get())
         d.layout = str(self._vars["layout"].get()); d.show_attempts_panel = bool(self._vars["show_attempts"].get()); d.show_timeline = bool(self._vars["show_timeline"].get()); d.show_status_bar = bool(self._vars["show_status"].get())
         d.show_live_preview = bool(self._vars["show_live"].get()); d.show_decision_controls = bool(self._vars["show_decisions"].get()); d.show_capture_warnings = bool(self._vars["show_warnings"].get()); d.show_takeoff_assist_badge = bool(self._vars["show_assist_badge"].get())
         d.comparison_enabled = bool(self._vars["comparison_enabled"].get()); d.comparison_offset_frames = int(self._vars["comparison_offset"].get())

@@ -186,12 +186,17 @@ def test_ready_attempt_is_recovered_from_temporary_cache(tmp_path, jpeg_frame):
     assert created
     ready = _wait_for(manager, created.attempt_id, {AttemptState.READY, AttemptState.ERROR})
     assert ready and ready.state is AttemptState.READY
+    analysis_start = ready.start_timestamp_ns + 20_000_000
+    analysis_end = ready.end_timestamp_ns - 20_000_000
+    assert manager.set_takeoff_candidate(ready.attempt_id, 2, .82, analysis_start, analysis_end)
     manager.stop()
 
     recovered_manager = AttemptManager(ring, config, ExportConfig(), cache, Queue())
     recovered_manager.start()
     recovered = recovered_manager.get_attempt(created.attempt_id)
     assert recovered and recovered.state is AttemptState.READY
+    assert recovered.takeoff_analysis_start_ns == analysis_start
+    assert recovered.takeoff_analysis_end_ns == analysis_end
     assert recovered.temp_video_path and recovered.temp_video_path.exists()
     assert recovered_manager.get_frame(recovered.attempt_id, recovered.freeze_frame_index).frame_bgr is not None
     recovered_manager.stop()

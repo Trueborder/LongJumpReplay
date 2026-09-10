@@ -28,7 +28,10 @@ class AttemptManager:
 
     POST_ROLL_STALL_GRACE_SECONDS = 3.0
     CACHE_SIZE_CACHE_SECONDS = 0.5
-    DECODE_CACHE_FRAMES = 4
+    # Frame stepping, Take-off Assist and Top-down Projection often revisit the
+    # same small neighbourhood. Twelve 720p frames are still bounded, but avoid
+    # repeatedly JPEG-decoding those frames across tools.
+    DECODE_CACHE_FRAMES = 12
 
     def __init__(
         self,
@@ -51,7 +54,7 @@ class AttemptManager:
         self._workers: dict[str, Thread] = {}
         self._pending_exports: dict[int, Path] = {}
         self._video_caps: dict[int, cv2.VideoCapture] = {}
-        self._frame_cache: dict[int, OrderedDict[int, object]] = {}
+        self._frame_cache: dict[int, OrderedDict[int, tuple[object, int]]] = {}
         self._video_next_index: dict[int, int] = {}
         self._cancelled_attempt_ids: set[int] = set()
         self._cache_size_value: int | None = None
@@ -380,13 +383,26 @@ class AttemptManager:
         self.event_queue.put(("attempt_updated", attempt_id))
         return True
 
-    def set_takeoff_candidate(self, attempt_id: int, frame_index: int, confidence: float) -> bool:
+    def set_takeoff_candidate(
+        self,
+        attempt_id: int,
+        frame_index: int,
+        confidence: float,
+        analysis_start_ns: int | None = None,
+        analysis_end_ns: int | None = None,
+    ) -> bool:
         with self._lock:
             attempt = self._find_locked(attempt_id)
             if attempt is None or attempt.frame_count <= 0:
                 return False
             attempt.takeoff_candidate_index = max(0, min(attempt.frame_count - 1, int(frame_index)))
             attempt.takeoff_confidence = max(0.0, min(1.0, float(confidence)))
+            if analysis_start_ns is not None and analysis_end_ns is not None:
+                lower, upper = attempt.start_timestamp_ns, attempt.end_timestamp_ns
+                start = max(lower, min(upper, int(analysis_start_ns)))
+                end = max(lower, min(upper, int(analysis_end_ns)))
+                attempt.takeoff_analysis_start_ns = min(start, end)
+                attempt.takeoff_analysis_end_ns = max(start, end)
             self._write_metadata_locked(attempt)
         self.event_queue.put(("takeoff_candidate", (attempt_id, attempt.takeoff_candidate_index, attempt.takeoff_confidence)))
         return True
@@ -506,15 +522,18 @@ class AttemptManager:
             if attempt is None or attempt.frame_count <= 0:
                 return MediaFrame(None, 0, 0, 0, 0.0)
             index = max(0, min(attempt.frame_count - 1, frame_index))
-            if attempt.packets and index < len(attempt.packets):
-                packet = attempt.packets[index]
-                return MediaFrame(decode_packet(packet), packet.timestamp_ns, index, attempt.frame_count, attempt.fps)
             cached = self._frame_cache.setdefault(attempt_id, OrderedDict())
             if index in cached:
-                frame = cached.pop(index)
-                cached[index] = frame
-                timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
+                frame, timestamp = cached.pop(index)
+                cached[index] = (frame, timestamp)
                 return MediaFrame(frame, timestamp, index, attempt.frame_count, attempt.fps)
+            if attempt.packets and index < len(attempt.packets):
+                packet = attempt.packets[index]
+                frame = decode_packet(packet)
+                cached[index] = (frame, packet.timestamp_ns)
+                while len(cached) > self.DECODE_CACHE_FRAMES:
+                    cached.popitem(last=False)
+                return MediaFrame(frame, packet.timestamp_ns, index, attempt.frame_count, attempt.fps)
             path = attempt.temp_video_path
             if not path or not path.exists():
                 return MediaFrame(None, 0, index, attempt.frame_count, attempt.fps)
@@ -527,11 +546,11 @@ class AttemptManager:
             ok, frame = cap.read()
             if not ok:
                 return MediaFrame(None, 0, index, attempt.frame_count, attempt.fps)
-            cached[index] = frame
+            timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
+            cached[index] = (frame, timestamp)
             while len(cached) > self.DECODE_CACHE_FRAMES:
                 cached.popitem(last=False)
             self._video_next_index[attempt_id] = index + 1
-            timestamp = attempt.start_timestamp_ns + int(index / max(1.0, attempt.fps) * 1e9)
             return MediaFrame(frame, timestamp, index, attempt.frame_count, attempt.fps)
 
     def frame_index_at_timestamp(self, attempt_id: int, timestamp_ns: int) -> int:
@@ -772,6 +791,8 @@ class AttemptManager:
             "freeze_frame_index": attempt.freeze_frame_index,
             "takeoff_candidate_index": attempt.takeoff_candidate_index,
             "takeoff_confidence": attempt.takeoff_confidence,
+            "takeoff_analysis_start_ns": attempt.takeoff_analysis_start_ns,
+            "takeoff_analysis_end_ns": attempt.takeoff_analysis_end_ns,
             "width": attempt.width,
             "height": attempt.height,
             "media_start_timestamp_ns": attempt.media_start_timestamp_ns,
@@ -833,6 +854,8 @@ class AttemptManager:
                     freeze_frame_index=int(data["freeze_frame_index"]),
                     takeoff_candidate_index=data.get("takeoff_candidate_index"),
                     takeoff_confidence=float(data.get("takeoff_confidence", 0.0)),
+                    takeoff_analysis_start_ns=int(data["takeoff_analysis_start_ns"]) if data.get("takeoff_analysis_start_ns") is not None else None,
+                    takeoff_analysis_end_ns=int(data["takeoff_analysis_end_ns"]) if data.get("takeoff_analysis_end_ns") is not None else None,
                     width=int(data.get("width", 0)),
                     height=int(data.get("height", 0)),
                     media_start_timestamp_ns=int(data.get("media_start_timestamp_ns", 0)),

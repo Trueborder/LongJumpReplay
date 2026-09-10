@@ -11,6 +11,7 @@ a = Analysis(
         (os.path.join(project_root, 'packaging/generated/config.json'), '.'),
         (os.path.join(project_root, 'assets/long_jump_replay.ico'), 'assets'),
         (os.path.join(project_root, 'assets/long_jump_splash.png'), 'assets'),
+        (os.path.join(project_root, 'assets/camera-checkerboard.svg'), 'assets'),
     ],
     hiddenimports=['hid'],
     hookspath=[],

@@ -1,4 +1,4 @@
-from src.athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
+from src.athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown, format_countdown_tenths
 
 
 class FakeClock:
@@ -18,8 +18,10 @@ def test_countdown_uses_monotonic_elapsed_time_and_rounds_up():
     timer.start()
     clock.advance(0.001)
     assert timer.snapshot().remaining_seconds == 60
+    assert timer.snapshot().remaining_tenths == 600
     clock.advance(0.999)
     assert timer.snapshot().remaining_seconds == 59
+    assert timer.snapshot().remaining_tenths == 590
     clock.advance(48.1)
     assert timer.snapshot().remaining_seconds == 11
 
@@ -53,3 +55,4 @@ def test_duration_change_resets_full_ready_value():
     assert snapshot.state is AthleteTimerState.READY
     assert snapshot.remaining_seconds == 90
     assert format_countdown(90) == "01:30"
+    assert format_countdown_tenths(905) == "01:30.5"

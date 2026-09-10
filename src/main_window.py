@@ -33,7 +33,8 @@ from .adjudication import (
 from . import VERSION_SHORT, __version__
 from .activation import current_authorization
 from .attempts import AttemptManager
-from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown
+from .board_calibration_wizard import BoardCalibrationWizard
+from .athlete_timer import AthleteTimerController, AthleteTimerState, format_countdown, format_countdown_tenths
 from .capture import CaptureEngine, OpenCVCameraSource
 from .competition import CompetitionSession, RosterAssignment
 from .competition_board import CompetitionBoard
@@ -60,6 +61,17 @@ from .runtime_diagnostics import RuntimeTelemetry, log_event
 from .settings_dialog import SettingsDialog
 from .shuttle_hid import ShuttleHIDPoller, list_shuttle_devices
 from .takeoff_assist import detect_takeoff_candidate
+from .top_view_projection import (
+    ProjectionCalibration,
+    ProjectionCandidate,
+    ProjectionProgressDialog,
+    TopViewProjectionWindow,
+    board_search_roi,
+    calibration_matches,
+    consecutive_candidate_indices,
+    filter_projection_candidates,
+    rank_decoded_projection_frames,
+)
 from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed_info
 from .timeline import ProfessionalTimeline, format_wall_time_ns
 from .trial import capabilities_for, record_successful_export, trial_exports_remaining, trial_is_active, trial_status
@@ -167,6 +179,13 @@ class MainWindow:
         self.adjudication = AdjudicationSessionStore(config_path.parent / "adjudication", writable_data_directory() / "adjudication-recovery")
         self.playback = PlaybackController(self.buffer, self.attempts)
         self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
+        # A new judging session always starts at the first athlete's first
+        # attempt.  The persisted selection remains available for explicit
+        # navigation, but must not silently carry into a fresh startup.
+        enabled_groups = [group for group, enabled in (("Boys", config.competition.boys_enabled), ("Girls", config.competition.girls_enabled)) if enabled]
+        config.competition.active_group = enabled_groups[0] if enabled_groups else "Boys"
+        config.competition.current_competitor_by_group["Boys"] = 1
+        config.competition.current_competitor_by_group["Girls"] = 1
         self.competition = CompetitionSession(config.competition)
         self.shuttle = ShuttleHIDPoller(config.shuttle, self.action_queue)
         report("Creating replay components…", 2, 8, "Replay, capture and evidence components created")
@@ -194,7 +213,15 @@ class MainWindow:
         self._window_interaction_job: str | None = None
         self._last_root_geometry = ""
         self._calibration_mode = False
+        self._board_calibration_wizard: BoardCalibrationWizard | None = None
+        self._startup_calibration_opened = False
         self._warning_active = False
+        self._assist_warning_attempt_id: int | None = None
+        self._top_view_window: TopViewProjectionWindow | None = None
+        self._top_view_loading_dialog: ProjectionProgressDialog | None = None
+        self._top_view_loading_cancel: Event | None = None
+        self._takeoff_projection_indices: dict[int, tuple[int, ...]] = {}
+        self._takeoff_projection_lock = Lock()
         self._last_video_update = 0.0
         self._menu_active_until = 0.0
         # Operator/setup mode is a development-only compatibility flag and is
@@ -299,6 +326,8 @@ class MainWindow:
         self.var_show_status = tk.BooleanVar(value=d.show_status_bar)
         self.var_show_live = tk.BooleanVar(value=d.show_live_preview)
         self.var_show_board = tk.BooleanVar(value=self.config.competition.show_competition_board)
+        self.var_show_board_outline = tk.BooleanVar(value=d.board_roi_visible)
+        self.var_show_foul_area = tk.BooleanVar(value=d.guide_enabled)
         self.var_layout = tk.StringVar(value=d.layout)
         self.var_theme = tk.StringVar(value=d.theme)
         self.camera_var = tk.StringVar(value="Starting camera…")
@@ -310,6 +339,8 @@ class MainWindow:
         self.message_var = tk.StringVar(value="")
         self.warning_var = tk.StringVar(value="")
         self.recording_var = tk.StringVar(value="")
+        self.assist_warning_var = tk.StringVar(value="")
+        self.camera_warning_var = tk.StringVar(value="")
         self.attempt_summary_var = tk.StringVar(value=self._t("attempts.none"))
         self.competition_banner_var = tk.StringVar(value="")
         self.group_var = tk.StringVar(value=self.config.competition.active_group)
@@ -408,11 +439,12 @@ class MainWindow:
             self.theme_menu.add_radiobutton(label=self._t(key), variable=self.var_theme, value=value, command=self._menu_theme_changed)
         self.view_menu.add_cascade(label=self._t("menu.theme"), menu=self.theme_menu)
         self.view_menu.add_separator()
-        self.view_menu.add_command(label=self._t("menu.calibration"), command=self.toggle_calibration_mode)
+        self.view_menu.add_command(label=self._t("menu.calibration"), command=self.open_board_calibration)
+        self.view_menu.add_checkbutton(label=self._t("menu.show_board_outline"), variable=self.var_show_board_outline, command=self.toggle_board_overlay)
+        self.view_menu.add_checkbutton(label=self._t("menu.show_foul_area") + "\tG", variable=self.var_show_foul_area, command=self.toggle_foul_overlay)
         self.view_menu.add_command(label=self._t("menu.comparison") + "\tC", command=self.toggle_comparison)
         self.view_menu.add_command(label=self._t("menu.fullscreen") + "\tF11", command=self.toggle_fullscreen)
         self.view_menu.add_command(label=self._t("menu.reset") + "\tR", command=self.reset_video_views)
-        self.view_menu.add_command(label=self._t("menu.guide") + "\tG", command=self.toggle_guide)
         self.help_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
         self.help_menu.add_command(label=self._t("menu.controls"), command=self.show_controls)
         self.help_menu.add_separator()
@@ -599,6 +631,7 @@ class MainWindow:
             detail_window_seconds=self.config.timeline.detail_window_seconds,
             min_detail_seconds=self.config.timeline.min_detail_seconds,
             max_detail_seconds=self.config.timeline.max_detail_seconds,
+            on_zoom_commit=self._commit_timeline_zoom,
             language=self.config.general.language,
         )
         self.timeline.grid(row=0, column=0, sticky="nsew")
@@ -623,6 +656,9 @@ class MainWindow:
         self.freeze_button.pack(side="left", padx=(0, 12))
         self.recording_status_label = ttk.Label(self.controls, textvariable=self.recording_var, style="Warning.TLabel")
         self.recording_status_label.pack(side="left", padx=(0, 12))
+        self.assist_warning_label = ttk.Label(self.controls, textvariable=self.assist_warning_var, style="Warning.TLabel")
+        # Keep the failure notice out of the way until a frozen attempt needs it.
+        self.assist_warning_label.pack_forget()
         self.frame_group = ttk.Frame(self.controls, style="ControlDock.TFrame")
         self.frame_group_label = ttk.Label(self.frame_group, text=self._t("controls.frame_review"), style="ContextTitle.TLabel")
         self.frame_group_label.pack(anchor="w")
@@ -632,6 +668,8 @@ class MainWindow:
         self.prev_frame_button.pack(side="left", padx=(0, 2))
         self.next_frame_button = ttk.Button(frame_buttons, text=self._t("button.next_frame"), width=12, style="Control.TButton", command=lambda: self.step_frame(1))
         self.next_frame_button.pack(side="left", padx=2)
+        self.top_view_button = ttk.Button(frame_buttons, text=self._t("button.top_view"), width=16, style="Control.TButton", command=self.open_top_view_projection)
+        self.top_view_button.pack(side="left", padx=(7, 0))
         self.frame_group.pack(side="left", padx=(0, 12))
 
         self.decision_frame = ttk.Frame(self.controls, style="ControlDock.TFrame")
@@ -648,15 +686,6 @@ class MainWindow:
         self.review_button = ttk.Button(decision_buttons, text=self._t("button.review"), width=12, style="JudgeReview.TButton", command=lambda: self.mark_decision(AttemptDecision.REVIEW))
         self.review_button.pack(side="left", padx=2)
         self.decision_frame.pack(side="left")
-
-        self.board_setup_frame = ttk.Frame(self.controls, style="ControlDock.TFrame")
-        self.board_setup_group_label = ttk.Label(self.board_setup_frame, text=self._t("controls.board_setup"), style="ContextTitle.TLabel")
-        self.board_setup_group_label.pack(anchor="w")
-        board_setup_buttons = ttk.Frame(self.board_setup_frame, style="ControlDock.TFrame")
-        board_setup_buttons.pack(anchor="w", pady=(2, 0))
-        self.board_setup_button = ttk.Button(board_setup_buttons, text=self._t("button.board_setup"), width=12, style="Control.TButton", command=self.toggle_calibration_mode)
-        self.board_setup_button.pack(side="left")
-        self.board_setup_frame.pack(side="right", padx=(6, 0))
 
         self.measurement_frame = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(7, 5))
         self.measurement_title_label = ttk.Label(self.measurement_frame, text=self._t("measurement.title"), style="ContextTitle.TLabel")
@@ -696,10 +725,15 @@ class MainWindow:
         self.status_bar.grid(row=3, column=0, sticky="ew", pady=(5, 0))
         self.status_bar.columnconfigure(0, weight=1)
         ttk.Label(self.status_bar, textvariable=self.status_var, style="Status.TLabel", anchor="w").grid(row=0, column=0, sticky="ew")
+        self.camera_warning_label = ttk.Label(
+            self.status_bar, textvariable=self.camera_warning_var,
+            style="StatusWarning.TLabel", anchor="e",
+        )
+        self.camera_warning_label.grid(row=0, column=1, sticky="e", padx=(10, 0))
         self.status_progress = ttk.Progressbar(self.status_bar, mode="indeterminate", length=110)
-        self.status_progress.grid(row=0, column=1, sticky="e", padx=(12, 0))
+        self.status_progress.grid(row=0, column=2, sticky="e", padx=(12, 0))
         self.status_progress.grid_remove()
-        ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel", anchor="e").grid(row=0, column=2, sticky="e", padx=(12, 0))
+        ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel", anchor="e").grid(row=0, column=3, sticky="e", padx=(12, 0))
 
     def _video_calibration_kwargs(self) -> dict:
         d = self.config.display
@@ -712,6 +746,8 @@ class MainWindow:
             board_roi=(d.board_roi_x, d.board_roi_y, d.board_roi_width, d.board_roi_height),
             board_roi_enabled=d.board_roi_enabled,
             board_roi_visible=d.board_roi_visible,
+            projection_board=tuple(tuple(point) for point in self.config.top_view_projection.board_corners),
+            projection_foul_area=tuple(tuple(point) for point in self.config.top_view_projection.foul_area),
         )
 
     def _build_attempts_panel(self, parent) -> ttk.Frame:
@@ -998,6 +1034,10 @@ class MainWindow:
         if self._camera_starting and not self._camera_retrying:
             if live_frame is not None:
                 self._finish_camera_start_feedback()
+                if not self._startup_calibration_opened:
+                    self._startup_calibration_opened = True
+                    calibration_frame = live_frame.copy()
+                    self.root.after_idle(lambda: self.open_board_calibration(startup=True, frame_bgr=calibration_frame))
                 if self._system_pause_transition and not self._system_paused:
                     self._system_pause_transition = False
                     self._set_system_paused_ui()
@@ -1158,8 +1198,7 @@ class MainWindow:
         if self._system_paused:
             self.camera_var.set(self._t("mode.paused")); self.clock_var.set(time.strftime("%H:%M:%S"))
             self.status_var.set(self._t("system.paused_status"))
-            if self._warning_active:
-                self.warning_banner.pack_forget(); self.warning_var.set(""); self._warning_active = False
+            self.camera_warning_var.set("")
             return
         capture, buffer = self.capture.stats(), self.buffer.stats()
         cache_gb = self.attempts.cache_size_bytes() / 1024 ** 3
@@ -1173,12 +1212,9 @@ class MainWindow:
         )
         warning = self._capture_quality_warning(capture)
         if self.config.display.show_capture_warnings and warning:
-            self.warning_var.set(f"⚠ {warning}")
-            self.warning_banner.configure(bg=self.palette["warning"], fg="#111111")
-            if not self.warning_banner.winfo_manager(): self.warning_banner.pack(fill="x", after=self.outer.winfo_children()[0], pady=(0, 6))
-            self._warning_active = True
-        elif self._warning_active:
-            self.warning_banner.pack_forget(); self.warning_var.set(""); self._warning_active = False
+            self.camera_warning_var.set(self._compact_capture_warning(capture))
+        else:
+            self.camera_warning_var.set("")
         if not self._busy_depth and time.perf_counter() >= self._message_until: self.message_var.set(self.shuttle.status)
         if capture.last_error and capture.last_error != self._last_error:
             self._last_error = capture.last_error; self._show_message(f"Camera: {capture.last_error}", 8)
@@ -1366,7 +1402,7 @@ class MainWindow:
             value_color = p["warning"]
         else:
             value_color = p["accent"]
-        signature = (snapshot.state, snapshot.remaining_seconds, prefix, prefix_visible, prefix_color, value_color, background, p["border"])
+        signature = (snapshot.state, snapshot.remaining_seconds, snapshot.remaining_tenths, prefix, prefix_visible, prefix_color, value_color, background, p["border"])
         if signature == self._last_timer_render_signature:
             return
         self._last_timer_render_signature = signature
@@ -1374,7 +1410,11 @@ class MainWindow:
         self.timer_frame.configure(bg=background)
         self.timer_prefix_label.configure(bg=background)
         self.timer_value_label.configure(bg=background)
-        self.timer_value_var.set(format_countdown(snapshot.remaining_seconds))
+        # Precision is most useful while the clock is running. Keep the
+        # stable READY/STOPPED/EXPIRED states compact for existing operator
+        # layouts and accessibility snapshots.
+        value = format_countdown_tenths(snapshot.remaining_tenths) if snapshot.state is AthleteTimerState.RUNNING else format_countdown(snapshot.remaining_seconds)
+        self.timer_value_var.set(value)
         if prefix_visible:
             self.timer_prefix_var.set(prefix)
             if not self.timer_prefix_label.winfo_manager():
@@ -1409,9 +1449,7 @@ class MainWindow:
         )
         self.system_pause_button.state(["disabled"] if self._system_pause_transition else ["!disabled"])
         state = ["disabled"] if paused_or_stopping or self._trial_expired else ["!disabled"]
-        for button in (
-            self.freeze_button, self.board_setup_button,
-        ):
+        for button in (self.freeze_button,):
             button.state(state)
         self._update_judging_controls()
         self._update_video_labels()
@@ -1428,6 +1466,7 @@ class MainWindow:
         state = ["!disabled"] if enabled else ["disabled"]
         for button in (self.prev_frame_button, self.next_frame_button):
             button.state(state)
+        self.top_view_button.state(state)
         for button in (self.not_decided_button, self.valid_button, self.foul_button, self.review_button):
             button.state(state)
 
@@ -1493,6 +1532,19 @@ class MainWindow:
         if stats.last_error: issues.append(stats.last_error)
         return " · ".join(issues)
 
+    def _compact_capture_warning(self, stats=None) -> str:
+        """Return a short warning suitable for the single-line status row."""
+        stats = stats or self.capture.stats()
+        target = max(1.0, self.config.camera.fps)
+        issues = []
+        if stats.captured_frames > 20 and stats.capture_fps > 0 and stats.capture_fps < target * .85:
+            issues.append(f"LOW FPS {stats.capture_fps:.0f}/{target:.0f}")
+        if stats.queue_drops:
+            issues.append(f"DROPS {stats.queue_drops}")
+        if stats.last_error:
+            issues.append("CAMERA ERROR")
+        return "! " + " | ".join(issues) if issues else ""
+
     def _update_timeline(self) -> None:
         oldest, newest = self.buffer.oldest(), self.buffer.newest()
         if self.playback.mode is PlaybackMode.ATTEMPT and self.playback.attempt_id is not None:
@@ -1500,19 +1552,24 @@ class MainWindow:
             if not attempt or attempt.frame_count <= 0: return
             playhead = self._displayed_timestamp_ns or (attempt.start_timestamp_ns + int(self.playback.attempt_frame_index / max(1.0, attempt.fps) * 1e9))
             markers = [m.timestamp_ns for m in attempt.markers]
+            predicted_frame_ns = None
             if attempt.takeoff_candidate_index is not None:
-                markers.append(attempt.start_timestamp_ns + int(attempt.takeoff_candidate_index / max(1.0, attempt.fps) * 1e9))
+                predicted_frame_ns = attempt.start_timestamp_ns + int(attempt.takeoff_candidate_index / max(1.0, attempt.fps) * 1e9)
             model = TimelineModel(
-                attempt.start_timestamp_ns,
-                max(attempt.start_timestamp_ns + 1, attempt.end_timestamp_ns),
-                playhead,
-                attempt.freeze_timestamp_ns,
-                attempt.freeze_timestamp_ns,
-                tuple(markers),
-                attempt.start_timestamp_ns,
-                attempt.end_timestamp_ns,
-                False,
-                attempt.media_start_wall_time_ns or int(attempt.created_wall_time * 1_000_000_000),
+                start_ns=attempt.start_timestamp_ns,
+                end_ns=max(attempt.start_timestamp_ns + 1, attempt.end_timestamp_ns),
+                playhead_ns=playhead,
+                reference_ns=attempt.freeze_timestamp_ns,
+                freeze_ns=attempt.freeze_timestamp_ns,
+                markers_ns=tuple(markers),
+                available_start_ns=attempt.start_timestamp_ns,
+                available_end_ns=attempt.end_timestamp_ns,
+                is_live=False,
+                wall_start_ns=attempt.media_start_wall_time_ns or int(attempt.created_wall_time * 1_000_000_000),
+                assist_start_ns=attempt.takeoff_analysis_start_ns,
+                assist_end_ns=attempt.takeoff_analysis_end_ns,
+                predicted_frame_ns=predicted_frame_ns,
+                prediction_confidence=attempt.takeoff_confidence,
             )
         elif oldest and newest:
             packet = newest if self.playback.mode is PlaybackMode.LIVE else self.buffer.get(self.playback.live_seq)
@@ -1600,7 +1657,10 @@ class MainWindow:
                     frozen_attempt.competitor_attempt_number, frozen_attempt.competition_phase,
                 )
         athlete = board_assignment.competitor_number if board_assignment else self.competition.current_competitor()
-        attempt_no = board_assignment.attempt_number if board_assignment else 0
+        # Keep the board focused on the first actionable cell at startup,
+        # rather than leaving athlete 1 visually unselected until an attempt
+        # has already been recorded.
+        attempt_no = board_assignment.attempt_number if board_assignment else 1
         adjudication_by_attempt = {
             attempt.attempt_id: self.adjudication.get_for_attempt(attempt)
             for attempt in attempts
@@ -1688,7 +1748,7 @@ class MainWindow:
         self._cancel_scheduled_review()
         if self.playback.select_attempt(attempt_id):
             self._selected_action_attempt_id = attempt_id
-            self._last_replay_key = None; self.timeline.detail_center_ns = None; self._refresh_attempts()
+            self._last_replay_key = None; self.timeline.detail_center_ns = None; self._clear_assist_warning(); self._refresh_attempts()
             self._update_judging_controls()
 
     def _mark_attempt_from_board(self, attempt_id: int, decision: AttemptDecision) -> None:
@@ -1980,6 +2040,11 @@ class MainWindow:
                 attempt_id, error = payload; self._end_busy(); self._show_message(f"Attempt #{attempt_id:02d} error: {error}", 10)
             elif event == "takeoff_candidate":
                 attempt_id, index, confidence = payload; self._handle_takeoff_candidate(int(attempt_id), int(index), float(confidence))
+            elif event == "takeoff_failed":
+                attempt_id, message = payload
+                detail = str(message)
+                self._set_assist_warning(int(attempt_id))
+                self._show_message(detail, 8)
             elif event == "attempts_cleared":
                 self._end_busy(); self._show_message(f"Cleared {int(payload)} temporary recording(s) and the live buffer.", 5)
             elif event == "system_pause_complete":
@@ -2322,6 +2387,7 @@ class MainWindow:
             self.competition_board.clear_focus()
             self.athlete_timer.stop(); self._update_athlete_timer_display()
             self._last_replay_key = None; self._last_board_signature = None; self._refresh_attempts()
+            self._clear_assist_warning()
             if self.config.takeoff_assist.enabled and self.config.display.board_roi_enabled:
                 self._start_takeoff_analysis(attempt_id)
         else:
@@ -2361,6 +2427,7 @@ class MainWindow:
         if complete_rotation and not self._complete_current_attempt_for_rotation():
             return False
         self.playback.go_live(); self._last_replay_key = None; self.timeline.detail_center_ns = None
+        self._clear_assist_warning()
         self._selected_action_attempt_id = None
         self._board_next_assignment = None; self.competition_board.clear_focus(); self._last_board_signature = None
         if returning_from_replay:
@@ -2394,7 +2461,7 @@ class MainWindow:
         self._cancel_scheduled_review()
         if self.playback.select_relative_attempt(delta):
             self._selected_action_attempt_id = self.playback.attempt_id
-            self._last_replay_key = None; self.timeline.detail_center_ns = None; self._refresh_attempts()
+            self._last_replay_key = None; self.timeline.detail_center_ns = None; self._clear_assist_warning(); self._refresh_attempts()
             attempt = self.attempts.get_attempt(self.playback.attempt_id or -1)
             if attempt:
                 self._show_message(f"{self._attempt_roster_display(attempt)} · {self._decision_display(attempt.decision)}", 2)
@@ -2403,6 +2470,259 @@ class MainWindow:
         if not self._trial_action_allowed("replay"):
             return
         self._cancel_scheduled_review(); self.playback.seek_timestamp(timestamp_ns); self._last_replay_key = None
+
+    def _commit_timeline_zoom(self, seconds: float) -> None:
+        value = max(60.0, min(3600.0, float(seconds)))
+        if abs(self.config.timeline.detail_window_seconds - value) < .001:
+            return
+        self.config.timeline.detail_window_seconds = value
+        self._save_config_safely()
+
+    def _top_view_camera_signature(self) -> str:
+        camera = self.config.camera
+        file_path = str(Path(camera.file_path).resolve()) if camera.source_type == "file" and camera.file_path else ""
+        return "|".join((camera.source_type, str(camera.device_index), camera.backend, camera.fourcc, file_path))
+
+    def _stored_top_view_calibration(self) -> ProjectionCalibration | None:
+        projection = self.config.top_view_projection
+        if len(projection.board_corners) != 4 or len(projection.foul_line) != 2:
+            return None
+        try:
+            return ProjectionCalibration(
+                board_corners=tuple((float(point[0]), float(point[1])) for point in projection.board_corners),
+                foul_line=tuple((float(point[0]), float(point[1])) for point in projection.foul_line),
+                camera_signature=projection.camera_signature,
+                reference_width=int(projection.reference_width), reference_height=int(projection.reference_height),
+                pad_length_cm=float(projection.pad_length_cm), pad_width_cm=float(projection.pad_width_cm),
+                shoe_width_cm=float(projection.shoe_width_cm),
+                legal_side_flipped=bool(projection.legal_side_flipped),
+                camera_profile=dict(projection.camera_profile) if projection.camera_profile else None,
+            )
+        except (IndexError, TypeError, ValueError):
+            return None
+
+    def _save_top_view_calibration(self, calibration: ProjectionCalibration) -> None:
+        projection = self.config.top_view_projection
+        projection.board_corners = [list(point) for point in calibration.board_corners]
+        projection.foul_line = [list(point) for point in calibration.foul_line]
+        projection.camera_signature = calibration.camera_signature
+        projection.reference_width = calibration.reference_width
+        projection.reference_height = calibration.reference_height
+        projection.pad_length_cm = calibration.pad_length_cm
+        projection.pad_width_cm = calibration.pad_width_cm
+        projection.shoe_width_cm = calibration.shoe_width_cm
+        projection.legal_side_flipped = calibration.legal_side_flipped
+        projection.camera_profile = dict(calibration.camera_profile or {})
+        self._save_config_safely()
+
+    def _save_projection_foul_area(self, foul_area: tuple[tuple[float, float], ...]) -> None:
+        if len(foul_area) != 4:
+            return
+        self.config.top_view_projection.foul_area = [list(point) for point in foul_area]
+        self._sync_calibration_to_canvases()
+        self._save_config_safely()
+
+    def open_board_calibration(self, startup: bool = False, frame_bgr: np.ndarray | None = None) -> None:
+        """Review saved geometry or auto-detect it from the current camera frame."""
+        if self._closing:
+            return
+        if self._board_calibration_wizard is not None:
+            try:
+                self._board_calibration_wizard.window.lift()
+                return
+            except tk.TclError:
+                self._board_calibration_wizard = None
+        frame = frame_bgr if frame_bgr is not None else self._displayed_bgr
+        if frame is None:
+            if not startup:
+                self._show_message(self._t("calibration.waiting_camera"), 5)
+            return
+        frame_size = (frame.shape[1], frame.shape[0])
+        signature = self._top_view_camera_signature()
+        stored = self._stored_top_view_calibration()
+        previous = stored if calibration_matches(stored, signature, frame_size) else None
+        projection = self.config.top_view_projection
+        previous_foul_area = projection.foul_area if previous is not None else ()
+        d = self.config.display
+        self._board_calibration_wizard = BoardCalibrationWizard(
+            self.root,
+            self.palette,
+            self.config.general.language,
+            frame,
+            (d.board_roi_x, d.board_roi_y, d.board_roi_width, d.board_roi_height),
+            signature,
+            previous,
+            previous_foul_area,
+            self._confirm_board_calibration,
+            self._board_calibration_closed,
+            lambda: (latest.copy() if (latest := self.capture.latest.get()[0]) is not None else None),
+        )
+
+    def _confirm_board_calibration(
+        self,
+        calibration: ProjectionCalibration,
+        foul_area: tuple[tuple[float, float], ...],
+    ) -> None:
+        projection = self.config.top_view_projection
+        projection.foul_area = [list(point) for point in foul_area]
+        self._save_top_view_calibration(calibration)
+        d = self.config.display
+        x, y, width, height = board_search_roi(calibration.board_corners, margin_ratio=0.0)
+        d.board_roi_x, d.board_roi_y = x, y
+        d.board_roi_width, d.board_roi_height = width, height
+        d.board_roi_enabled = True
+        line = np.asarray(calibration.foul_line, dtype=np.float32)
+        centre = line.mean(axis=0)
+        vector = line[1] - line[0]
+        d.guide_x_ratio, d.guide_y_ratio = float(centre[0]), float(centre[1])
+        d.guide_angle_deg = float(math.degrees(math.atan2(float(vector[0]), float(vector[1]))))
+        self._sync_calibration_to_canvases()
+        self._save_config_safely()
+        self._show_message(self._t("calibration.saved"), 5)
+
+    def _board_calibration_closed(self) -> None:
+        self._board_calibration_wizard = None
+
+    def open_top_view_projection(self) -> None:
+        if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id is None:
+            self._show_message(self._t("projection.freeze_first"), 5)
+            return
+        if self._top_view_loading_dialog is not None:
+            try:
+                self._top_view_loading_dialog.window.lift()
+                return
+            except tk.TclError:
+                self._top_view_loading_dialog = None
+        if self._top_view_window is not None:
+            try:
+                if self._top_view_window.window.winfo_exists():
+                    self._top_view_window.window.lift()
+                    self._top_view_window.window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+            self._top_view_window = None
+        attempt_id = int(self.playback.attempt_id)
+        attempt = self.attempts.get_attempt(attempt_id)
+        packets = self.attempts.packets_snapshot(attempt_id)
+        if attempt is None or max(attempt.frame_count, len(packets)) <= 0:
+            self._show_message(self._t("projection.no_frames"), 5)
+            return
+        frame_count = max(attempt.frame_count, len(packets))
+        # Projection follows the frame currently shown to the operator.
+        frame_index = self.playback.attempt_frame_index
+        if frame_index is None:
+            frame_index = attempt.freeze_frame_index
+        frame_index = max(0, min(frame_count - 1, int(frame_index)))
+        fps = max(1.0, float(attempt.fps))
+        target_timestamp_ns = attempt.start_timestamp_ns + int(frame_index / fps * 1_000_000_000)
+        candidate_frame_indices = (frame_index,)
+        # Neighbours are hidden segmentation references only; they are never
+        # offered as alternate frames to the operator.
+        reference_indices = tuple(
+            frame_index + delta
+            for delta in (-3, -2, -1, 1, 2, 3)
+            if 0 <= frame_index + delta < frame_count
+        )
+        current_signature = self._top_view_camera_signature()
+        stored = self._stored_top_view_calibration()
+        configured_roi = (self.config.display.board_roi_x, self.config.display.board_roi_y, self.config.display.board_roi_width, self.config.display.board_roi_height)
+        loading_cancel = Event()
+        self._top_view_loading_cancel = loading_cancel
+
+        def cancel_loading() -> None:
+            loading_cancel.set()
+            if self._top_view_loading_dialog is not None:
+                self._top_view_loading_dialog.close()
+            self._top_view_loading_dialog = None
+            self._top_view_loading_cancel = None
+
+        self._top_view_loading_dialog = ProjectionProgressDialog(
+            self.root,
+            self.palette,
+            self._t("button.top_view"),
+            self._t("projection.loading_frames"),
+            cancel_loading,
+            cancel_text=self._t("projection.cancel"),
+        )
+        result_queue: Queue[tuple[str, object]] = Queue()
+        unique_references = tuple(index for index in dict.fromkeys(reference_indices) if index not in set(candidate_frame_indices))
+        total_reads = max(1, len(candidate_frame_indices) + len(unique_references))
+
+        def load_worker() -> None:
+            decoded_frames: list[tuple[int, int, np.ndarray]] = []
+            reference_frames: list[np.ndarray] = []
+            read_count = 0
+            for candidate_index in candidate_frame_indices:
+                if loading_cancel.is_set(): return
+                media = self.attempts.get_frame(attempt_id, candidate_index)
+                read_count += 1
+                if media.frame_bgr is not None:
+                    decoded_frames.append((media.frame_index, media.timestamp_ns, media.frame_bgr))
+                result_queue.put(("progress", (read_count / total_reads * 55.0, self._t("projection.decoding_detail").format(current=read_count, total=total_reads))))
+            for reference_index in unique_references:
+                if loading_cancel.is_set(): return
+                media = self.attempts.get_frame(attempt_id, reference_index)
+                read_count += 1
+                if media.frame_bgr is not None:
+                    reference_frames.append(media.frame_bgr)
+                result_queue.put(("progress", (read_count / total_reads * 55.0, self._t("projection.decoding_detail").format(current=read_count, total=total_reads))))
+            if not decoded_frames:
+                result_queue.put(("error", self._t("projection.no_decodable"))); return
+            local_target = next((timestamp for index, timestamp, _frame in decoded_frames if index == frame_index), target_timestamp_ns)
+            frame_size = (decoded_frames[0][2].shape[1], decoded_frames[0][2].shape[0])
+            matching = calibration_matches(stored, current_signature, frame_size)
+            active_calibration = stored if matching else None
+            projection_roi = board_search_roi(stored.board_corners) if matching and stored is not None else configured_roi
+            result_queue.put(("progress", (72.0, self._t("projection.using_current_frame"))))
+            candidates = [
+                ProjectionCandidate(index, timestamp, frame, 1.0, 0.0, 0.0)
+                for index, timestamp, frame in sorted(decoded_frames, key=lambda item: item[0])
+            ]
+            if not candidates:
+                result_queue.put(("error", self._t("projection.no_decodable"))); return
+            if not reference_frames:
+                reference_frames = [frame for _index, _timestamp, frame in decoded_frames]
+            estimates = {}
+            warning = self._t("projection.camera_changed") if stored is not None and not matching else ""
+            result_queue.put(("result", (candidates, reference_frames, estimates, local_target, projection_roi, active_calibration, warning)))
+
+        def poll_loading() -> None:
+            if loading_cancel.is_set(): return
+            try:
+                while True:
+                    kind, payload = result_queue.get_nowait()
+                    if kind == "progress" and self._top_view_loading_dialog is not None:
+                        value, detail = payload
+                        self._top_view_loading_dialog.update(value, self._t("projection.loading_frames"), str(detail))
+                    elif kind == "error":
+                        cancel_loading(); self._show_message(str(payload), 6); return
+                    elif kind == "result":
+                        candidates, reference_frames, estimates, local_target, projection_roi, active_calibration, warning = payload
+                        if self._top_view_loading_dialog is not None:
+                            self._top_view_loading_dialog.complete(self._t("projection.opening_screen"))
+                            self._top_view_loading_dialog.close()
+                        self._top_view_loading_dialog = None; self._top_view_loading_cancel = None
+                        self._top_view_window = TopViewProjectionWindow(
+                            self.root, self.palette, self.config.general.language, attempt_id, packets, local_target,
+                            projection_roi, active_calibration, warning, current_signature,
+                            self._save_top_view_calibration,
+                            lambda selected_id: self._show_message(self._t("projection.ready_message").format(attempt=selected_id), 5),
+                            self._top_view_closed,
+                            candidates=candidates, reference_frames=reference_frames, candidate_estimates=estimates,
+                            foul_area=self.config.top_view_projection.foul_area if active_calibration is not None else (),
+                            on_foul_area_saved=self._save_projection_foul_area,
+                        )
+                        return
+            except Empty:
+                pass
+            self.root.after(40, poll_loading)
+
+        Thread(target=load_worker, name=f"projection-loader-{attempt_id}", daemon=True).start()
+        self.root.after(40, poll_loading)
+
+    def _top_view_closed(self) -> None:
+        self._top_view_window = None
 
     def add_marker(self) -> None:
         if not self._trial_action_allowed("replay"):
@@ -2806,6 +3126,22 @@ class MainWindow:
         self._update_judging_controls()
 
     # -------------------------------------------------------- Take-off Assist
+    def _set_assist_warning(self, attempt_id: int) -> None:
+        """Show a persistent, compact failure state for the active frozen attempt."""
+        if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id != attempt_id:
+            return
+        self._assist_warning_attempt_id = attempt_id
+        self.assist_warning_var.set("! Take-off Assist failed")
+        if not self.assist_warning_label.winfo_manager():
+            self.assist_warning_label.pack(side="left", padx=(0, 12))
+
+    def _clear_assist_warning(self) -> None:
+        self._assist_warning_attempt_id = None
+        if hasattr(self, "assist_warning_var"):
+            self.assist_warning_var.set("")
+        if hasattr(self, "assist_warning_label") and self.assist_warning_label.winfo_manager():
+            self.assist_warning_label.pack_forget()
+
     def _start_takeoff_analysis(self, attempt_id: int) -> None:
         attempt = self.attempts.get_attempt(attempt_id)
         if not attempt: return
@@ -2817,20 +3153,39 @@ class MainWindow:
                     time.sleep(a.analysis_seconds_after_freeze + .05)
                 packets = self.attempts.packets_snapshot(attempt_id)
                 if not packets:
+                    self.event_queue.put(("takeoff_failed", (attempt_id, "Take-off Assist failed: no recorded frames were available.")))
                     return
                 candidate = detect_takeoff_candidate(packets, attempt.freeze_timestamp_ns, roi,
                                                      a.analysis_seconds_before_freeze, a.analysis_seconds_after_freeze,
                                                      a.downscale_width)
                 if candidate:
-                    self.attempts.set_takeoff_candidate(attempt_id, candidate.frame_index + a.seek_lead_frames, candidate.confidence)
-                else: self.event_queue.put(("message", "Take-off Assist did not find a clear local motion peak."))
-            except Exception as exc: self.event_queue.put(("message", f"Take-off Assist error: {exc}"))
+                    lead = int(a.seek_lead_frames)
+                    cached_indices = tuple(
+                        max(0, min(max(0, attempt.frame_count - 1), int(index) + lead))
+                        for index in candidate.usable_frame_indices
+                    )
+                    with self._takeoff_projection_lock:
+                        self._takeoff_projection_indices[attempt_id] = tuple(sorted(set(cached_indices)))
+                    self.attempts.set_takeoff_candidate(
+                        attempt_id,
+                        candidate.frame_index + a.seek_lead_frames,
+                        candidate.confidence,
+                        candidate.analysis_start_ns,
+                        candidate.analysis_end_ns,
+                    )
+                else:
+                    self.event_queue.put(("takeoff_failed", (attempt_id, "Take-off Assist failed: no clear local motion peak was found.")))
+            except Exception as exc:
+                self.event_queue.put(("takeoff_failed", (attempt_id, f"Take-off Assist failed: {exc}")))
         Thread(target=worker, name=f"takeoff-assist-{attempt_id}", daemon=True).start()
 
     def _handle_takeoff_candidate(self, attempt_id: int, index: int, confidence: float) -> None:
         a = self.config.takeoff_assist
         if confidence < a.minimum_confidence:
-            self._show_message(f"Take-off Assist candidate was uncertain ({confidence:.0%}); playhead was not moved.", 5); return
+            detail = f"Take-off Assist failed: candidate confidence was only {confidence:.0%}; playhead was not moved."
+            self._set_assist_warning(attempt_id)
+            self._show_message(detail, 6); return
+        self._clear_assist_warning()
         self._show_message(f"Take-off Assist found a motion peak near the board ({confidence:.0%}).", 5)
         if self.playback.attempt_id != attempt_id: return
         if a.quick_review_enabled: self._start_quick_review(attempt_id, index)
@@ -2885,13 +3240,30 @@ class MainWindow:
 
     def _sync_calibration_to_canvases(self, except_canvas: VideoCanvas | None = None) -> None:
         d = self.config.display; roi = (d.board_roi_x, d.board_roi_y, d.board_roi_width, d.board_roi_height)
+        projection = self.config.top_view_projection
+        board = tuple(tuple(point) for point in projection.board_corners)
+        foul_area = tuple(tuple(point) for point in projection.foul_area)
         for canvas in (self.replay_canvas, self.live_canvas):
             if canvas is except_canvas: continue
             canvas.set_calibration(d.guide_x_ratio, d.guide_y_ratio, d.guide_angle_deg, roi, d.board_roi_enabled, d.board_roi_visible, d.guide_width_px)
+            canvas.set_projection_overlay(board, foul_area)
 
     def toggle_guide(self) -> None:
         enabled = not self.replay_canvas.guide_enabled; self.config.display.guide_enabled = enabled
+        self.var_show_foul_area.set(enabled)
         self.replay_canvas.set_guide_enabled(enabled); self.live_canvas.set_guide_enabled(enabled); self._save_config_safely()
+
+    def toggle_foul_overlay(self) -> None:
+        enabled = bool(self.var_show_foul_area.get())
+        self.config.display.guide_enabled = enabled
+        self.replay_canvas.set_guide_enabled(enabled); self.live_canvas.set_guide_enabled(enabled)
+        self._save_config_safely()
+
+    def toggle_board_overlay(self) -> None:
+        visible = bool(self.var_show_board_outline.get())
+        self.config.display.board_roi_visible = visible
+        self._sync_calibration_to_canvases()
+        self._save_config_safely()
 
     def toggle_comparison(self) -> None:
         if not self.config.display.comparison_enabled:
@@ -3032,6 +3404,9 @@ class MainWindow:
     def _prompt_recording_mode(self) -> None:
         if self._closing or self.config.general.recording_mode_prompted:
             return
+        if self._board_calibration_wizard is not None:
+            self.root.after(500, self._prompt_recording_mode)
+            return
         dialog = tk.Toplevel(self.root)
         configure_popup(dialog, self.root)
         dialog.title("Choose recording mode")
@@ -3077,6 +3452,9 @@ class MainWindow:
         self.close()
 
     def show_onboarding(self) -> None:
+        if self._board_calibration_wizard is not None:
+            self.root.after(300, self.show_onboarding)
+            return
         if getattr(self, "_onboarding_window", None) is not None:
             try:
                 self._onboarding_window.lift(); return
@@ -3138,14 +3516,13 @@ class MainWindow:
         self.system_pause_button.configure(text=self._t("button.resume_system") if self._system_paused else self._t("button.pause_system"))
         self.prev_frame_button.configure(text=self._t("button.previous_frame"))
         self.next_frame_button.configure(text=self._t("button.next_frame"))
+        self.top_view_button.configure(text=self._t("button.top_view"))
         self.not_decided_button.configure(text=self._t("button.not_decided"))
         self.valid_button.configure(text=self._t("button.valid"))
         self.foul_button.configure(text=self._t("button.foul"))
         self.review_button.configure(text=self._t("button.review"))
-        self.board_setup_button.configure(text=self._t("button.board_setup"))
         self.frame_group_label.configure(text=self._t("controls.frame_review"))
         self.decision_group_label.configure(text=self._t("controls.judging"))
-        self.board_setup_group_label.configure(text=self._t("controls.board_setup"))
         self.wizard_button.configure(text=self._t("button.wizard"))
         self.special_result_button.configure(text=self._t("button.more"))
         self.board_target_title_label.configure(text=self._t("board.next_target"))
@@ -3638,6 +4015,7 @@ class MainWindow:
             "Ctrl+Page Up / Ctrl+Page Down: previous / next attempt\nV: Valid\nF: Foul\nU: Review\n"
             "P: Save frame\nE: Export attempt\nCtrl+Delete: clear temporary recordings\nC: comparison view\n\n"
             "Board calibration: drag the line centre; drag its yellow handle to rotate; Shift-drag a new board ROI; Ctrl+wheel fine-rotates the guide.\n\n"
+            "Top-down projection: freeze an attempt, open Top-down projection, review the calibrated board/foul area and shoe outline, then inspect the unified result.\n\n"
             "ShuttleXpress: jog wheel steps frames; outer ring selects attempts; five buttons are configurable in Settings.",
         )
 
@@ -3680,6 +4058,16 @@ class MainWindow:
     def close(self) -> None:
         if self._closing: return
         self._closing = True; self._cancel_scheduled_review()
+        if self._top_view_loading_cancel is not None:
+            self._top_view_loading_cancel.set()
+        if self._top_view_loading_dialog is not None:
+            self._top_view_loading_dialog.close()
+            self._top_view_loading_dialog = None
+        if self._top_view_window is not None:
+            self._top_view_window.close()
+        if self._board_calibration_wizard is not None:
+            self._board_calibration_wizard.close()
+            self._board_calibration_wizard = None
         self._cancel_recording_auto_stop()
         if self.attempts.is_recording:
             self.attempts.stop_recording()

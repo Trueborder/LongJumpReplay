@@ -310,20 +310,25 @@ class CaptureEngine:
                     with self._stats_lock:
                         self._captured_frames += 1
                         self._capture_fps = self._rolling_fps(self._capture_times, time.perf_counter())
-                    item = (capture_index, timestamp_ns, wall_time_ns, frame)
-                    try:
-                        self._raw_queue.put_nowait(item)
-                    except Full:
-                        try:
-                            self._raw_queue.get_nowait(); self._raw_queue.task_done()
-                        except Empty:
-                            pass
+                    # Frames excluded by the configured retention cadence are
+                    # never destined for evidence or replay storage. Filter
+                    # them before queue allocation/locking so the encoder
+                    # worker and queue only see frames they can actually keep.
+                    if capture_index % self.buffer_config.store_every_nth_frame == 0:
+                        item = (capture_index, timestamp_ns, wall_time_ns, frame)
                         try:
                             self._raw_queue.put_nowait(item)
                         except Full:
-                            pass
-                        with self._stats_lock:
-                            self._queue_drops += 1
+                            try:
+                                self._raw_queue.get_nowait(); self._raw_queue.task_done()
+                            except Empty:
+                                pass
+                            try:
+                                self._raw_queue.put_nowait(item)
+                            except Full:
+                                pass
+                            with self._stats_lock:
+                                self._queue_drops += 1
                     capture_index += 1
             except Exception as exc:
                 if not self._stop_event.is_set():
@@ -345,15 +350,12 @@ class CaptureEngine:
 
     def _encoder_loop(self) -> None:
         params = [cv2.IMWRITE_JPEG_QUALITY, self.buffer_config.jpeg_quality]
-        nth = self.buffer_config.store_every_nth_frame
         while not self._stop_event.is_set() or not self._raw_queue.empty():
             try:
                 capture_index, timestamp_ns, wall_time_ns, frame = self._raw_queue.get(timeout=.1)
             except Empty:
                 continue
             try:
-                if capture_index % nth != 0:
-                    continue
                 started = time.perf_counter()
                 ok, encoded = cv2.imencode(".jpg", frame, params)
                 elapsed_ms = (time.perf_counter() - started) * 1000

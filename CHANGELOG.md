@@ -1,5 +1,36 @@
 # LongJumpReplay changelog
 
+## 6.2.1 - 2026-09-09
+
+- Extends the logarithmic timeline zoom down to a one-second detailed view and
+  lets the board-calibration editor replace its startup snapshot with the
+  latest live camera frame while preserving normalized edit points.
+- Opens a skippable board-calibration review after the camera produces its
+  first frame on every launch. Saved geometry must be previewed and confirmed;
+  otherwise board and take-off-line detection supplies editable suggestions.
+- Replaces the bottom-right Board setup control with a guided four-corner board
+  and four-corner take-off-line editor, and adds independent View toggles for
+  the thin competition overlays.
+- Reworks projection review around the exact replay frame currently displayed:
+  the frame chooser and separate Board/Overhead compute modes are replaced by
+  one automatic flat top-down projection.
+- Improves shoe segmentation with multi-reference foreground recovery, shadow
+  suppression, bounded GrabCut refinement, concave contour preservation, and
+  confidence-aware `REVIEW ORIGINAL` fallback.
+- Enlarges the unified top-down result, moves verdict and confidence outside
+  the evidence raster, hides idle progress, and adds a sharp cursor-following
+  magnifier plus brush-assisted shoe-edge correction.
+- Reduces review-time CPU work with coarse-to-fine Take-off Assist scanning, a
+  bounded decoded-frame cache, optical-flow neighbour contours, cached lens
+  maps, pre-queue retention filtering, and single-pass top-down rectification
+  without changing evidence or export formats.
+- Shows the athlete countdown in tenths of a second, starts a new competition
+  on athlete 1 / attempt 1, keeps the wizard confirmation page stable, and
+  defaults the live camera guide outlines off.
+- Automatically opens a full-screen original-versus-computed top-down review
+  after analysis, with a clear VALID / FOUL / ON THE LINE / REVIEW ORIGINAL
+  badge and actionable status messages when computation cannot proceed.
+
 ## 4.0.0 - 2026-09-06
 
 - Adds a recording workflow that can run without the rolling buffer: press

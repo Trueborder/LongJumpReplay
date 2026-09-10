@@ -32,6 +32,8 @@ class VideoCanvas(tk.Canvas):
         board_roi: tuple[float, float, float, float] = (.35, .35, .30, .45),
         board_roi_enabled: bool = True,
         board_roi_visible: bool = False,
+        projection_board: tuple[tuple[float, float], ...] = (),
+        projection_foul_area: tuple[tuple[float, float], ...] = (),
         calibration_changed: Callable[[dict[str, float]], None] | None = None,
         compact: bool = False,
         language: str = "en",
@@ -54,6 +56,8 @@ class VideoCanvas(tk.Canvas):
         self.board_roi = tuple(board_roi)
         self.board_roi_enabled = board_roi_enabled
         self.board_roi_visible = board_roi_visible
+        self.projection_board = tuple(tuple(map(float, point)) for point in projection_board)
+        self.projection_foul_area = tuple(tuple(map(float, point)) for point in projection_foul_area)
         self.calibration_changed = calibration_changed
         self.calibration_mode = False
         self.compact = compact
@@ -89,6 +93,8 @@ class VideoCanvas(tk.Canvas):
         self._roi_box = self.create_rectangle(0, 0, 0, 0, state="hidden")
         self._roi_handle = self.create_rectangle(0, 0, 0, 0, state="hidden")
         self._roi_label = self.create_text(0, 0, state="hidden")
+        self._projection_board_item = self.create_polygon(0, 0, 0, 0, state="hidden", fill="")
+        self._projection_foul_item = self.create_polygon(0, 0, 0, 0, state="hidden", fill="")
         self._status_box = self.create_rectangle(0, 0, 0, 0)
         self._status_label = self.create_text(0, 0)
         self._help_label = self.create_text(0, 0, state="hidden")
@@ -151,6 +157,15 @@ class VideoCanvas(tk.Canvas):
             self.guide_width_px = max(1, min(20, int(guide_width_px)))
         self.request_render()
 
+    def set_projection_overlay(
+        self,
+        board: tuple[tuple[float, float], ...],
+        foul_area: tuple[tuple[float, float], ...],
+    ) -> None:
+        self.projection_board = tuple(tuple(map(float, point)) for point in board)
+        self.projection_foul_area = tuple(tuple(map(float, point)) for point in foul_area)
+        self.request_render()
+
     def reset_view(self) -> None:
         self.zoom = 1.0
         self.pan_x = self.pan_y = 0.0
@@ -192,6 +207,8 @@ class VideoCanvas(tk.Canvas):
             self._roi_box,
             self._roi_handle,
             self._roi_label,
+            self._projection_board_item,
+            self._projection_foul_item,
             self._help_label,
             self._secondary_label,
         ):
@@ -236,11 +253,22 @@ class VideoCanvas(tk.Canvas):
             self.itemconfigure(self._image_item, state="normal", image=self._photo)
         else:
             self.itemconfigure(self._image_item, state="hidden")
-        if self.board_roi_enabled and (self.board_roi_visible or self.calibration_mode):
+        has_board_polygon = len(self.projection_board) == 4
+        has_foul_polygon = len(self.projection_foul_area) == 4
+        if self.board_roi_enabled and (self.board_roi_visible or self.calibration_mode) and not has_board_polygon:
             self._draw_roi(left, top, dw, dh)
-        if self.guide_enabled:
+        if self.guide_enabled and not has_foul_polygon:
             self._draw_guide(left, top, dw, dh)
+        if has_board_polygon and self.board_roi_visible:
+            self._draw_projection_polygon(self._projection_board_item, self.projection_board, left, top, dw, dh, self.palette["warning"])
+        if has_foul_polygon and self.guide_enabled:
+            self._draw_projection_polygon(self._projection_foul_item, self.projection_foul_area, left, top, dw, dh, self.palette["danger"])
         self._draw_overlay(w, h)
+
+    def _draw_projection_polygon(self, item: int, points, left: float, top: float, dw: float, dh: float, colour: str) -> None:
+        coords = [value for x, y in points for value in (left + x * dw, top + y * dh)]
+        self.coords(item, *coords)
+        self.itemconfigure(item, state="normal", outline=colour, fill="", width=1)
 
     def _draw_guide(self, left: float, top: float, dw: float, dh: float) -> None:
         gx = left + dw * self.guide_x_ratio

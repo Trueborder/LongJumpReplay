@@ -100,6 +100,8 @@ class AttemptSession:
     freeze_frame_index: int = 0
     takeoff_candidate_index: int | None = None
     takeoff_confidence: float = 0.0
+    takeoff_analysis_start_ns: int | None = None
+    takeoff_analysis_end_ns: int | None = None
     media_start_timestamp_ns: int = 0
     media_end_timestamp_ns: int = 0
     media_start_wall_time_ns: int = 0
@@ -166,3 +168,7 @@ class TimelineModel:
     available_end_ns: int | None = None
     is_live: bool = False
     wall_start_ns: int = 0
+    assist_start_ns: int | None = None
+    assist_end_ns: int | None = None
+    predicted_frame_ns: int | None = None
+    prediction_confidence: float = 0.0

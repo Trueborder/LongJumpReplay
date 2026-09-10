@@ -18,3 +18,5 @@ def test_portable_build_embeds_generated_defaults_not_developer_config():
     assert "packaging/generated/config.json" in spec
     assert "project_root, 'config.json'" not in spec
     assert "write_default_config.py" in build
+    assert "assets/camera-checkerboard.svg" in spec
+    assert (project / "assets" / "camera-checkerboard.svg").exists()

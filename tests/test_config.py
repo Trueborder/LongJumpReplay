@@ -21,6 +21,38 @@ def test_old_partial_config_gets_new_defaults():
     assert config.hotkeys.bindings['timer_toggle'] == ''
     assert config.athlete_timer.duration_seconds == 60
     assert config.display.window_maximized is False
+    assert config.top_view_projection.legal_side_flipped is False
+    assert config.top_view_projection.camera_profile == {}
+    assert config.top_view_projection.foul_area == []
+
+
+def test_legacy_timeline_zoom_is_migrated_to_one_second_to_one_hour():
+    below = config_from_dict({"timeline": {
+        "detail_window_seconds": 2.0,
+        "min_detail_seconds": .1,
+        "max_detail_seconds": 60.0,
+    }})
+    assert below.timeline.detail_window_seconds == 2.0
+    assert below.timeline.min_detail_seconds == 1.0
+    assert below.timeline.max_detail_seconds == 3600.0
+    above = config_from_dict({"timeline": {"detail_window_seconds": 7200.0}})
+    assert above.timeline.detail_window_seconds == 3600.0
+
+
+def test_top_view_legal_side_and_optional_camera_profile_round_trip():
+    profile = {"image_width": 1920, "rms_error_px": .24}
+    config = config_from_dict({"top_view_projection": {
+        "legal_side_flipped": True,
+        "camera_profile": profile,
+    }})
+    assert config.top_view_projection.legal_side_flipped is True
+    assert config.top_view_projection.camera_profile == profile
+
+
+def test_four_corner_foul_area_round_trip():
+    area = [[.45, .2], [.55, .2], [.55, .8], [.45, .8]]
+    config = config_from_dict({"top_view_projection": {"foul_area": area}})
+    assert config.top_view_projection.foul_area == area
 
 
 def test_invalid_theme_rejected():

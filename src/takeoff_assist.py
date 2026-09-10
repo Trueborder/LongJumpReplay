@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
+import time
 from typing import Sequence
 
 import cv2
@@ -8,6 +10,10 @@ import numpy as np
 
 from .exporter import decode_packet
 from .models import FramePacket
+from .motion_segmentation import foreground_motion_mask
+
+
+_LOGGER = logging.getLogger("long_jump_replay.takeoff_assist")
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +21,12 @@ class TakeoffCandidate:
     frame_index: int
     confidence: float
     peak_score: float
+    analysis_start_ns: int
+    analysis_end_ns: int
+    # Frame indices that contained the compact dark shoe signal used by the
+    # assist.  The projection window can reuse this bounded shortlist instead
+    # of decoding and re-scanning the whole attempt a second time.
+    usable_frame_indices: tuple[int, ...] = ()
 
 
 def _roi_pixels(frame: np.ndarray, roi: tuple[float, float, float, float], target_width: int) -> np.ndarray:
@@ -28,8 +40,63 @@ def _roi_pixels(frame: np.ndarray, roi: tuple[float, float, float, float], targe
     scale = min(1.0, target_width / max(1, crop.shape[1]))
     if scale < 1:
         crop = cv2.resize(crop, (max(8, int(crop.shape[1] * scale)), max(8, int(crop.shape[0] * scale))), interpolation=cv2.INTER_AREA)
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    return cv2.GaussianBlur(gray, (5, 5), 0)
+    return cv2.GaussianBlur(crop, (5, 5), 0)
+
+
+def _transition_score(previous: np.ndarray, current: np.ndarray) -> tuple[float, float]:
+    """Return motion and compact-shoe presence for one reduced ROI pair."""
+    mask, shadow_mask = foreground_motion_mask(current, [previous])
+    if shadow_mask is not None and shadow_mask.shape == mask.shape:
+        shadow_u8 = shadow_mask.astype(np.uint8) * 255 if shadow_mask.dtype == bool else shadow_mask
+        mask = cv2.bitwise_and(mask, cv2.bitwise_not(shadow_u8))
+    current_gray = cv2.cvtColor(current, cv2.COLOR_BGR2GRAY)
+    difference = cv2.absdiff(current_gray, cv2.cvtColor(previous, cv2.COLOR_BGR2GRAY)).astype(np.float32)
+    active = difference[mask > 0]
+    active_fraction = active.size / difference.size if active.size else 0.0
+    score = float(active.mean() * active_fraction) if active.size else 0.0
+    if active_fraction > 0.12:
+        score *= 0.25
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    area = float(mask.shape[0] * mask.shape[1])
+    background_level = float(np.median(current_gray))
+    presence = 0.0
+    for contour in contours:
+        contour_area = float(cv2.contourArea(contour))
+        if contour_area < area * 0.003 or contour_area > area * 0.10:
+            continue
+        x, y, w, h = cv2.boundingRect(contour)
+        if x <= 1 or y <= 1 or x + w >= mask.shape[1] - 1 or y + h >= mask.shape[0] - 1:
+            continue
+        contour_mask = np.zeros(mask.shape, dtype=np.uint8)
+        cv2.drawContours(contour_mask, [contour], -1, 255, -1)
+        contour_level = float(current_gray[contour_mask > 0].mean()) if np.any(contour_mask) else background_level
+        if contour_level > background_level - 35.0:
+            continue
+        compactness = min(1.0, contour_area / max(1.0, float(w * h)))
+        presence = max(presence, min(1.0, contour_area / (area * 0.08)) * (0.55 + 0.45 * compactness))
+    return score, float(presence)
+
+
+def _select_peak(scores: list[float], presence_scores: list[float]) -> tuple[int, float, float] | None:
+    if len(scores) < 3 or max(scores) <= 0:
+        return None
+    raw = np.asarray(scores, dtype=np.float32)
+    smoothed = np.convolve(raw, np.asarray([0.2, 0.6, 0.2], dtype=np.float32), mode="same")
+    presence = np.asarray(presence_scores, dtype=np.float32)
+    peak_pos = int(np.argmax(smoothed))
+    peak_value = float(smoothed[peak_pos])
+    onset_candidates = [
+        pos for pos in range(max(0, peak_pos - 5), peak_pos + 1)
+        if float(smoothed[pos]) >= peak_value * 0.62 and float(presence[pos]) >= 0.12
+    ]
+    if onset_candidates:
+        peak_pos = onset_candidates[0]
+    peak = float(smoothed[peak_pos])
+    baseline = float(np.median(smoothed))
+    spread = float(np.percentile(smoothed, 90) - baseline)
+    confidence = max(0.0, min(1.0, (peak - baseline) / max(1e-6, peak + spread)))
+    return peak_pos, peak, confidence
 
 
 def detect_takeoff_candidate(
@@ -45,9 +112,11 @@ def detect_takeoff_candidate(
     This is deliberately an assist, not an automatic foul decision. For the
     intended fixed ground camera, perpendicular to the runway beside the board,
     the athlete's foot produces a short, strong local change inside a calibrated
-    board ROI. Global brightness changes are suppressed by subtracting the median
-    difference, and a small temporal smoothing reduces JPEG flicker.
+    board ROI. Colour-preserving brightness changes are suppressed as shadows,
+    global brightness changes are removed, and a small temporal smoothing
+    reduces JPEG flicker.
     """
+    started = time.perf_counter()
     if len(packets) < 4:
         return None
     start = freeze_timestamp_ns - int(max(0.1, before_seconds) * 1e9)
@@ -56,33 +125,82 @@ def detect_takeoff_candidate(
     if len(indexed) < 4:
         return None
 
-    scores: list[float] = []
-    indices: list[int] = []
-    previous = None
-    for original_index, packet in indexed:
-        frame = decode_packet(packet)
-        if frame is None:
-            continue
-        current = _roi_pixels(frame, roi, target_width)
-        if previous is not None and previous.shape == current.shape:
-            diff = cv2.absdiff(current, previous).astype(np.float32)
-            # Remove broad illumination changes. What remains is local motion.
-            diff -= float(np.median(diff))
-            np.maximum(diff, 0, out=diff)
-            threshold = max(7.0, float(np.percentile(diff, 82)))
-            active = diff[diff >= threshold]
-            score = float(active.mean() * (active.size / diff.size)) if active.size else 0.0
-            scores.append(score)
-            indices.append(original_index)
-        previous = current
+    roi_cache: dict[int, np.ndarray] = {}
 
-    if len(scores) < 3 or max(scores) <= 0:
+    def reduced(position: int) -> np.ndarray:
+        cached = roi_cache.get(position)
+        if cached is None:
+            cached = _roi_pixels(decode_packet(indexed[position][1]), roi, target_width)
+            roi_cache[position] = cached
+        return cached
+
+    def analyse(positions: Sequence[int]) -> tuple[list[float], list[float], list[int]]:
+        scores: list[float] = []
+        presence_scores: list[float] = []
+        indices: list[int] = []
+        previous = None
+        for position in positions:
+            current = reduced(position)
+            if previous is not None and previous.shape == current.shape:
+                score, presence = _transition_score(previous, current)
+                scores.append(score)
+                presence_scores.append(presence)
+                indices.append(indexed[position][0])
+            previous = current
+        return scores, presence_scores, indices
+
+    # Long 120-FPS windows are searched cheaply first, then the exact local
+    # frames are inspected. This preserves final frame precision while avoiding
+    # full analysis of every JPEG in the complete window.
+    stride = 1 if len(indexed) <= 48 else min(3, max(2, int(round(len(indexed) / 55.0))))
+    coarse_positions = list(range(0, len(indexed), stride))
+    if coarse_positions[-1] != len(indexed) - 1:
+        coarse_positions.append(len(indexed) - 1)
+    coarse_scores, coarse_presence, coarse_indices = analyse(coarse_positions)
+    coarse_peak = _select_peak(coarse_scores, coarse_presence)
+    if coarse_peak is None:
         return None
-    raw = np.asarray(scores, dtype=np.float32)
-    smoothed = np.convolve(raw, np.asarray([0.2, 0.6, 0.2], dtype=np.float32), mode="same")
-    peak_pos = int(np.argmax(smoothed))
-    peak = float(smoothed[peak_pos])
-    baseline = float(np.median(smoothed))
-    spread = float(np.percentile(smoothed, 90) - baseline)
-    confidence = max(0.0, min(1.0, (peak - baseline) / max(1e-6, peak + spread)))
-    return TakeoffCandidate(indices[peak_pos], confidence, peak)
+
+    if stride > 1:
+        coarse_frame_index = coarse_indices[coarse_peak[0]]
+        coarse_source_position = min(range(len(indexed)), key=lambda pos: abs(indexed[pos][0] - coarse_frame_index))
+        radius = max(8, stride * 4)
+        first = max(0, coarse_source_position - radius - 1)
+        last = min(len(indexed), coarse_source_position + radius + 1)
+        scores, presence_scores, indices = analyse(range(first, last))
+        selected = _select_peak(scores, presence_scores)
+        if selected is None:
+            scores, presence_scores, indices = coarse_scores, coarse_presence, coarse_indices
+            selected = coarse_peak
+    else:
+        scores, presence_scores, indices = coarse_scores, coarse_presence, coarse_indices
+        selected = coarse_peak
+
+    peak_pos, peak, confidence = selected
+    presence = np.asarray(presence_scores, dtype=np.float32)
+    usable = [indices[position] for position, value in enumerate(presence) if float(value) >= 0.12]
+    if not usable:
+        usable = [indices[peak_pos]]
+    # Keep the projection shortlist small and centred on the selected onset.
+    # These are the same frames that passed Take-off Assist's compact-object
+    # gate, so the projection loader does not need another full segmentation
+    # pass before opening the frame chooser.
+    usable = sorted(set(usable), key=lambda value: (abs(value - indices[peak_pos]), value))[:5]
+    result = TakeoffCandidate(
+        indices[peak_pos],
+        confidence,
+        peak,
+        indexed[0][1].timestamp_ns,
+        indexed[-1][1].timestamp_ns,
+        tuple(sorted(usable)),
+    )
+    _LOGGER.info(
+        "takeoff_analysis duration_ms=%.2f window_frames=%d decoded_frames=%d stride=%d candidate=%d confidence=%.3f",
+        (time.perf_counter() - started) * 1000.0,
+        len(indexed),
+        len(roi_cache),
+        stride,
+        result.frame_index,
+        result.confidence,
+    )
+    return result

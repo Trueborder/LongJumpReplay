@@ -11,7 +11,7 @@ from .i18n import tr
 from .language_catalog import normalize_language
 
 
-NICE_STEPS = [1 / 240, 1 / 120, 1 / 60, 1 / 30, .05, .1, .2, .5, 1, 2, 5, 10, 15, 30, 60, 120, 300]
+NICE_STEPS = [1 / 240, 1 / 120, 1 / 60, 1 / 30, .05, .1, .2, .5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800]
 
 
 def choose_tick_step(duration_seconds: float, width: int, min_pixels: int = 84) -> float:
@@ -35,6 +35,8 @@ def format_wall_time_ns(wall_time_ns: int) -> str:
 
 
 def format_timeline_span(seconds: float) -> str:
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f} h view"
     if seconds >= 60:
         return f"{seconds / 60:.1f} min view"
     return f"{seconds:.1f} s view"
@@ -54,9 +56,9 @@ class ProfessionalTimeline(tk.Canvas):
     cheaper for Tk to redraw at video-rate.
     """
 
-    HEADER_H = 32
-    DETAIL_TOP = 35
-    DETAIL_BOTTOM = 101
+    HEADER_H = 35
+    DETAIL_TOP = 38
+    DETAIL_BOTTOM = 104
     OVERVIEW_TOP = 113
     OVERVIEW_BOTTOM = 136
     SIDE_PAD = 16
@@ -70,9 +72,10 @@ class ProfessionalTimeline(tk.Canvas):
         master,
         palette: dict[str, str],
         on_seek: Callable[[int], None],
-        detail_window_seconds: float = 2.0,
-        min_detail_seconds: float = .1,
-        max_detail_seconds: float = 60.0,
+        detail_window_seconds: float = 60.0,
+        min_detail_seconds: float = 1.0,
+        max_detail_seconds: float = 3600.0,
+        on_zoom_commit: Callable[[float], None] | None = None,
         language: str = "en",
         **kwargs,
     ) -> None:
@@ -88,6 +91,7 @@ class ProfessionalTimeline(tk.Canvas):
         self.palette = palette
         self.language = normalize_language(language)
         self.on_seek = on_seek
+        self.on_zoom_commit = on_zoom_commit
         self.model: TimelineModel | None = None
         self.detail_seconds = detail_window_seconds
         self.min_detail_seconds = min_detail_seconds
@@ -106,6 +110,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._queued_seek_ns: int | None = None
         self._seek_job: str | None = None
         self._zoom_dragging = False
+        self._zoom_commit_job: str | None = None
 
         self._create_item_pool()
         self.bind("<Configure>", self._on_configure)
@@ -125,29 +130,50 @@ class ProfessionalTimeline(tk.Canvas):
         p = self.palette
         self._items: dict[str, int] = {}
         self._items["background"] = self.create_rectangle(0, 0, 1, 1, fill=p["surface"], outline="")
-        self._items["mode"] = self.create_text(self.SIDE_PAD, 12, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 8))
-        self._items["timecode"] = self.create_text(1, 12, anchor="center", text="+0.000s", fill=p["text"], font=("Consolas", 10, "bold"))
-        self._items["zoom"] = self.create_text(1, 12, anchor="e", text=tr(self.language, "timeline.view", seconds=2.0), fill=p["muted"], font=("Segoe UI", 8))
-        self._items["zoom_track"] = self.create_line(1, 23, 2, 23, fill=p["border"], width=3)
-        self._items["zoom_thumb"] = self.create_oval(1, 19, 2, 27, fill=p["accent"], outline=p["accent"])
+        self._items["mode"] = self.create_text(self.SIDE_PAD, 10, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 8))
+        self._items["timecode"] = self.create_text(1, 11, anchor="center", text="+0.000s", fill=p["text"], font=("Consolas", 10, "bold"))
+        self._items["zoom"] = self.create_text(1, 9, anchor="e", text=format_timeline_span(self.detail_seconds), fill=p["muted"], font=("Segoe UI", 8))
+        self._items["zoom_track"] = self.create_line(1, 27, 2, 27, fill=p["border"], width=4)
+        self._items["zoom_thumb"] = self.create_oval(1, 22, 2, 32, fill=p["accent"], outline=p["accent"])
+
+        legend_x = self.SIDE_PAD
+        for key, colour, label_key in (
+            ("recorded", p["recorded"], "timeline.recorded"),
+            ("assist", p["assist"], "timeline.assist_scan"),
+            ("prediction", p["prediction"], "timeline.prediction"),
+        ):
+            self._items[f"legend_{key}_swatch"] = self.create_rectangle(legend_x, 22, legend_x + 9, 29, fill=colour, outline="")
+            self._items[f"legend_{key}_label"] = self.create_text(legend_x + 13, 25, anchor="w", text=tr(self.language, label_key), fill=p["muted"], font=("Segoe UI", 7))
+            legend_x += 82 if key != "prediction" else 0
 
         self._items["detail_bg"] = self.create_rectangle(1, self.DETAIL_TOP, 2, self.DETAIL_BOTTOM, fill=p["timeline"], outline=p["border"])
-        self._items["detail_available"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 2, self.DETAIL_BOTTOM - 1, fill=p["surface2"], outline="")
+        self._items["detail_available"] = self.create_rectangle(1, self.DETAIL_TOP + 25, 2, self.DETAIL_BOTTOM - 5, fill=p["recorded"], outline="")
         self._items["unavailable_left"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 1, self.DETAIL_BOTTOM - 1, fill=p["bg"], outline="", stipple="gray50")
         self._items["unavailable_right"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 1, self.DETAIL_BOTTOM - 1, fill=p["bg"], outline="", stipple="gray50")
         self._items["freeze_line"] = self.create_line(0, 0, 0, 0, fill=p["warning"], width=2, state="hidden")
         self._items["freeze_label"] = self.create_text(0, 0, anchor="s", text=tr(self.language, "timeline.freeze"), fill=p["warning"], font=("Segoe UI Semibold", 7), state="hidden")
+        self._items["record_start_line"] = self.create_line(0, 0, 0, 0, fill=p["recorded"], width=2, state="hidden")
+        self._items["record_end_line"] = self.create_line(0, 0, 0, 0, fill=p["recorded"], width=2, state="hidden")
+        self._items["record_start_label"] = self.create_text(0, 0, anchor="se", text="", fill=p["text"], font=("Consolas", 7), state="hidden")
+        self._items["record_end_label"] = self.create_text(0, 0, anchor="sw", text="", fill=p["text"], font=("Consolas", 7), state="hidden")
+        self._items["assist_band"] = self.create_rectangle(0, 0, 0, 0, fill=p["assist"], outline="", stipple="gray50", state="hidden")
+        self._items["confidence_band"] = self.create_rectangle(0, 0, 0, 0, fill=p["prediction"], outline=p["prediction"], state="hidden")
+        self._items["prediction_line"] = self.create_line(0, 0, 0, 0, fill=p["prediction"], width=2, state="hidden")
+        self._items["prediction_diamond"] = self.create_polygon(0, 0, 0, 0, fill=p["prediction"], outline="", state="hidden")
+        self._items["prediction_label"] = self.create_text(0, 0, anchor="s", text="", fill=p["prediction"], font=("Segoe UI Semibold", 8), state="hidden")
 
         self._items["overview_bg"] = self.create_rectangle(1, self.OVERVIEW_TOP, 2, self.OVERVIEW_BOTTOM, fill=p["timeline"], outline=p["border"])
-        self._items["overview_available"] = self.create_rectangle(1, self.OVERVIEW_TOP + 3, 2, self.OVERVIEW_BOTTOM - 3, fill=p["accent"], outline="")
+        self._items["overview_available"] = self.create_rectangle(1, self.OVERVIEW_TOP + 3, 2, self.OVERVIEW_BOTTOM - 3, fill=p["recorded"], outline="")
         self._items["overview_viewport"] = self.create_rectangle(1, self.OVERVIEW_TOP + 1, 2, self.OVERVIEW_BOTTOM - 1, fill="", outline=p["text"], width=1)
         self._items["overview_playhead"] = self.create_line(0, self.OVERVIEW_TOP, 0, self.OVERVIEW_BOTTOM, fill=p["danger"], width=2)
         self._items["overview_freeze"] = self.create_line(0, self.OVERVIEW_TOP, 0, self.OVERVIEW_BOTTOM, fill=p["warning"], width=1, state="hidden")
+        self._items["overview_assist"] = self.create_rectangle(0, 0, 0, 0, fill=p["assist"], outline="", state="hidden")
+        self._items["overview_prediction"] = self.create_line(0, 0, 0, 0, fill=p["prediction"], width=2, state="hidden")
         self._items["focus_band"] = self.create_rectangle(0, self.DETAIL_TOP + 1, 0, self.DETAIL_BOTTOM - 1, fill=p["selection"], outline="", stipple="gray50")
 
         # The detail playhead is intentionally always centred and created last.
-        self._items["fixed_playhead"] = self.create_line(0, self.HEADER_H, 0, self.OVERVIEW_TOP - 2, fill=p["danger"], width=2)
-        self._items["playhead_cap"] = self.create_polygon(0, self.HEADER_H, 0, self.HEADER_H, 0, self.HEADER_H + 7, fill=p["danger"], outline="")
+        self._items["fixed_playhead"] = self.create_line(0, self.HEADER_H, 0, self.OVERVIEW_TOP - 2, fill=p["playhead"], width=2)
+        self._items["playhead_cap"] = self.create_polygon(0, self.HEADER_H, 0, self.HEADER_H, 0, self.HEADER_H + 7, fill=p["playhead"], outline="")
 
         self._major_lines = [self.create_line(0, 0, 0, 0, fill=p["tick"], state="hidden") for _ in range(self.MAX_MAJOR_TICKS)]
         self._major_labels = [self.create_text(0, 0, anchor="n", text="", fill=p["muted"], font=("Consolas", 7), state="hidden") for _ in range(self.MAX_MAJOR_TICKS)]
@@ -158,6 +184,8 @@ class ProfessionalTimeline(tk.Canvas):
     def set_language(self, language: str) -> None:
         self.language = normalize_language(language)
         self.itemconfigure(self._items["freeze_label"], text=tr(self.language, "timeline.freeze"))
+        for key, label_key in (("recorded", "timeline.recorded"), ("assist", "timeline.assist_scan"), ("prediction", "timeline.prediction")):
+            self.itemconfigure(self._items[f"legend_{key}_label"], text=tr(self.language, label_key))
         self.request_render(force=True)
 
     def apply_palette(self, palette: dict[str, str]) -> None:
@@ -175,19 +203,32 @@ class ProfessionalTimeline(tk.Canvas):
         self.itemconfigure(self._items["zoom_track"], fill=p["border"])
         self.itemconfigure(self._items["zoom_thumb"], fill=p["accent"], outline=p["accent"])
         self.itemconfigure(self._items["detail_bg"], fill=p["timeline"], outline=p["border"])
-        self.itemconfigure(self._items["detail_available"], fill=p["surface2"])
+        self.itemconfigure(self._items["detail_available"], fill=p["recorded"])
         self.itemconfigure(self._items["unavailable_left"], fill=p["bg"])
         self.itemconfigure(self._items["unavailable_right"], fill=p["bg"])
         self.itemconfigure(self._items["freeze_line"], fill=p["warning"])
         self.itemconfigure(self._items["freeze_label"], fill=p["warning"])
+        for name in ("record_start_line", "record_end_line"):
+            self.itemconfigure(self._items[name], fill=p["recorded"])
+        for name in ("record_start_label", "record_end_label"):
+            self.itemconfigure(self._items[name], fill=p["text"])
+        self.itemconfigure(self._items["assist_band"], fill=p["assist"])
+        self.itemconfigure(self._items["confidence_band"], fill=p["prediction"], outline=p["prediction"])
+        for name in ("prediction_line", "prediction_diamond", "prediction_label"):
+            self.itemconfigure(self._items[name], fill=p["prediction"])
+        for key in ("recorded", "assist", "prediction"):
+            self.itemconfigure(self._items[f"legend_{key}_swatch"], fill=p[key])
+            self.itemconfigure(self._items[f"legend_{key}_label"], fill=p["muted"])
         self.itemconfigure(self._items["overview_bg"], fill=p["timeline"], outline=p["border"])
-        self.itemconfigure(self._items["overview_available"], fill=p["accent"])
+        self.itemconfigure(self._items["overview_available"], fill=p["recorded"])
         self.itemconfigure(self._items["overview_viewport"], outline=p["text"])
         self.itemconfigure(self._items["overview_playhead"], fill=p["danger"])
         self.itemconfigure(self._items["overview_freeze"], fill=p["warning"])
+        self.itemconfigure(self._items["overview_assist"], fill=p["assist"])
+        self.itemconfigure(self._items["overview_prediction"], fill=p["prediction"])
         self.itemconfigure(self._items["focus_band"], fill=p["selection"])
-        self.itemconfigure(self._items["fixed_playhead"], fill=p["danger"])
-        self.itemconfigure(self._items["playhead_cap"], fill=p["danger"])
+        self.itemconfigure(self._items["fixed_playhead"], fill=p["playhead"])
+        self.itemconfigure(self._items["playhead_cap"], fill=p["playhead"])
         for item in self._major_lines:
             self.itemconfigure(item, fill=p["tick"])
         for item in self._major_labels:
@@ -248,13 +289,12 @@ class ProfessionalTimeline(tk.Canvas):
         p = self.palette
 
         self.coords(self._items["background"], 0, 0, w, h)
-        self.coords(self._items["mode"], x0, 12)
-        self.coords(self._items["timecode"], cx, 12)
-        self.coords(self._items["zoom"], x1, 12)
-        zoom_right = x1 - 2
-        zoom_left = max(x0 + 170, zoom_right - 112)
-        self.coords(self._items["zoom_track"], zoom_left, 23, zoom_right, 23)
-        self.coords(self._items["zoom_thumb"], self._zoom_x(zoom_left, zoom_right) - 4, 19, self._zoom_x(zoom_left, zoom_right) + 4, 27)
+        self.coords(self._items["mode"], x0, 10)
+        self.coords(self._items["timecode"], cx, 11)
+        self.coords(self._items["zoom"], x1, 9)
+        zoom_left, zoom_right = self._zoom_track_bounds(w)
+        self.coords(self._items["zoom_track"], zoom_left, 27, zoom_right, 27)
+        self.coords(self._items["zoom_thumb"], self._zoom_x(zoom_left, zoom_right) - 5, 22, self._zoom_x(zoom_left, zoom_right) + 5, 32)
         self.coords(self._items["detail_bg"], x0, self.DETAIL_TOP, x1, self.DETAIL_BOTTOM)
         self.coords(self._items["overview_bg"], x0, self.OVERVIEW_TOP, x1, self.OVERVIEW_BOTTOM)
         self.coords(self._items["focus_band"], cx - 22, self.DETAIL_TOP + 1, cx + 22, self.DETAIL_BOTTOM - 1)
@@ -268,7 +308,7 @@ class ProfessionalTimeline(tk.Canvas):
             self.itemconfigure(self._items["mode"], text=tr(self.language, "timeline.title"))
             self.itemconfigure(self._items["timecode"], text=tr(self.language, "timeline.waiting"))
             self.itemconfigure(self._items["zoom"], text=format_timeline_span(self.detail_seconds))
-            self.coords(self._items["detail_available"], x0 + 1, self.DETAIL_TOP + 1, x0 + 1, self.DETAIL_BOTTOM - 1)
+            self.coords(self._items["detail_available"], x0 + 1, self.DETAIL_TOP + 25, x0 + 1, self.DETAIL_BOTTOM - 5)
             self.coords(self._items["overview_available"], x0 + 1, self.OVERVIEW_TOP + 3, x0 + 1, self.OVERVIEW_BOTTOM - 3)
             self._hide_pools()
             return
@@ -288,12 +328,15 @@ class ProfessionalTimeline(tk.Canvas):
         ax0 = self._time_to_x(available_start, detail_start, detail_end, x0, x1)
         ax1 = self._time_to_x(available_end, detail_start, detail_end, x0, x1)
         ax0c, ax1c = max(x0, min(x1, ax0)), max(x0, min(x1, ax1))
-        self.coords(self._items["detail_available"], ax0c, self.DETAIL_TOP + 1, ax1c, self.DETAIL_BOTTOM - 1)
+        self.coords(self._items["detail_available"], ax0c, self.DETAIL_TOP + 25, ax1c, self.DETAIL_BOTTOM - 5)
         self.coords(self._items["unavailable_left"], x0 + 1, self.DETAIL_TOP + 1, max(x0 + 1, ax0c), self.DETAIL_BOTTOM - 1)
         self.coords(self._items["unavailable_right"], min(x1 - 1, ax1c), self.DETAIL_TOP + 1, x1 - 1, self.DETAIL_BOTTOM - 1)
 
         self._render_detail_ticks(model, detail_start, detail_end, x0, x1)
         self._render_markers(model, detail_start, detail_end, x0, x1)
+        self._render_recording_bounds(model, detail_start, detail_end, x0, x1)
+        self._render_assist(model, detail_start, detail_end, x0, x1)
+        self._render_prediction(model, detail_start, detail_end, x0, x1)
         self._render_freeze(model, detail_start, detail_end, x0, x1)
         self._render_overview(model, detail_start, detail_end, x0, x1)
 
@@ -353,6 +396,74 @@ class ProfessionalTimeline(tk.Canvas):
                 count += 1
         self._hide_from(self._marker_lines, count)
 
+    def _render_recording_bounds(self, model: TimelineModel, start_ns: int, end_ns: int, x0: float, x1: float) -> None:
+        available_start = model.available_start_ns if model.available_start_ns is not None else model.start_ns
+        available_end = model.available_end_ns if model.available_end_ns is not None else model.end_ns
+        visible: list[tuple[str, float]] = []
+        for name, timestamp, anchor in (
+            ("record_start", available_start, "se"),
+            ("record_end", available_end, "sw"),
+        ):
+            if not start_ns <= timestamp <= end_ns:
+                self.itemconfigure(self._items[f"{name}_line"], state="hidden")
+                self.itemconfigure(self._items[f"{name}_label"], state="hidden")
+                continue
+            x = self._time_to_x(timestamp, start_ns, end_ns, x0, x1)
+            wall = model.wall_start_ns + max(0, timestamp - model.start_ns) if model.wall_start_ns else 0
+            text = format_wall_time_ns(wall) if wall else format_relative((timestamp - model.reference_ns) / 1e9, True)
+            self.coords(self._items[f"{name}_line"], x, self.DETAIL_TOP + 23, x, self.DETAIL_BOTTOM - 3)
+            self.coords(self._items[f"{name}_label"], x - 3 if anchor == "se" else x + 3, self.DETAIL_BOTTOM - 7)
+            self.itemconfigure(self._items[f"{name}_label"], text=text, anchor=anchor, state="normal")
+            self.itemconfigure(self._items[f"{name}_line"], state="normal")
+            visible.append((name, x))
+        if len(visible) == 2 and abs(visible[1][1] - visible[0][1]) < 150:
+            # Short clips remain readable at the one-minute minimum by using two label rows.
+            self.coords(self._items["record_start_label"], visible[0][1] - 3, self.DETAIL_BOTTOM - 7)
+            self.coords(self._items["record_end_label"], visible[1][1] + 3, self.DETAIL_TOP + 39)
+
+    def _render_assist(self, model: TimelineModel, start_ns: int, end_ns: int, x0: float, x1: float) -> None:
+        if model.assist_start_ns is None or model.assist_end_ns is None:
+            self.itemconfigure(self._items["assist_band"], state="hidden")
+            return
+        visible_start = max(start_ns, model.assist_start_ns)
+        visible_end = min(end_ns, model.assist_end_ns)
+        if visible_start > visible_end:
+            self.itemconfigure(self._items["assist_band"], state="hidden")
+            return
+        left = self._time_to_x(visible_start, start_ns, end_ns, x0, x1)
+        right = self._time_to_x(visible_end, start_ns, end_ns, x0, x1)
+        self.coords(self._items["assist_band"], left, self.DETAIL_TOP + 29, right, self.DETAIL_BOTTOM - 9)
+        self.itemconfigure(self._items["assist_band"], state="normal")
+
+    def _render_prediction(self, model: TimelineModel, start_ns: int, end_ns: int, x0: float, x1: float) -> None:
+        timestamp = model.predicted_frame_ns
+        names = ("confidence_band", "prediction_line", "prediction_diamond", "prediction_label")
+        if timestamp is None or not start_ns <= timestamp <= end_ns:
+            for name in names:
+                self.itemconfigure(self._items[name], state="hidden")
+            return
+        x = self._time_to_x(timestamp, start_ns, end_ns, x0, x1)
+        zone_start = max(start_ns, timestamp - 100_000_000)
+        zone_end = min(end_ns, timestamp + 100_000_000)
+        left = self._time_to_x(zone_start, start_ns, end_ns, x0, x1)
+        right = self._time_to_x(zone_end, start_ns, end_ns, x0, x1)
+        if right - left < 8:
+            left, right = x - 4, x + 4
+        confidence = max(0.0, min(1.0, model.prediction_confidence))
+        stipple = "gray25" if confidence < .34 else ("gray50" if confidence < .67 else "gray75")
+        self.coords(self._items["confidence_band"], left, self.DETAIL_TOP + 25, right, self.DETAIL_BOTTOM - 5)
+        self.itemconfigure(self._items["confidence_band"], stipple=stipple, state="normal")
+        self.coords(self._items["prediction_line"], x, self.DETAIL_TOP + 20, x, self.DETAIL_BOTTOM - 3)
+        self.coords(
+            self._items["prediction_diamond"],
+            x, self.DETAIL_TOP + 20, x + 5, self.DETAIL_TOP + 25,
+            x, self.DETAIL_TOP + 30, x - 5, self.DETAIL_TOP + 25,
+        )
+        self.coords(self._items["prediction_label"], x, self.DETAIL_TOP + 42)
+        self.itemconfigure(self._items["prediction_label"], text=f"{tr(self.language, 'timeline.prediction')} {confidence:.0%}", state="normal")
+        for name in ("prediction_line", "prediction_diamond"):
+            self.itemconfigure(self._items[name], state="normal")
+
     def _render_freeze(self, model: TimelineModel, start_ns: int, end_ns: int, x0: float, x1: float) -> None:
         if model.freeze_ns is None or not (start_ns <= model.freeze_ns <= end_ns):
             self.itemconfigure(self._items["freeze_line"], state="hidden")
@@ -371,6 +482,25 @@ class ProfessionalTimeline(tk.Canvas):
         av0 = self._time_to_x(available_start, full_start, full_end, x0, x1)
         av1 = self._time_to_x(available_end, full_start, full_end, x0, x1)
         self.coords(self._items["overview_available"], max(x0 + 1, av0), self.OVERVIEW_TOP + 4, min(x1 - 1, av1), self.OVERVIEW_BOTTOM - 4)
+
+        if model.assist_start_ns is not None and model.assist_end_ns is not None:
+            assist_start = max(full_start, model.assist_start_ns)
+            assist_end = min(full_end, model.assist_end_ns)
+            if assist_start <= assist_end:
+                aa0 = self._time_to_x(assist_start, full_start, full_end, x0, x1)
+                aa1 = self._time_to_x(assist_end, full_start, full_end, x0, x1)
+                self.coords(self._items["overview_assist"], aa0, self.OVERVIEW_TOP + 7, aa1, self.OVERVIEW_BOTTOM - 7)
+                self.itemconfigure(self._items["overview_assist"], state="normal")
+            else:
+                self.itemconfigure(self._items["overview_assist"], state="hidden")
+        else:
+            self.itemconfigure(self._items["overview_assist"], state="hidden")
+        if model.predicted_frame_ns is not None and full_start <= model.predicted_frame_ns <= full_end:
+            prediction_x = self._time_to_x(model.predicted_frame_ns, full_start, full_end, x0, x1)
+            self.coords(self._items["overview_prediction"], prediction_x, self.OVERVIEW_TOP + 2, prediction_x, self.OVERVIEW_BOTTOM - 2)
+            self.itemconfigure(self._items["overview_prediction"], state="normal")
+        else:
+            self.itemconfigure(self._items["overview_prediction"], state="hidden")
 
         vx0 = self._time_to_x(detail_start, full_start, full_end, x0, x1)
         vx1 = self._time_to_x(detail_end, full_start, full_end, x0, x1)
@@ -404,7 +534,11 @@ class ProfessionalTimeline(tk.Canvas):
     def _hide_pools(self) -> None:
         for pool in (self._major_lines, self._major_labels, self._minor_lines, self._marker_lines, self._overview_ticks):
             self._hide_from(pool, 0)
-        for name in ("freeze_line", "freeze_label", "overview_freeze"):
+        for name in (
+            "freeze_line", "freeze_label", "overview_freeze", "record_start_line", "record_end_line",
+            "record_start_label", "record_end_label", "assist_band", "confidence_band", "prediction_line",
+            "prediction_diamond", "prediction_label", "overview_assist", "overview_prediction",
+        ):
             self.itemconfigure(self._items[name], state="hidden")
 
     def _hide_from(self, items: list[int], start: int) -> None:
@@ -466,12 +600,21 @@ class ProfessionalTimeline(tk.Canvas):
         return "break"
 
     def _on_release(self, _event) -> str:
+        commit_zoom = self._zoom_dragging
         self._drag_region = None
         self._zoom_dragging = False
+        if commit_zoom:
+            self._commit_zoom()
         return "break"
 
     def _zoom_bounds(self) -> tuple[float, float]:
         return self.min_detail_seconds, self.max_detail_seconds
+
+    def _zoom_track_bounds(self, width: int | None = None) -> tuple[float, float]:
+        width = width or self.winfo_width()
+        right = width - self.SIDE_PAD - 2
+        left = max(self.SIDE_PAD + 150, right - 180)
+        return min(left, right - 40), right
 
     def _zoom_x(self, left: float, right: float) -> float:
         low, high = self._zoom_bounds()
@@ -479,15 +622,13 @@ class ProfessionalTimeline(tk.Canvas):
         return left + value * (right - left)
 
     def _zoom_region(self, x: int, y: int) -> bool:
-        if not 15 <= y <= 31:
+        if not 19 <= y <= 35:
             return False
-        right = self.winfo_width() - self.SIDE_PAD - 2
-        left = max(self.SIDE_PAD + 170, right - 112)
+        left, right = self._zoom_track_bounds()
         return left - 10 <= x <= right + 10
 
     def _set_zoom_from_x(self, x: int) -> None:
-        right = self.winfo_width() - self.SIDE_PAD - 2
-        left = max(self.SIDE_PAD + 170, right - 112)
+        left, right = self._zoom_track_bounds()
         fraction = max(0.0, min(1.0, (x - left) / max(1.0, right - left)))
         low, high = self._zoom_bounds()
         self.detail_seconds = low * ((high / low) ** fraction)
@@ -530,7 +671,24 @@ class ProfessionalTimeline(tk.Canvas):
         factor = .82 if event.delta > 0 else 1.22
         self.detail_seconds = max(self.min_detail_seconds, min(self.max_detail_seconds, self.detail_seconds * factor))
         self.request_render(force=True)
+        self._schedule_zoom_commit()
         return "break"
+
+    def _schedule_zoom_commit(self) -> None:
+        if self._zoom_commit_job is not None:
+            try:
+                self.after_cancel(self._zoom_commit_job)
+            except tk.TclError:
+                pass
+        try:
+            self._zoom_commit_job = self.after(250, self._commit_zoom)
+        except tk.TclError:
+            self._zoom_commit_job = None
+
+    def _commit_zoom(self) -> None:
+        self._zoom_commit_job = None
+        if self.on_zoom_commit is not None:
+            self.on_zoom_commit(self.detail_seconds)
 
     def _wheel_linux(self, event, direction: int) -> str:
         event.delta = 120 * direction

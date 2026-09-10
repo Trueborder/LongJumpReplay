@@ -18,6 +18,9 @@ class AthleteTimerState(Enum):
 class AthleteTimerSnapshot:
     state: AthleteTimerState
     remaining_seconds: int
+    # Tenths are kept separately so existing competition logic can continue to
+    # use whole-second thresholds while the operator gets a precise display.
+    remaining_tenths: int
 
 
 class AthleteTimerController:
@@ -43,14 +46,16 @@ class AthleteTimerController:
                 self.state = AthleteTimerState.EXPIRED
                 self._stopped_seconds = 0
             else:
-                return AthleteTimerSnapshot(self.state, int(math.ceil(remaining_ns / 1_000_000_000)))
+                remaining_seconds = int(math.ceil(remaining_ns / 1_000_000_000))
+                remaining_tenths = int(math.ceil(remaining_ns / 100_000_000))
+                return AthleteTimerSnapshot(self.state, remaining_seconds, remaining_tenths)
         if self.state is AthleteTimerState.READY:
             remaining = self.duration_seconds
         elif self.state is AthleteTimerState.STOPPED:
             remaining = self._stopped_seconds
         else:
             remaining = 0
-        return AthleteTimerSnapshot(self.state, remaining)
+        return AthleteTimerSnapshot(self.state, remaining, max(0, int(remaining) * 10))
 
     def start(self) -> AthleteTimerSnapshot:
         self._started_ns = self._clock_ns()
@@ -80,3 +85,11 @@ class AthleteTimerController:
 def format_countdown(seconds: int) -> str:
     minutes, seconds = divmod(max(0, int(seconds)), 60)
     return f"{minutes:02d}:{seconds:02d}"
+
+
+def format_countdown_tenths(total_tenths: int) -> str:
+    """Format a countdown as MM:SS.t without changing the legacy formatter."""
+    total_tenths = max(0, int(total_tenths))
+    minutes, remainder = divmod(total_tenths, 600)
+    seconds, tenth = divmod(remainder, 10)
+    return f"{minutes:02d}:{seconds:02d}.{tenth}"

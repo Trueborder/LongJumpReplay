@@ -81,7 +81,7 @@ The timer is available in competition and judge-only modes and is never written 
 
 - Choose the existing rolling Buffer workflow or explicit Record/Stop Capture mode.
 - Open completed recordings from Captures and control recording, selection, and playback from ShuttleXpress.
-- Zoom the timeline from 0.5 seconds to 10 minutes and read local timestamps with millisecond precision.
+- Zoom the timeline from 1 second to 60 minutes and read local timestamps with millisecond precision.
 - Use a denser operator workspace that keeps more room available for the camera.
 - Choose a video-file source by typing its path or using Browse, and select cameras by their Windows device names.
 - Apply Settings without changing the timeline's current size.
@@ -258,7 +258,7 @@ scripts\build\BUILD_INSTALLER.bat
 
 After source tests and frozen self-tests pass, it replaces the existing `release` folder and creates:
 
-- `LongJumpReplay-Setup-4.0.0.exe` and its SHA-256 checksum;
+- `LongJumpReplay-Setup-6.2.1.exe` and its SHA-256 checksum;
 - the tested portable application folder used by the installer.
 
 The installer excludes private licensing and update-signing keys. Run it with
@@ -284,7 +284,7 @@ The builder:
 Output:
 
 ```text
-release\LongJumpReplay-4.0.0-Windows-x64.zip
+release\LongJumpReplay-6.2.1-Windows-x64.zip
 ```
 
 The recipient only extracts the ZIP and runs `LongJumpReplay.exe`.

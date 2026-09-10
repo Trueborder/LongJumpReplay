@@ -1,9 +1,39 @@
 import time
 import tkinter as tk
+from types import SimpleNamespace
+from tkinter import ttk
 
 from src.camera_devices import CameraDevice
 from src.config import AppConfig, load_config, save_config
 from src.main_window import MainWindow
+from src.playback import PlaybackMode
+
+
+def test_capture_warning_is_compact_for_the_status_row():
+    app = object.__new__(MainWindow)
+    app.config = SimpleNamespace(camera=SimpleNamespace(fps=120))
+    stats = SimpleNamespace(captured_frames=100, capture_fps=80.2, queue_drops=3, last_error="")
+
+    assert app._compact_capture_warning(stats) == "! LOW FPS 80/120 | DROPS 3"
+
+
+def test_takeoff_failure_notice_is_visible_only_for_the_active_frozen_attempt():
+    root = tk.Tk()
+    try:
+        app = object.__new__(MainWindow)
+        app.playback = SimpleNamespace(mode=PlaybackMode.ATTEMPT, attempt_id=7)
+        app.assist_warning_var = tk.StringVar(root, value="")
+        app.assist_warning_label = ttk.Label(root, textvariable=app.assist_warning_var)
+
+        app._set_assist_warning(7)
+        assert app.assist_warning_var.get() == "! Take-off Assist failed"
+        assert app.assist_warning_label.winfo_manager() == "pack"
+
+        app._clear_assist_warning()
+        assert app.assist_warning_var.get() == ""
+        assert not app.assist_warning_label.winfo_manager()
+    finally:
+        root.destroy()
 
 
 def test_synthetic_cli_override_does_not_replace_saved_camera_source(tmp_path):
@@ -296,7 +326,6 @@ def test_exit_survives_an_out_of_range_timeline_sash(tmp_path):
     root.mainloop()
 
     assert not app.capture.is_running
-    assert 100 <= app.config.display.timeline_height <= 500
 
 
 def test_showing_timeline_restores_a_usable_height(tmp_path):

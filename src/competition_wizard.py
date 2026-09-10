@@ -118,8 +118,11 @@ class CompetitionWizard(tk.Toplevel):
             ttk.Button(self.footer, text=self.tr("wizard.back"), command=self._setup_back).pack(side="right", padx=(8, 0))
         label = self.tr("wizard.finish") if step == "review" else self.tr("wizard.next")
         ttk.Button(self.footer, text=label, style="Accent.TButton", command=self._setup_next).pack(side="right")
-        if step == "review":
-            self._schedule_refresh()
+        # The review page is intentionally static after confirmation.  The
+        # old periodic rebuild destroyed and recreated the widgets every 1.2s,
+        # which looked like flashing and could steal focus from the final
+        # confirmation button.  The existing Refresh action remains available
+        # for an explicit readiness check.
 
     def _page_format(self, parent: ttk.Frame) -> None:
         for row, template in enumerate(("simple", "final", "judge_only")):

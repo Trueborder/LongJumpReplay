@@ -1,5 +1,157 @@
 # Long Jump Replay — Project Knowledge
 
+## One-second review and live calibration snapshot (2026-09-09, 6.2.1)
+
+- The logarithmic timeline detail range is exactly 1 to 3600 seconds and still
+  defaults to 60 seconds. Existing saved values are clamped into that range.
+- The board-calibration editor can replace its initial startup snapshot with
+  the latest frame from the continuously running camera. Existing board and
+  foul-area points are preserved in normalized image coordinates, including
+  across a resolution change; the operator may adjust them or run detection
+  again. A stale automatic-detection result from the replaced frame is ignored.
+- The athlete timer preserves whole-second state thresholds but displays a
+  tenth-second countdown (`MM:SS.t`) while running. A fresh application session resets the
+  competition focus to the first enabled group, athlete 1, attempt 1.
+- The competition wizard review page is static after rendering; readiness is
+  refreshed only by the explicit Refresh action, avoiding repeated widget
+  destruction and visible flashing.
+- Main camera guide and board-outline visibility defaults are off while board
+  detection remains enabled. The projection editor can still show outlines on
+  demand.
+
+## CPU-efficient review pipeline (2026-09-09, 6.2.1)
+
+- The capture thread applies `store_every_nth_frame` before the encoder queue.
+  Frames intentionally excluded from the rolling replay are still published as
+  the latest live frame, but no longer allocate queue work or evict a frame
+  that should be retained.
+- Long Take-off Assist windows use a coarse reduced-ROI scan followed by an
+  exact consecutive-frame refinement around the detected peak. Short windows
+  retain the original full scan. Logs report window frames, frames actually
+  decoded, stride, duration, candidate and confidence.
+- `AttemptManager` keeps a bounded twelve-frame decoded LRU shared by replay
+  stepping and projection loading. Cached packet frames retain their original
+  timestamps; completed-video frames retain the derived media timestamp.
+- Top-down reconstruction treats the selected measured outline as
+  authoritative. Neighbouring observations first propagate it with sparse
+  optical flow; full GrabCut shoe segmentation is limited to two failed-flow
+  fallbacks. Diagnostics distinguish tracked observations and full refinements.
+- Camera-profile undistortion maps are cached per resolution and calibration.
+  The clean top-down board raster is rectified once, then copied for overlay
+  rendering. Mouse inspection remains visualization-only.
+- Temporary MP4 and manual export formats are unchanged. Direct MJPEG packet
+  muxing is intentionally deferred until a bundled, validated muxer is
+  available, because changing temporary media compatibility is higher risk
+  than the processing optimizations above.
+
+## Unified top-down review and calibration (2026-09-09, 6.2.1)
+
+- The projection window keeps one operator-facing result. The original frame
+  uses roughly 40% of visualization height and the larger Top-down projection
+  uses roughly 60%; there is no second competing projection panel.
+- Saved four-corner foul-area calibration is reused in the projection editor,
+  with its two-point centreline derived only for measurement compatibility.
+  Source overlays use consistent visible widths and remain independently
+  hideable.
+- Shoe detection searches beyond the physical board so a side-view heel and
+  upper are not cropped away. The manual shoe editor adds an optional brush:
+  paint once around the shoe and release to snap a resampled contour to nearby
+  image edges without rerunning detection.
+- Mouse zoom is a throttled local magnifier, normally 3x and adjustable from
+  1.5x to 8x. It tracks the real image point under the cursor with light
+  smoothing, ignores letterboxing, clamps edge crops, redraws overlays sharply,
+  and never triggers analysis. Fullscreen retains cursor-anchored wheel zoom
+  and adds drag pan plus double-click reset.
+- Once automatic top-down compute completes, a separate fullscreen review
+  compares the original frame with the computed top-down image and places the
+  verdict outside both rasters. Any key closes that review; the normal
+  single-result workspace remains underneath for editing.
+- Verdict and confidence sit outside the raster as one LEGAL, FOUL, or
+  UNCERTAIN badge. Observed geometry is solid green, estimated geometry dashed
+  yellow, and the image contains no overlapping status text. The single
+  modeless determinate bar is visible only while real compute stages advance;
+  idle state is a compact completion line with measured duration.
+
+## Compact desktop interface density (2026-09-07)
+
+- The Tk interface applies a non-compounding `100 / 130` density ratio to the
+  native Windows/Tk scale. Text and character-sized controls become about 23%
+  smaller while retaining the computer's DPI factor. Shared button padding,
+  inputs, tabs, table rows, and checkbox indicators are also
+  tightened consistently; changing themes does not apply the ratio again.
+- The public product page describes support for compatible high-frame-rate
+  cameras, including qualified 120 FPS capture when the camera, driver, and
+  computer support it, in both English and Czech.
+- The product-page Requirements section publishes the practical bilingual event
+  target from `docs/RECOMMENDED_SYSTEM_REQUIREMENTS.md`: Windows 11 x64, recent
+  Core i5/Ryzen 5 or better, 16 GB RAM, an SSD with 10 GB free, Full HD display,
+  and a USB 3 camera capable of 720p60 (with 120 FPS preferred for detailed
+  review). It remains a recommendation, not a formally benchmarked minimum.
+
+## Local top-view projection (2026-09-07)
+
+- Frozen attempts can open a modeless Top-view projection window. It ranks
+  seven nearby frames from retained packets or cached MP4, uses a local
+  classical OpenCV motion/contour estimate with manual polygon correction,
+  and projects the foot through a saved four-corner pad homography plus
+  foul-line endpoints.
+- Calibration is tied to the camera source, backend, device/file identity,
+  and frame resolution; mismatches require recalibration. After the first
+  camera frame on every launch, a skippable guided editor opens. A matching
+  saved setup is presented for review and must be previewed and confirmed;
+  otherwise the app detects the board and take-off line automatically. The
+  operator can drag four thin board corners and four corners surrounding the
+  take-off line, preview the clean result, and return to editing. No
+  dimensions are entered; the PESMENPOL board dimensions 1201 × 340 mm supply
+  a 120.1 × 34 cm top-view scale, while its 100 mm height is irrelevant to the
+  planar homography. Older saved custom dimensions remain compatible.
+- The view is decision support only. It never changes Valid/Foul or replaces
+  the original camera evidence.
+- Candidate ranking weights proximity to the Take-off Assist timestamp above
+  raw motion, and compares chronological neighbouring frames rather than only
+  consecutive frame indices. Foot extraction suppresses illumination-only
+  darkening, searches an expanded calibrated-board zone, and scores compact,
+  edge-rich contours so broad athlete shadows do not win by area.
+- Take-off Assist uses the same colour-aware local-motion segmentation. Both
+  newly cast shadows and regions where a shadow has just moved away are
+  suppressed before temporal peak scoring, while dark shoes with hard edges
+  remain eligible.
+- Projection foot extraction derives its search bounds from the calibrated
+  board rather than the narrower Take-off Assist ROI, uses clean frames from
+  the attempt boundaries as background references, and weights proximity to
+  the calibrated foul line. A real 1920 × 1080 cached attempt confirmed that
+  the outline moved from a board speck to the shoe while Take-off Assist kept
+  the correct event frame. Private recordings are never committed as fixtures.
+- Measurement uses the detected or manually corrected sole/contact outline,
+  never the shoe centre or decorative upper. The 120.1 cm physical axis is
+  selected parallel to the calibrated foul line and the 34 cm axis is selected
+  perpendicular to it, independent of camera rotation and corner-click order.
+  The result is the minimum signed edge distance: positive clear, zero within
+  uncertainty, and negative for the deepest crossing. Calibration, resolution,
+  segmentation, and accepted-fit variation contribute to the displayed
+  uncertainty. The board-centre side is inferred as legal and the persisted
+  Flip legal side control corrects unusual installations.
+- Candidate thumbnails are limited to the five most likely frames centred on
+  the predicted frame, shown at about 160 × 100 with horizontal scrolling.
+  Selecting one updates the planar board projection immediately and starts a
+  cancellable local reconstruction worker. Switching frames or closing the
+  window cancels and discards stale results; Tk widgets remain main-thread only.
+- The optional Overhead shoe view fits a bounded parametric sole and explanatory
+  upper using OpenCV/NumPy only, with a hard five-second deadline. Its single
+  modeless determinate progress bar advances on real stages (preparing frames,
+  isolating shoe, fitting model, rendering). Observed surfaces retain source
+  colour, hidden surfaces use neutral shading, and the view is labelled
+  Estimated shoe footprint. Low-confidence and timed-out fits are rejected while the
+  corrected board projection remains available. Neither view decides Valid or
+  Foul.
+- The former bottom-right Board setup group is no longer shown. View → Board
+  calibration reopens the same guided editor, while independent View toggles
+  make the thin board and take-off-line overlays optional during competition.
+- Advanced camera profiling is optional. A bundled print-at-100% 8 × 5-inner-
+  corner checkerboard with 25 mm squares can produce a local lens profile from
+  at least three sharp, distinct views; ordinary use still needs only the
+  two-step board/foul-line calibration.
+
 ## Light-only website appearance (2026-09-06)
 
 - The public website and account portal use one permanent light appearance.
@@ -999,7 +1151,7 @@ Highest-value future work, in rough order:
 - The Competition Wizard opens directly into its five-step setup flow without a teaching or simulated-practice path. Setup uses Simple event, Qualification + final, and Judge-only replay templates; adapts its pages to the chosen format; validates dependencies inline; keeps optional judging as the default; requires an explicit Keep/Clear decision for existing temporary recordings; and shows non-blocking capture/buffer/cache readiness with Settings and camera-help handoffs. Wizard results contain only `CompetitionConfig`, which is merged into the latest `AppConfig` so Settings changes made while the wizard is open cannot be reverted.
 - Settings and Competition Board scrolling now handle Windows and Linux wheel/button events consistently, refresh scroll regions after content changes, and use themed scrollbar states. Settings Hotkeys puts Defaults above the table; double-click changes a row and the right-click menu restores one default with duplicate protection. A first-run guided tutorial is persisted in `general.onboarding_completed` and can be reopened from General settings. Applying camera/live-buffer changes asks whether to restart immediately; the relaunch preserves the script or frozen executable arguments. Board guide width is passed to all video canvases and evidence overlays instead of using a fixed preview width.
 
-- Judge controls are grouped into frame review and judging categories. Frame, verdict, and Board setup buttons use equal widths and square native ttk rendering; Board setup stays on the right edge.
+- Judge controls are grouped into frame review and judging categories. Frame and verdict buttons use equal widths and square native ttk rendering; board setup is handled by the startup calibration editor rather than a bottom-right control.
 - Verdict controls are greyed whenever there is no active frozen attempt to judge (including Live and system-paused states).
 - Competition-board scrolling handles Windows and Linux wheel events, including horizontal Shift-wheel scrolling, while preserving keyboard cell navigation.
 - Attempt export uses one modeless status-bar indicator: it begins indeterminate while the requested attempt is still encoding, then switches to real copied/total bytes as soon as the temporary MP4 size is known. Camera pause/resume feedback is delayed briefly so fast transitions do not flash, and synchronous recording clearing has no progress bar.
@@ -1012,7 +1164,7 @@ Highest-value future work, in rough order:
 - The main control dock has one larger Freeze/Live toggle. Frame review and judging buttons are enabled only for a frozen attempt and use the same disabled/faded treatment; Not decided uses a neutral pending style rather than black. Board Setup is a matching labeled group, and the system pause button/mode badge share a fixed width.
 - The athlete countdown duration is managed in a dedicated Athlete timer settings category with a Low performance-impact badge.
 - On the Competition Board, Up/Down may move between athlete rows; Left/Right are reserved for replay frame stepping after Freeze and never change the selected attempt column.
-- Export, Delete, and Clear all temporary recordings share one equal-width muted action row. Board calibration position/size fields are intentionally absent from Settings and are changed by dragging directly on the main video. All application-owned dialogs use the current ThemeManager palette.
+- Export, Delete, and Clear all temporary recordings share one equal-width muted action row. Board calibration position/size fields are intentionally absent from Settings and are changed in the guided four-corner editor. All application-owned dialogs use the current ThemeManager palette.
 
 ## 20. Build entry points
 
@@ -1041,7 +1193,7 @@ A change is done only when:
 
 - Hotkey capture uses Tk's platform-specific Alt state mask: on Windows, Num Lock no longer turns a plain key such as `v` into `Alt-v`, while genuine Alt combinations remain supported.
 - The recordings footer keeps Export, Delete, and Clear all temporary recordings in one equal-width, muted action row beside the recordings list.
-- Settings no longer edits guide/ROI positions or dimensions numerically. Those values remain owned by the visual Board calibration interaction in the main video; Settings keeps visibility and line-width controls plus plain-language guidance.
+- Settings no longer edits guide/ROI positions or dimensions numerically. Those values remain owned by the guided Board calibration editor; Settings keeps visibility and line-width controls plus plain-language guidance.
 - Performance profiles now have an explicit selection flow and explain that normal profiles change presentation/analysis workload without changing camera capture or evidence quality. Older PC mode remains the explicit frame-dropping trade-off.
 - Application-owned message and confirmation dialogs use shared themed ttk content, including dark-mode confirmations and diagnostics. Startup splash presentation is instantaneous on entry and exit.
 - Hotkey Settings places Defaults above the table; row editing is by double-click and per-row reset is available from the themed context menu.
@@ -1081,5 +1233,50 @@ A change is done only when:
 
 - LongJumpReplay now supports a restart-applied `buffer` or `capture` recording mode. Buffer mode preserves rolling replay and Freeze; Capture mode disables ring-buffer persistence and saves only explicit Record/Stop sessions through the existing attempt/export pipeline.
 - Capture mode records the current competition assignment, auto-stops at the configurable maximum (default 10 minutes), finalizes safely on shutdown, and adds Record/Stop markers to the saved attempt timeline. Capture packets retain monotonic media time plus a wall-clock timestamp for local `HH:MM:SS.mmm` display.
-- The timeline has direct drag zoom from 0.5 seconds to 10 minutes, a visible span label, and local wall-clock playhead/tick labels. Applying Settings leaves an already-visible timeline sash untouched and only positions it when the timeline is newly shown.
+- The timeline has direct drag zoom, a visible span label, and local wall-clock playhead/tick labels. Applying Settings leaves an already-visible timeline sash untouched and only positions it when the timeline is newly shown. The current zoom limits are defined by the newer timeline evidence-layer section below.
 - ShuttleXpress defaults are Live, Record/Stop, unused, latest Capture, and hold-to-play from the current position; button mappings remain configurable. Compact operator styling reduces control/panel density so the camera remains dominant.
+
+## Timeline evidence layers and Settings information architecture (2026-09-07)
+
+- The timeline zoom is logarithmic from exactly 1 second to 60 minutes and defaults to 60 seconds. Legacy zoom bounds are migrated by clamping them into this supported range. Drag changes stay in memory while moving and persist only when the drag ends; wheel changes use a short settling debounce.
+- Recorded media is a labelled blue band with wall-clock start/end boundaries. Take-off Assist shows its actual analysed interval in violet, and its predicted frame uses an amber diamond/line plus a fixed ±100 ms confidence zone whose fill strength follows the confidence value. Manual markers, Freeze, and the fixed-centre playhead retain different shapes or line treatments so colour is not the only cue. The compact overview mirrors recorded, analysed, and predicted ranges without creating canvas items per refresh.
+- Take-off Assist attempt persistence includes the first and last timestamps actually analysed. Older attempt JSON remains compatible because both fields are optional.
+- Settings has eight task-oriented pages: General; Camera & recording; Competition; Judging & evidence; Board & Take-off Assist; Workspace & controls; Licence & support; and Advanced. General opens first. Existing configuration keys remain available, while low-level camera, codec, and performance controls live under Advanced.
+- Settings search matches English and Czech labels, descriptions, page names, option values, and explicit keywords. `Ctrl+F` focuses search; arrow keys navigate results; Enter opens, scrolls to, focuses, and briefly outlines the setting; Escape clears search. Searching never marks the configuration as changed.
+- Shared styled text and custom canvas/overlay text retain the compact-interface baseline. Settings keeps its fixed footer and existing window size; the Czech Browse control uses the same existing compact text treatment so it remains inside the minimum window.
+- A failed Take-off Assist now raises a persistent `! Take-off Assist failed` warning beside the Freeze/Live controls for the active frozen attempt. Missing frames, no detected peak, analysis errors, and below-threshold confidence all use this failure path; returning Live, selecting another attempt, or receiving a valid candidate clears it.
+- Capture-quality warnings no longer insert a banner above the workspace. The status row carries a compact warning such as `! LOW FPS 80/120 | DROPS 3`, preserving the camera's vertical workspace while keeping the operator signal visible.
+
+## Corrected overhead and board projection (2026-09-08)
+
+- Board projection and overhead rendering now use the foul-line orientation to map the physical 120.1 cm axis horizontally, so reversed/rotated corner orders do not transpose the board or move the fitted sole away from the source shoe.
+- Optional camera profiles (including radial distortion coefficients) are applied before rectification. The Advanced camera wizard remains optional; the normal four-corner board workflow is unchanged.
+- The review window asks for Board projection or Overhead shoe before analysing frames, keeps one truthful modeless determinate progress bar, and suppresses candidate thumbnails that do not contain a sufficiently confident shoe estimate.
+- The frozen-attempt action is now **3D projection**. It first shows a modal determinate loader while a bounded shortlist is decoded, then opens a dedicated left-thumbnail/right-preview frame-selection page.
+- Confirming a frame starts a second cancellable automatic-analysis loader. Board edges, the foul line, and a smooth sole/contact outline are detected before the projection workspace opens; unreliable analysis returns to frame selection without inventing geometry.
+- The workspace shows the annotated original frame above two equal blank panels. Board projection and Overhead shoe each start only from their own Compute button and share one truthful modeless determinate progress surface. Back cancels stale work and returns to the cached frame selection.
+- The former Set up board, Find board edges, Estimate foot, initial view-choice, and view-switch buttons are not part of the active 3D projection window. Automatic overlays remain editable; geometry changes invalidate both results and restore both Compute buttons.
+- Clicking an Edit board, Edit foul line, or Edit shoe control enters precision mode: the annotated source frame expands to the available workspace and the projection panes temporarily hide. The same control exits precision mode and restores both panels; the optional Mouse zoom checkbox enables the cursor magnifier while editing.
+- Take-off Assist combines shadow suppression, compact dark-object presence, and onset selection so it favours the first usable foot frame instead of a late trailing motion peak.
+- 3D projection startup reuses the bounded frames that already passed Take-off Assist's compact-shoe gate (or the same five-frame temporal window if the assist is still finishing). It no longer decodes separate background references or reruns ranking and multi-frame shoe segmentation before opening the chooser; frame confirmation still performs the authoritative board, foul-line, and contact-outline analysis.
+- Projection compute workers now report unexpected failures back to the Tk worker queue, so one failed board or overhead fit cannot leave the other Compute button permanently blocked. Empty rectification results fall back to a visible board crop instead of presenting an all-black panel.
+- The workspace toolbar is grouped into navigation, editing, and calibration labels with larger controls. Editing hides the other actions and exposes Done plus the optional mouse zoom; the zoomed editing crop includes the board, foul-line, and shoe overlays.
+- Frame confirmation uses two hidden temporal anchors outside the five visible candidates, applies physical shoe-size scoring while choosing contours, and retries against individual clean references when a median background is contaminated by the athlete. A remaining size mismatch opens the correction workspace with a clear warning instead of blocking the operator before Edit shoe is available.
+- Projection results normalize OpenCV arrays before passing them to Pillow/Tk, and the worker-queue poller now survives display exceptions so a failed first view cannot prevent the other Compute action. Rectification also checks how much of the warped board maps to real source pixels and falls back to the visible calibrated crop when the homography would produce a mostly black board.
+- Mouse zoom is available throughout the projection workspace, not only while a point-editing tool is active. Its checkbox clears the lens immediately when switched off, changes the source cursor, and reports the current on/off state.
+- If automatic board, foul-line, or shoe-outline analysis fails after frame confirmation, the frame chooser preserves any geometry already found and shows **Set up manually**. The recovery workspace supplies editable board/foul handles, focuses the failed layer, accepts the first three points of a completely manual shoe outline, and asks the operator to re-analyse after correcting the failed geometry; provisional guesses are not persisted until edited.
+- Projection canvases use Tk-native Windows cursor names (`hand2` for clickable results and `crosshair` in fullscreen); CSS cursor names such as `zoom-in` raise a Tcl error on Windows and must not be used.
+- Shoe extraction supplements shadow-suppressed motion with non-shadow Lab colour/lightness change, joins nearby sole fragments, and strongly prefers physically typical shoe dimensions instead of treating every contour inside the broad plausible range equally. This prevents small heel or board fragments from outranking a complete sole.
+- The projection workspace has a **Show outlines** switch. It removes board, foul-line, sole, and estimated-upper geometry from the source and both computed views while retaining the source imagery and measurement text; the active layer remains visible during editing. Mouse magnification remains rendered and follows the dragged point throughout a drag.
+- Overhead reconstruction no longer rejects a selected outline because its apparent calibrated length or width falls outside a fixed shoe-size range. The local contour is scale-normalised only for fitting, while its original signed position relative to the foul line remains the classification evidence; camera distance and non-standard board size therefore do not block rendering.
+- Active board and overhead projection images present **VALID**, **FOUL**, or **ON THE LINE** instead of centimetre clearance. Fullscreen uses the same classification. This is visual decision support and does not write the official Valid/Foul adjudication automatically.
+- Automatic-analysis recovery is named for the failed layer. In particular, a foul-line failure returns to frame selection with **Set foul line manually**; it opens the selected frame in precision mode with two visible red endpoints and explicit instructions to place both endpoints, finish editing, and re-analyse.
+
+### Unified top-down projection (2026-09-09)
+
+- The projection action now uses the exact frame currently displayed in replay. Take-off Assist is not allowed to replace the operator's frame; up to three neighbouring frames on either side are hidden segmentation references only.
+- The frame chooser and separate Board projection/Overhead shoe compute workflow are no longer active. The window opens directly into one Top-down projection workspace and starts one automatic background computation after analysis.
+- Shoe extraction compares against every temporal reference, joins separated shoe regions, refines with bounded GrabCut, preserves concave contours, suppresses shadows, and treats calibrated dimensions only as geometry—not as a plausibility gate.
+- Manual analysis failure stays on the current frame and opens the failed board, foul-line, or shoe editor directly. Completing an edit invalidates stale output and automatically recomputes the unified projection.
+- Reconstruction results now carry observed, estimated, and contact masks plus a confidence-aware verdict. Low-confidence contact is labelled **REVIEW ORIGINAL**; only credible contact geometry drives the advisory classification.
+- The unified result remains a flat board-plane view. The original frame remains authoritative and reconstructed regions are explanatory only.

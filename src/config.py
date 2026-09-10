@@ -165,7 +165,7 @@ class DisplayConfig:
     show_takeoff_assist_badge: bool = True
     attempts_panel_width: int = 360
     timeline_height: int = 220
-    guide_enabled: bool = True
+    guide_enabled: bool = False
     guide_x_ratio: float = 0.5
     guide_y_ratio: float = 0.5
     guide_angle_deg: float = 0.0
@@ -260,9 +260,9 @@ PERFORMANCE_PRESETS: dict[str, dict[str, Any]] = {
 
 @dataclass(slots=True)
 class TimelineConfig:
-    detail_window_seconds: float = 2.0
-    min_detail_seconds: float = 0.5
-    max_detail_seconds: float = 600.0
+    detail_window_seconds: float = 60.0
+    min_detail_seconds: float = 1.0
+    max_detail_seconds: float = 3600.0
     show_frame_ticks: bool = True
     snap_to_frames: bool = True
 
@@ -278,6 +278,26 @@ class TakeoffAssistConfig:
     seek_lead_frames: int = 0
     minimum_confidence: float = 0.18
     downscale_width: int = 240
+
+
+@dataclass(slots=True)
+class TopViewProjectionConfig:
+    """Persistent geometry for the local take-off-pad projection."""
+
+    enabled: bool = True
+    board_corners: list[list[float]] = field(default_factory=list)
+    foul_line: list[list[float]] = field(default_factory=list)
+    # Four editable corners surrounding the take-off line.  The two-point
+    # centreline above remains the projection/measurement compatibility API.
+    foul_area: list[list[float]] = field(default_factory=list)
+    camera_signature: str = ""
+    reference_width: int = 0
+    reference_height: int = 0
+    pad_length_cm: float = 0.0
+    pad_width_cm: float = 0.0
+    shoe_width_cm: float = 0.0
+    legal_side_flipped: bool = False
+    camera_profile: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -331,6 +351,7 @@ class AppConfig:
     performance: PerformanceConfig = field(default_factory=PerformanceConfig)
     timeline: TimelineConfig = field(default_factory=TimelineConfig)
     takeoff_assist: TakeoffAssistConfig = field(default_factory=TakeoffAssistConfig)
+    top_view_projection: TopViewProjectionConfig = field(default_factory=TopViewProjectionConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
     hotkeys: HotkeyConfig = field(default_factory=HotkeyConfig)
     shuttle: ShuttleConfig = field(default_factory=ShuttleConfig)
@@ -433,12 +454,10 @@ class AppConfig:
             raise ValueError("Board ROI must have a positive size")
         if self.display.board_roi_x + self.display.board_roi_width > 1.0001 or self.display.board_roi_y + self.display.board_roi_height > 1.0001:
             raise ValueError("Board ROI must fit inside the image")
-        if self.timeline.min_detail_seconds <= 0:
-            raise ValueError("timeline.min_detail_seconds must be positive")
-        if self.timeline.max_detail_seconds < self.timeline.min_detail_seconds:
-            raise ValueError("timeline.max_detail_seconds must be >= minimum")
-        if self.timeline.detail_window_seconds <= 0:
-            raise ValueError("timeline.detail_window_seconds must be positive")
+        if self.timeline.min_detail_seconds != 1.0 or self.timeline.max_detail_seconds != 3600.0:
+            raise ValueError("timeline zoom range must be exactly 1 to 3600 seconds")
+        if not self.timeline.min_detail_seconds <= self.timeline.detail_window_seconds <= self.timeline.max_detail_seconds:
+            raise ValueError("timeline detail window must stay inside the zoom range")
         a = self.takeoff_assist
         if a.analysis_seconds_before_freeze <= 0 or a.analysis_seconds_after_freeze < 0:
             raise ValueError("Take-off analysis window is invalid")
@@ -450,6 +469,33 @@ class AppConfig:
             raise ValueError("takeoff_assist.quick_review_speed must be between 0.01 and 4")
         if not -1000 <= a.seek_lead_frames <= 1000:
             raise ValueError("takeoff_assist.seek_lead_frames must be between -1000 and 1000")
+        projection = self.top_view_projection
+        if not isinstance(projection.enabled, bool):
+            raise ValueError("top_view_projection.enabled must be true or false")
+        for name, points, expected in (
+            ("board_corners", projection.board_corners, 4),
+            ("foul_line", projection.foul_line, 2),
+            ("foul_area", projection.foul_area, 4),
+        ):
+            if points and len(points) != expected:
+                raise ValueError(f"top_view_projection.{name} must contain {expected} points")
+            for point in points:
+                if not isinstance(point, (list, tuple)) or len(point) != 2:
+                    raise ValueError(f"top_view_projection.{name} points must contain x and y")
+                if any(not isinstance(value, (int, float)) or not 0 <= float(value) <= 1 for value in point):
+                    raise ValueError(f"top_view_projection.{name} coordinates must be between 0 and 1")
+        if not isinstance(projection.camera_signature, str):
+            raise ValueError("top_view_projection.camera_signature must be text")
+        if not isinstance(projection.legal_side_flipped, bool):
+            raise ValueError("top_view_projection.legal_side_flipped must be true or false")
+        if not isinstance(projection.camera_profile, dict):
+            raise ValueError("top_view_projection.camera_profile must be an object")
+        if projection.reference_width < 0 or projection.reference_height < 0:
+            raise ValueError("top_view_projection reference dimensions cannot be negative")
+        for name in ("pad_length_cm", "pad_width_cm", "shoe_width_cm"):
+            value = float(getattr(projection, name))
+            if value < 0 or value > 1000:
+                raise ValueError(f"top_view_projection.{name} must be between 0 and 1000")
         if not 0 <= self.export.target_fps <= 1000:
             raise ValueError("export.target_fps must be between 0 and 1000")
         if not isinstance(self.hotkeys.bindings, dict):
@@ -531,6 +577,7 @@ def config_from_dict(data: dict[str, Any]) -> AppConfig:
             performance=PerformanceConfig(**merged["performance"]),
             timeline=TimelineConfig(**merged["timeline"]),
             takeoff_assist=TakeoffAssistConfig(**merged["takeoff_assist"]),
+            top_view_projection=TopViewProjectionConfig(**merged["top_view_projection"]),
             export=ExportConfig(**merged["export"]),
             hotkeys=HotkeyConfig(**merged["hotkeys"]),
             shuttle=ShuttleConfig(**merged["shuttle"]),
@@ -540,6 +587,14 @@ def config_from_dict(data: dict[str, Any]) -> AppConfig:
     # Migrate pre-2.3 configs which only had display.refresh_hz.
     if "performance" not in data:
         config.performance.preview_refresh_hz = config.display.refresh_hz
+    # Timeline zoom supports precise one-second review through a one-hour
+    # overview. Normalize older saved ranges without quarantining the config.
+    config.timeline.min_detail_seconds = 1.0
+    config.timeline.max_detail_seconds = 3600.0
+    config.timeline.detail_window_seconds = max(
+        config.timeline.min_detail_seconds,
+        min(config.timeline.max_detail_seconds, float(config.timeline.detail_window_seconds)),
+    )
     config.hotkeys.bindings = {**DEFAULT_HOTKEYS, **config.hotkeys.bindings}
     config.validate()
     return config

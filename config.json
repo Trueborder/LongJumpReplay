@@ -1,14 +1,16 @@
 {
   "general": {
-    "language": "en",
+    "language": "cs",
     "confirm_destructive_actions": false,
     "show_tooltips": true,
-    "onboarding_completed": true
+    "onboarding_completed": true,
+    "progress_details_expanded": false,
+    "recording_mode_prompted": true
   },
   "camera": {
-    "source_type": "camera",
+    "source_type": "file",
     "device_index": 1,
-    "file_path": "",
+    "file_path": "C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
     "width": 1280,
     "height": 720,
     "fps": 120.0,
@@ -25,6 +27,10 @@
     "max_memory_mb": 1024,
     "store_every_nth_frame": 2
   },
+  "capture": {
+    "mode": "buffer",
+    "max_duration_seconds": 600.0
+  },
   "attempts": {
     "pre_seconds": 30.0,
     "post_seconds": 10.0,
@@ -39,7 +45,7 @@
     "duration_seconds": 60
   },
   "competition": {
-    "enabled": true,
+    "enabled": false,
     "decision_controls_enabled": true,
     "require_decision_before_continue": false,
     "default_decision": "Not decided",
@@ -54,7 +60,7 @@
     },
     "active_group": "Boys",
     "current_competitor_by_group": {
-      "Boys": 6,
+      "Boys": 1,
       "Girls": 1
     },
     "auto_advance_after_decision": false,
@@ -70,7 +76,7 @@
     "final_round_enabled": true,
     "finalists_count": 8,
     "final_attempts": 3,
-    "final_order": "same",
+    "final_order": "manual",
     "finalist_numbers_by_group": {
       "Boys": [],
       "Girls": []
@@ -91,7 +97,7 @@
   "display": {
     "refresh_hz": 20,
     "fullscreen": false,
-    "theme": "system",
+    "theme": "dark",
     "layout": "replay_pip",
     "show_attempts_panel": true,
     "show_timeline": true,
@@ -100,19 +106,19 @@
     "show_decision_controls": true,
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
-    "attempts_panel_width": 514,
-    "timeline_height": 220,
-    "guide_enabled": true,
-    "guide_x_ratio": 0.6553308823529411,
-    "guide_y_ratio": 0.886437908496732,
-    "guide_angle_deg": 6.458816378718656,
+    "attempts_panel_width": 502,
+    "timeline_height": 225,
+    "guide_enabled": false,
+    "guide_x_ratio": 0.8387097120285034,
+    "guide_y_ratio": 0.4556451439857483,
+    "guide_angle_deg": 5.478636681430089,
     "guide_width_px": 10,
     "board_roi_enabled": true,
-    "board_roi_x": 0.38590990954392834,
-    "board_roi_y": 0.265459939205008,
-    "board_roi_width": 0.23767361111111163,
-    "board_roi_height": 0.43703703703703634,
-    "board_roi_visible": true,
+    "board_roi_x": 0.2815726101398468,
+    "board_roi_y": 0.0,
+    "board_roi_width": 0.7184274196624756,
+    "board_roi_height": 0.9315770864486694,
+    "board_roi_visible": false,
     "comparison_enabled": true,
     "comparison_offset_frames": 1,
     "remember_geometry": true,
@@ -132,9 +138,9 @@
     "menu_throttle_enabled": true
   },
   "timeline": {
-    "detail_window_seconds": 2.0,
-    "min_detail_seconds": 0.1,
-    "max_detail_seconds": 60.0,
+    "detail_window_seconds": 60.0,
+    "min_detail_seconds": 1.0,
+    "max_detail_seconds": 3600.0,
     "show_frame_ticks": true,
     "snap_to_frames": true
   },
@@ -148,6 +154,63 @@
     "seek_lead_frames": 0,
     "minimum_confidence": 0.18,
     "downscale_width": 128
+  },
+  "top_view_projection": {
+    "enabled": true,
+    "board_corners": [
+      [
+        0.6239919662475586,
+        0.01344086043536663
+      ],
+      [
+        0.8477822542190552,
+        0.0026881720405071974
+      ],
+      [
+        0.9959677457809448,
+        0.8915770649909973
+      ],
+      [
+        0.32157260179519653,
+        0.8342293500900269
+      ]
+    ],
+    "foul_line": [
+      [
+        0.7958669662475586,
+        0.008960573002696037
+      ],
+      [
+        0.8815524578094482,
+        0.9023297429084778
+      ]
+    ],
+    "foul_area": [
+      [
+        0.7590725421905518,
+        0.0008960573468357325
+      ],
+      [
+        0.7681452035903931,
+        0.9130824208259583
+      ],
+      [
+        0.9949597120285034,
+        0.8915770649909973
+      ],
+      [
+        0.8326613306999207,
+        0.017025088891386986
+      ]
+    ],
+    "camera_signature": "file|1|DSHOW|MJPG|C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
+    "reference_width": 1920,
+    "reference_height": 1080,
+    "pad_length_cm": 120.1,
+    "pad_width_cm": 34.0,
+    "shoe_width_cm": 0.0,
+    "legal_side_flipped": false,
+    "camera_profile": {}
   },
   "export": {
     "directory": "exports",
@@ -204,8 +267,10 @@
     "shuttle_action": "select_attempt",
     "shuttle_debounce_ms": 250,
     "button_map": {
-      "freeze_toggle": 1,
       "return_live": 2,
+      "freeze_toggle": 1,
+      "select_latest_capture": 4,
+      "hold_playback": 5,
       "decision_valid": 3,
       "decision_foul": 4,
       "decision_review": 5
