@@ -1,5 +1,13 @@
 # LongJumpReplay changelog
 
+## 6.2.5 - 2026-09-10
+
+- Makes the final fullscreen split review the first window shown by the button
+  or Enter shortcut, with the frozen original immediately visible on the left.
+- Removes the separate fullscreen loader from this path. Frame loading,
+  analysis, and reconstruction update one progress bar in the split review,
+  and the computed image is inserted into the right panel in place.
+
 ## 6.2.4 - 2026-09-10
 
 - Opens the final fullscreen split review before reconstruction starts, with

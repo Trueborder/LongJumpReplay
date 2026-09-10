@@ -2028,6 +2028,7 @@ class TopViewProjectionWindow:
         foul_area: Sequence[Sequence[float]] = (),
         on_foul_area_saved: Callable[[tuple[tuple[float, float], ...]], None] | None = None,
         start_fullscreen: bool = False,
+        auto_start: bool = True,
     ) -> None:
         self.master, self.palette, self.language = master, palette, language
         self.attempt_id, self.packets = attempt_id, list(packets)
@@ -2265,7 +2266,13 @@ class TopViewProjectionWindow:
             self.current_candidate = min(range(len(self.candidates)), key=lambda index: abs(self.candidates[index].timestamp_ns - self.target_timestamp_ns))
             self._select_candidate(self.current_candidate)
             self.selection_page.grid_remove()
-            self.window.after_idle(self._confirm_frame)
+            if auto_start:
+                self.window.after_idle(self._confirm_frame)
+            else:
+                self._state = "loading_frames"
+                self.selection_page.grid_remove()
+                self.workspace_page.grid(row=1, column=0, sticky="nsew")
+                self.window.after_idle(self._render_source)
         else:
             self.confirm_frame_button.state(["disabled"])
         self.window.update_idletasks()
@@ -2299,6 +2306,52 @@ class TopViewProjectionWindow:
 
     def _current(self) -> ProjectionCandidate | None:
         return self.candidates[self.current_candidate] if self.candidates else None
+
+    def open_pending_review(self) -> None:
+        """Show the authoritative original frame before background loading."""
+        if self._closed:
+            return
+        self._open_split_review()
+        review = self._split_review_window
+        if review is not None:
+            review.lift()
+            review.focus_force()
+
+    def update_loading_progress(self, value: float, detail: str) -> None:
+        """Update only the already-visible split review; never open another UI."""
+        self._update_split_review_progress(min(12.0, max(0.0, float(value) * 0.12)), detail)
+
+    def begin_automatic_analysis(
+        self,
+        candidates: Sequence[ProjectionCandidate],
+        reference_frames: Sequence[np.ndarray],
+        candidate_estimates: dict[int, FootEstimate],
+        target_timestamp_ns: int,
+        roi: Sequence[float],
+        calibration: ProjectionCalibration | None,
+        calibration_warning: str,
+    ) -> None:
+        """Attach loaded inputs and continue inside the existing split review."""
+        if self._closed or not candidates:
+            return
+        self.candidates = list(candidates)
+        self.reference_frames = [frame for frame in reference_frames if frame is not None]
+        self._candidate_estimates = dict(candidate_estimates)
+        self.target_timestamp_ns = int(target_timestamp_ns)
+        self.roi = tuple(roi)
+        self.calibration = calibration
+        self.calibration_warning = calibration_warning
+        self.current_candidate = min(range(len(self.candidates)), key=lambda index: abs(self.candidates[index].timestamp_ns - self.target_timestamp_ns))
+        self._state = "selecting_frame"
+        self._render_source()
+        if self._split_review_render is not None:
+            self._split_review_render()
+        self._confirm_frame()
+        if self._split_review_window is not None:
+            self.window.after_idle(lambda: (
+                self._split_review_window.lift(),
+                self._split_review_window.focus_force(),
+            ) if self._split_review_window is not None else None)
 
     def _projection_panel(self, parent: ttk.Frame, column: int, title: str, target: str) -> tuple[tk.Canvas, ttk.Button]:
         panel = ttk.Frame(parent, style="Panel.TFrame", padding=5)

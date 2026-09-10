@@ -28,6 +28,10 @@ def test_top_down_projection_uses_current_frame_without_chooser(tmp_path):
     def open_projection():
         app.open_top_view_projection()
         result["loading_visible"] = app._top_view_loading_dialog is not None
+        result["split_immediate"] = bool(
+            app._top_view_window is not None
+            and app._top_view_window._split_review_window is not None
+        )
         wait_for_window()
 
     def wait_for_window():
@@ -54,7 +58,8 @@ def test_top_down_projection_uses_current_frame_without_chooser(tmp_path):
     root.after(7000, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
 
-    assert result["loading_visible"] is True
+    assert result["loading_visible"] is False
+    assert result["split_immediate"] is True
     assert result["opened"] is True
     assert result["title"] == "Top-down projection"
     assert result["candidates"] == 1

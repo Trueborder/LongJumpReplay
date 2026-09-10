@@ -2632,24 +2632,37 @@ class MainWindow:
         configured_roi = (self.config.display.board_roi_x, self.config.display.board_roi_y, self.config.display.board_roi_width, self.config.display.board_roi_height)
         loading_cancel = Event()
         self._top_view_loading_cancel = loading_cancel
-
-        def cancel_loading() -> None:
-            loading_cancel.set()
-            if self._top_view_loading_dialog is not None:
-                self._top_view_loading_dialog.close()
-            self._top_view_loading_dialog = None
+        preview_frame = None if self._displayed_bgr is None else self._displayed_bgr.copy()
+        if preview_frame is None:
             self._top_view_loading_cancel = None
-
-        self._top_view_loading_dialog = ProjectionProgressDialog(
-            self.root,
-            self.palette,
-            self._t("button.top_view"),
-            self._t("projection.loading_frames"),
-            cancel_loading,
-            cancel_text=self._t("projection.cancel"),
-            fullscreen=True,
-            preview_frame=self._displayed_bgr,
+            self._show_message(self._t("projection.no_decodable"), 6)
+            return
+        preview_size = (preview_frame.shape[1], preview_frame.shape[0])
+        preview_matching = calibration_matches(stored, current_signature, preview_size)
+        preview_calibration = stored if preview_matching else None
+        preview_roi = board_search_roi(stored.board_corners) if preview_matching and stored is not None else configured_roi
+        preview_warning = self._t("projection.camera_changed") if stored is not None and not preview_matching else ""
+        preview_candidate = ProjectionCandidate(
+            frame_index,
+            self._displayed_timestamp_ns or target_timestamp_ns,
+            preview_frame,
+            1.0,
+            0.0,
+            0.0,
         )
+        self._top_view_window = TopViewProjectionWindow(
+            self.root, self.palette, self.config.general.language, attempt_id, packets, target_timestamp_ns,
+            preview_roi, preview_calibration, preview_warning, current_signature,
+            self._save_top_view_calibration,
+            lambda selected_id: self._show_message(self._t("projection.ready_message").format(attempt=selected_id), 5),
+            self._top_view_closed,
+            candidates=(preview_candidate,), reference_frames=(), candidate_estimates={},
+            foul_area=self.config.top_view_projection.foul_area if preview_calibration is not None else (),
+            on_foul_area_saved=self._save_projection_foul_area,
+            start_fullscreen=True,
+            auto_start=False,
+        )
+        self._top_view_window.open_pending_review()
         result_queue: Queue[tuple[str, object]] = Queue()
         unique_references = tuple(index for index in dict.fromkeys(reference_indices) if index not in set(candidate_frame_indices))
         total_reads = max(1, len(candidate_frame_indices) + len(unique_references))
@@ -2697,28 +2710,24 @@ class MainWindow:
             try:
                 while True:
                     kind, payload = result_queue.get_nowait()
-                    if kind == "progress" and self._top_view_loading_dialog is not None:
+                    if kind == "progress" and self._top_view_window is not None:
                         value, detail = payload
-                        self._top_view_loading_dialog.update(value, self._t("projection.loading_frames"), str(detail))
+                        self._top_view_window.update_loading_progress(float(value), str(detail))
                     elif kind == "error":
-                        cancel_loading(); self._show_message(str(payload), 6); return
+                        loading_cancel.set()
+                        self._top_view_loading_cancel = None
+                        if self._top_view_window is not None:
+                            self._top_view_window._update_split_review_error(str(payload))
+                        self._show_message(str(payload), 6)
+                        return
                     elif kind == "result":
                         candidates, reference_frames, estimates, local_target, projection_roi, active_calibration, warning = payload
-                        if self._top_view_loading_dialog is not None:
-                            self._top_view_loading_dialog.complete(self._t("projection.opening_screen"))
-                            self._top_view_loading_dialog.close()
                         self._top_view_loading_dialog = None; self._top_view_loading_cancel = None
-                        self._top_view_window = TopViewProjectionWindow(
-                            self.root, self.palette, self.config.general.language, attempt_id, packets, local_target,
-                            projection_roi, active_calibration, warning, current_signature,
-                            self._save_top_view_calibration,
-                            lambda selected_id: self._show_message(self._t("projection.ready_message").format(attempt=selected_id), 5),
-                            self._top_view_closed,
-                            candidates=candidates, reference_frames=reference_frames, candidate_estimates=estimates,
-                            foul_area=self.config.top_view_projection.foul_area if active_calibration is not None else (),
-                            on_foul_area_saved=self._save_projection_foul_area,
-                            start_fullscreen=True,
-                        )
+                        if self._top_view_window is not None:
+                            self._top_view_window.begin_automatic_analysis(
+                                candidates, reference_frames, estimates, local_target,
+                                projection_roi, active_calibration, warning,
+                            )
                         return
             except Empty:
                 pass
