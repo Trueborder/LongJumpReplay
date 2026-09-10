@@ -174,6 +174,7 @@ def test_judge_only_mode_hides_competition_board(tmp_path):
         assert not hasattr(app, "prev_athlete_button")
         assert not app.board_navigation.winfo_manager()
         assert app.side_notebook.tab(app.board_tab, "state") == "hidden"
+        assert not app.decision_frame.winfo_manager()
     finally:
         app.close(); root.mainloop()
 

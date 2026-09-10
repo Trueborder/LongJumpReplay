@@ -636,10 +636,12 @@ class MainWindow:
         )
         self.timeline.grid(row=0, column=0, sticky="nsew")
         self.timeline_hint_label = ttk.Label(
-            self.timeline_wrap, text=self._t("timeline.hint"), style="TimelineHint.TLabel",
+            self.timeline_wrap, text="", style="TimelineHint.TLabel",
             anchor="center", justify="center",
         )
-        self.timeline_hint_label.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        # Keep the compatibility attribute for integrations, but remove the
+        # obsolete keyboard/zoom instruction strip from the operator surface.
+        self.timeline_hint_label.grid_remove()
         self.media_pane.add(self.video_host, weight=5)
         self.media_pane.add(self.timeline_wrap, weight=1)
         self._timeline_pane_added = True
@@ -2644,6 +2646,7 @@ class MainWindow:
             self._t("projection.loading_frames"),
             cancel_loading,
             cancel_text=self._t("projection.cancel"),
+            fullscreen=True,
         )
         result_queue: Queue[tuple[str, object]] = Queue()
         unique_references = tuple(index for index in dict.fromkeys(reference_indices) if index not in set(candidate_frame_indices))
@@ -2712,6 +2715,7 @@ class MainWindow:
                             candidates=candidates, reference_frames=reference_frames, candidate_estimates=estimates,
                             foul_area=self.config.top_view_projection.foul_area if active_calibration is not None else (),
                             on_foul_area_saved=self._save_projection_foul_area,
+                            start_fullscreen=True,
                         )
                         return
             except Empty:
@@ -3317,7 +3321,11 @@ class MainWindow:
         show_status = bool(self.var_show_status.get())
         if show_status and not self.status_bar.winfo_manager(): self.status_bar.grid(row=3, column=0, sticky="ew", pady=(5, 0))
         elif not show_status and self.status_bar.winfo_manager(): self.status_bar.grid_remove()
-        show_decisions = self.config.competition.decision_controls_enabled and self.config.display.show_decision_controls
+        show_decisions = bool(
+            self.config.competition.enabled
+            and self.config.competition.decision_controls_enabled
+            and self.config.display.show_decision_controls
+        )
         if show_decisions and not self.decision_frame.winfo_manager(): self.decision_frame.pack(side="left")
         elif not show_decisions and self.decision_frame.winfo_manager(): self.decision_frame.pack_forget()
         show_board = bool(self.config.competition.enabled and self.config.competition.show_competition_board and self.var_show_board.get())
@@ -3501,7 +3509,7 @@ class MainWindow:
         self.translator.set_language(self.config.general.language)
         if hasattr(self, "timeline"):
             self.timeline.set_language(self.config.general.language)
-            self.timeline_hint_label.configure(text=self._t("timeline.hint"))
+            self.timeline_hint_label.configure(text="")
         if hasattr(self, "replay_canvas"):
             for canvas in self._all_video_canvases():
                 canvas.set_language(self.config.general.language)

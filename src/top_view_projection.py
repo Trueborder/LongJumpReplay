@@ -1290,8 +1290,6 @@ class _LegacyTopViewProjectionWindow:
         self.find_edges_button.pack(side="left", padx=(0, 6))
         self.flip_side_button = ttk.Button(actions, text=self._text("Flip legal side", "Obrátit platnou stranu"), command=self._flip_legal_side)
         self.flip_side_button.pack(side="left", padx=(0, 6))
-        self.camera_profile_button = ttk.Button(actions, text=self._text("Advanced camera…", "Pokročilá kamera…"), command=self._open_camera_profile_wizard)
-        self.camera_profile_button.pack(side="left", padx=(0, 6))
         self.estimate_button = ttk.Button(actions, text=self._text("Estimate foot", "Odhadnout botu"), command=self._estimate_foot)
         self.estimate_button.pack(side="left", padx=(0, 6))
         self.edit_button = ttk.Button(actions, text=self._text("Edit outline", "Upravit obrys"), command=self._toggle_editing)
@@ -1923,15 +1921,18 @@ class _LegacyTopViewProjectionWindow:
 class ProjectionProgressDialog:
     """Small modal determinate dialog driven only from the Tk thread."""
 
-    def __init__(self, parent: tk.Misc, palette: dict[str, str], title: str, label: str, cancel: Callable[[], None], cancel_text: str = "Cancel") -> None:
+    def __init__(self, parent: tk.Misc, palette: dict[str, str], title: str, label: str, cancel: Callable[[], None], cancel_text: str = "Cancel", fullscreen: bool = False) -> None:
         self.window = tk.Toplevel(parent)
         self.window.title(title)
         self.window.transient(parent)
         self.window.resizable(False, False)
         self.window.configure(bg=palette["bg"])
         self.window.protocol("WM_DELETE_WINDOW", cancel)
-        frame = ttk.Frame(self.window, style="Panel.TFrame", padding=18)
-        frame.pack(fill="both", expand=True)
+        frame = ttk.Frame(self.window, style="Panel.TFrame", padding=28 if fullscreen else 18)
+        if fullscreen:
+            frame.pack(anchor="center", padx=40, pady=40)
+        else:
+            frame.pack(fill="both", expand=True)
         self.label_var = tk.StringVar(value=label)
         self.detail_var = tk.StringVar(value="")
         ttk.Label(frame, textvariable=self.label_var, style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
@@ -1939,6 +1940,10 @@ class ProjectionProgressDialog:
         self.progress.grid(row=1, column=0, sticky="ew", pady=(7, 0))
         ttk.Button(frame, text=cancel_text, command=cancel).grid(row=1, column=1, padx=(10, 0))
         ttk.Label(frame, textvariable=self.detail_var, style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        if fullscreen:
+            # Open the review surface immediately. The determinate bar remains
+            # the only progress indicator while frame loading is bounded.
+            self.window.attributes("-fullscreen", True)
         self.window.grab_set()
         self.window.update_idletasks()
         parent_x = parent.winfo_rootx() if parent.winfo_exists() else 0
@@ -1990,6 +1995,7 @@ class TopViewProjectionWindow:
         candidate_estimates: dict[int, FootEstimate] | None = None,
         foul_area: Sequence[Sequence[float]] = (),
         on_foul_area_saved: Callable[[tuple[tuple[float, float], ...]], None] | None = None,
+        start_fullscreen: bool = False,
     ) -> None:
         self.master, self.palette, self.language = master, palette, language
         self.attempt_id, self.packets = attempt_id, list(packets)
@@ -2054,6 +2060,8 @@ class TopViewProjectionWindow:
         self.window.geometry("1220x790")
         self.window.minsize(940, 650)
         self.window.configure(bg=palette["bg"])
+        if start_fullscreen:
+            self.window.attributes("-fullscreen", True)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         self.window.bind("<Escape>", lambda _event: self.close())
         self.window.columnconfigure(0, weight=1)
@@ -2132,6 +2140,8 @@ class TopViewProjectionWindow:
             (("Flip legal side", "Obrátit platnou stranu"), self._flip_legal_side),
             (("Advanced camera...", "Pokročilá kamera..."), self._open_camera_profile_wizard),
         ):
+            if text_pair[0].startswith("Advanced camera"):
+                continue
             if not self._toolbar_buttons:
                 label = ttk.Label(toolbar, text=self._text("NAVIGATE", "NAVIGACE"), style="ProjectionCategory.TLabel"); label.pack(side="left", padx=(0, 4)); self._toolbar_category_labels.append(label)
             elif len(self._toolbar_buttons) == 2:

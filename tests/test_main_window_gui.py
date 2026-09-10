@@ -230,7 +230,7 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     root.mainloop()
     assert sizes['video'] > 250
     assert 200 <= sizes['timeline'] <= 280
-    assert sizes['timeline_hint'] >= 10
+    assert sizes['timeline_hint'] <= 2
     assert sizes['status'] >= 20
     assert sizes['replay_width'] > 400
     assert sizes['view_flags'] == (True, True, True, True, True)

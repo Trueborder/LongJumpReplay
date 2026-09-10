@@ -1,5 +1,15 @@
 # LongJumpReplay changelog
 
+## 6.2.2 - 2026-09-10
+
+- Opens Top-down projection in fullscreen immediately after Freeze, with a
+  truthful determinate loading bar while frames and the projection are built.
+- Removes the optional Advanced camera profile from the projection workflow;
+  normal board calibration remains the only required setup.
+- Makes Judge-only replay a review-only surface by hiding competition-board,
+  verdict controls, roster navigation, and related keyboard actions.
+- Removes the obsolete keyboard and zoom instruction strip below the timeline.
+
 ## 6.2.1 - 2026-09-09
 
 - Extends the logarithmic timeline zoom down to a one-second detailed view and

@@ -72,6 +72,19 @@ class CompetitionSetupModel:
         c = self.competition
         if template == "judge_only":
             c.enabled = False
+            # Judge-only replay is intentionally a review surface, not a
+            # competition station: remove verdict controls, roster/board
+            # navigation, special results, and rotation-related behavior.
+            c.decision_controls_enabled = False
+            c.require_decision_before_continue = False
+            c.auto_advance_on_attempt_complete = False
+            c.auto_advance_after_decision = False
+            c.show_competitor_selector = False
+            c.show_competition_board = False
+            c.show_state_banner = False
+            c.next_athlete_overlay = False
+            c.enable_special_results = False
+            c.keyboard_competition_controls = False
             return
         c.enabled = True
         c.default_attempts_per_competitor = 3
