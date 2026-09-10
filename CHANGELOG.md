@@ -1,5 +1,12 @@
 # LongJumpReplay changelog
 
+## 6.2.4 - 2026-09-10
+
+- Opens the final fullscreen split review before reconstruction starts, with
+  the original camera frame visible immediately and the computed panel filled
+  when the projection finishes.
+- Keeps one monotonic progress bar across analysis and reconstruction stages.
+
 ## 6.2.3 - 2026-09-10
 
 - Shows the frozen original camera frame immediately in the fullscreen

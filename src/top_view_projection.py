@@ -1970,11 +1970,18 @@ class ProjectionProgressDialog:
         height, width = frame.shape[:2]
         canvas_width = max(1, self._preview_canvas.winfo_width())
         canvas_height = max(1, self._preview_canvas.winfo_height())
-        scale = min(canvas_width / max(1, width), canvas_height / max(1, height))
+        panel_width = max(1, canvas_width // 2 - 20)
+        scale = min(panel_width / max(1, width), (canvas_height - 54) / max(1, height))
         shown = cv2.resize(frame, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
         self._preview_photo = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(shown, cv2.COLOR_BGR2RGB)))
         self._preview_canvas.delete("all")
-        self._preview_canvas.create_image((canvas_width - shown.shape[1]) / 2, (canvas_height - shown.shape[0]) / 2, image=self._preview_photo, anchor="nw")
+        left_x = canvas_width * .25
+        right_x = canvas_width * .75
+        self._preview_canvas.create_text(left_x, 18, text="Original camera frame", fill="#d8e2ed", font=("Segoe UI", 14, "bold"))
+        self._preview_canvas.create_text(right_x, 18, text="Computed top-down view", fill="#d8e2ed", font=("Segoe UI", 14, "bold"))
+        self._preview_canvas.create_line(canvas_width / 2, 0, canvas_width / 2, canvas_height, fill="#31404e", width=2)
+        self._preview_canvas.create_image(left_x - shown.shape[1] / 2, 42 + (canvas_height - 54 - shown.shape[0]) / 2, image=self._preview_photo, anchor="nw")
+        self._preview_canvas.create_text(right_x, canvas_height / 2, text="Waiting for computed\ntop-down projection…", fill="#b8c5d2", justify="center", font=("Segoe UI", 16))
 
     def update(self, value: float, label: str | None = None, detail: str | None = None) -> None:
         if label is not None:
@@ -2066,6 +2073,11 @@ class TopViewProjectionWindow:
         self._fullscreen_drag_start: tuple[float, float] | None = None
         self._split_review_window: tk.Toplevel | None = None
         self._split_review_photos: list[ImageTk.PhotoImage] = []
+        self._split_review_render: Callable[[], None] | None = None
+        self._split_review_progress: ttk.Progressbar | None = None
+        self._split_review_stage_var: tk.StringVar | None = None
+        self._split_review_badge: tk.Label | None = None
+        self._split_review_detail: tk.Label | None = None
         self._brush_trace: list[tuple[float, float]] = []
         self._compute_started_at = 0.0
         self._last_compute_duration_ms = 0.0
@@ -2526,7 +2538,13 @@ class TopViewProjectionWindow:
         self._generation += 1; generation = self._generation
         cancel = Event(); self._cancel = cancel
         self._state = "analysing_frame"
+        # Show the final comparison immediately: the original frame is
+        # available now while the computed panel remains in a waiting state.
+        self._open_split_review()
         self._analysis_dialog = ProjectionProgressDialog(self.window, self.palette, self._text("Top-down projection", "Projekce shora"), self._text("Preparing the current frame...", "Připravuji aktuální snímek..."), self._cancel_analysis)
+        if self._analysis_dialog is not None:
+            self._analysis_dialog.close()
+            self._analysis_dialog = None
         frame = candidate.frame_bgr.copy(); references = tuple(frame.copy() for frame in self.reference_frames)
         prior = self.calibration; roi = self.roi; signature = self.camera_signature
         cached = self._candidate_estimates.get(candidate.frame_index)
@@ -2720,6 +2738,7 @@ class TopViewProjectionWindow:
             self.status_var.set(self._text("Analysis ready. Computing the top-down projection...", "Analýza je připravena. Počítám projekci shora..."))
         self._render_source()
         if "manual_setup" not in result.diagnostics and len(self._foot_points) >= 3:
+            self.window.after_idle(self._open_split_review)
             self.window.after_idle(lambda: self._compute("overhead"))
 
     def _go_back(self) -> None:
@@ -3012,12 +3031,19 @@ class TopViewProjectionWindow:
             while True:
                 generation, kind, payload = self._queue.get_nowait()
                 if generation != self._generation: continue
-                if kind == "analysis_progress" and self._analysis_dialog:
-                    value, stage = payload; self._analysis_dialog.update(value, analysis_labels.get(str(stage), str(stage)))
+                if kind == "analysis_progress":
+                    value, stage = payload
+                    label = analysis_labels.get(str(stage), str(stage))
+                    if self._analysis_dialog:
+                        self._analysis_dialog.update(value, label)
+                    # Analysis occupies the first 40% of the single review
+                    # bar; reconstruction owns the remaining 60%.
+                    self._update_split_review_progress(float(value) * 0.4, label)
                 elif kind == "analysis_result":
                     if self._analysis_dialog: self._analysis_dialog.complete(self._text("Analysis complete.", "Analýza je dokončena.")); self._analysis_dialog.close(); self._analysis_dialog = None
                     self._cancel = None; self._show_workspace(payload)
                 elif kind in {"analysis_cancelled", "analysis_error"}:
+                    self._close_split_review()
                     if self._analysis_dialog: self._analysis_dialog.close(); self._analysis_dialog = None
                     self._cancel = None; self._state = "selecting_frame"
                     self.workspace_page.grid_remove()
@@ -3050,7 +3076,11 @@ class TopViewProjectionWindow:
                         self._open_manual_setup()
                         self.status_var.set(message)
                 elif kind == "compute_progress":
-                    _target, stage, value = payload; self.progress_label_var.set(labels.get(stage, stage)); self.reconstruction_progress.configure(value=max(float(self.reconstruction_progress["value"]), min(99, value)))
+                    _target, stage, value = payload
+                    label = labels.get(stage, stage)
+                    self.progress_label_var.set(label)
+                    self.reconstruction_progress.configure(value=max(float(self.reconstruction_progress["value"]), min(99, value)))
+                    self._update_split_review_progress(40.0 + float(value) * 0.6, label)
                 elif kind == "board_result":
                     self._board_result = payload; self._finish_compute("board")
                 elif kind == "overhead_result":
@@ -3094,6 +3124,8 @@ class TopViewProjectionWindow:
             self.status_var.set(error); self.progress_label_var.set(error)
             (self.board_compute_button if target == "board" else self.overhead_compute_button).configure(text=self._text("Try again", "Zkusit znovu"))
             self.progress_frame.grid_remove()
+            if target == "overhead":
+                self._update_split_review_error(error)
         else:
             self._last_compute_duration_ms = max(0.0, (time.perf_counter() - self._compute_started_at) * 1000.0)
             self.reconstruction_progress.configure(value=100)
@@ -3114,6 +3146,7 @@ class TopViewProjectionWindow:
                     f"Spolehlivost {self._overhead_result.fit_confidence:.0%}",
                 ))
                 self.result_badge.configure(bg=colour, fg="#111722" if status not in {"over", "clear"} else "#ffffff")
+                self._update_split_review_result()
         self._render_result(target)
         overhead_image = self._overhead_result.overhead_image if self._overhead_result is not None else None
         image_is_renderable = overhead_image is not None and overhead_image.size > 0 and float(np.count_nonzero(overhead_image)) / float(overhead_image.size) >= 0.02
@@ -3141,10 +3174,10 @@ class TopViewProjectionWindow:
         return image
 
     @staticmethod
-    def _fit_review_image(canvas: tk.Canvas, image: np.ndarray, photo_holder: list[ImageTk.PhotoImage]) -> None:
+    def _fit_review_image(canvas: tk.Canvas, image: np.ndarray | None, photo_holder: list[ImageTk.PhotoImage], empty_text: str = "No image") -> None:
         canvas.delete("all")
         if image is None or image.size == 0:
-            canvas.create_text(max(20, canvas.winfo_width() / 2), max(20, canvas.winfo_height() / 2), text="No image", fill="#d8e2ed")
+            canvas.create_text(max(20, canvas.winfo_width() / 2), max(20, canvas.winfo_height() / 2), text=empty_text, fill="#b8c5d2", width=max(220, canvas.winfo_width() - 40))
             return
         width, height = max(1, canvas.winfo_width() - 18), max(1, canvas.winfo_height() - 18)
         image_height, image_width = image.shape[:2]
@@ -3197,10 +3230,105 @@ class TopViewProjectionWindow:
         left_canvas.bind("<Configure>", render); right_canvas.bind("<Configure>", render)
         review.after_idle(lambda: (review.focus_force(), render()))
 
+    def _open_split_review(self) -> None:
+        """Open the final two-panel review before reconstruction completes."""
+        if self._closed or self._split_review_window is not None:
+            return
+        original = self._source_review_image()
+        if original is None:
+            self.status_var.set(self._text("Could not open the comparison: the source frame is unavailable.", "Zdrojový snímek není k dispozici."))
+            return
+        review = tk.Toplevel(self.window)
+        self._split_review_window = review
+        review.title(self._text("Top-down projection review", "Kontrola projekce shora"))
+        review.configure(bg="#0b1118")
+        review.attributes("-fullscreen", True)
+        review.protocol("WM_DELETE_WINDOW", self._close_split_review)
+        review.bind("<KeyPress>", self._close_split_review)
+        review.bind("<Escape>", self._close_split_review)
+        review.rowconfigure(1, weight=1); review.columnconfigure(0, weight=1); review.columnconfigure(1, weight=1)
+        header = tk.Frame(review, bg="#111a24", padx=18, pady=12)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew")
+        tk.Label(header, text=self._text("TOP-DOWN PROJECTION REVIEW", "KONTROLA PROJEKCE SHORA"), bg="#111a24", fg="#f2f6fa", font=("Segoe UI", 18, "bold")).pack(side="left")
+        self._split_review_badge = tk.Label(header, text="COMPUTING", bg="#f3c969", fg="#101820", padx=14, pady=4, font=("Segoe UI", 13, "bold"))
+        self._split_review_badge.pack(side="left", padx=(20, 8))
+        self._split_review_detail = tk.Label(header, text=self._text("Original frame is ready; waiting for the computed projection.", "Původní snímek je připraven; čekám na projekci."), bg="#111a24", fg="#b8c5d2", font=("Segoe UI", 10))
+        self._split_review_detail.pack(side="left", padx=(0, 12))
+        self._split_review_stage_var = tk.StringVar(value=self._text("Preparing projection...", "Připravuji projekci..."))
+        ttk.Label(header, textvariable=self._split_review_stage_var, style="Muted.TLabel").pack(side="right", padx=(8, 8))
+        self._split_review_progress = ttk.Progressbar(header, mode="determinate", maximum=100, value=0, length=220, style="Modal.Horizontal.TProgressbar")
+        self._split_review_progress.pack(side="right")
+        left_frame = tk.Frame(review, bg="#0b1118", padx=12, pady=10); left_frame.grid(row=1, column=0, sticky="nsew")
+        right_frame = tk.Frame(review, bg="#0b1118", padx=12, pady=10); right_frame.grid(row=1, column=1, sticky="nsew")
+        tk.Label(left_frame, text=self._text("Original camera frame", "Původní snímek kamery"), bg="#0b1118", fg="#d8e2ed", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 5))
+        tk.Label(right_frame, text=self._text("Computed top-down view", "Vypočtený pohled shora"), bg="#0b1118", fg="#d8e2ed", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 5))
+        left_canvas = tk.Canvas(left_frame, bg="#05080c", highlightthickness=1, highlightbackground="#31404e")
+        right_canvas = tk.Canvas(right_frame, bg="#05080c", highlightthickness=1, highlightbackground="#31404e")
+        left_canvas.pack(fill="both", expand=True); right_canvas.pack(fill="both", expand=True)
+        self._split_review_photos = []
+        def render(_event=None) -> None:
+            holders = getattr(render, "holders", None)
+            if holders is None:
+                holders = [[], []]; render.holders = holders
+            current = self._overhead_result
+            result = None
+            if current is not None:
+                result = current.overhead_image if self.show_outlines_var.get() or current.clean_overhead_image is None else current.clean_overhead_image
+            self._fit_review_image(left_canvas, original, holders[0])
+            self._fit_review_image(right_canvas, result, holders[1], self._text("Waiting for computed top-down projection...", "Čekám na vypočtenou projekci shora..."))
+            self._split_review_photos = holders[0] + holders[1]
+        self._split_review_render = render
+        left_canvas.bind("<Configure>", render); right_canvas.bind("<Configure>", render)
+        review.after_idle(lambda: (review.focus_force(), render()))
+        if self._overhead_result is not None:
+            self._update_split_review_result()
+
+    def _update_split_review_progress(self, value: float, label: str) -> None:
+        if self._split_review_progress is not None:
+            self._split_review_progress.configure(value=max(float(self._split_review_progress["value"]), min(99.0, float(value))))
+        if self._split_review_stage_var is not None:
+            self._split_review_stage_var.set(label)
+
+    def _update_split_review_result(self) -> None:
+        result = self._overhead_result
+        if result is None:
+            return
+        status = result.verdict_status
+        badge = projection_verdict_text(status)
+        colour = "#ff6474" if status == "over" else "#70d6a5" if status == "clear" else "#f3c969"
+        if self._split_review_badge is not None:
+            self._split_review_badge.configure(text=badge, bg=colour)
+        if self._split_review_detail is not None:
+            self._split_review_detail.configure(text=self._text(f"Confidence {result.fit_confidence:.0%}", f"Spolehlivost {result.fit_confidence:.0%}"))
+        if self._split_review_stage_var is not None:
+            self._split_review_stage_var.set(self._text("Projection ready.", "Projekce je připravena."))
+        if self._split_review_progress is not None:
+            self._split_review_progress.configure(value=100)
+            self._split_review_progress.pack_forget()
+        if self._split_review_render is not None:
+            self._split_review_render()
+
+    def _update_split_review_error(self, message: str) -> None:
+        if self._split_review_badge is not None:
+            self._split_review_badge.configure(text=self._text("UNCERTAIN", "NEJISTÉ"), bg="#f3c969")
+        if self._split_review_detail is not None:
+            self._split_review_detail.configure(text=message)
+        if self._split_review_stage_var is not None:
+            self._split_review_stage_var.set(self._text("Projection unavailable.", "Projekce není k dispozici."))
+        if self._split_review_progress is not None:
+            self._split_review_progress.pack_forget()
+        if self._split_review_render is not None:
+            self._split_review_render()
+
     def _close_split_review(self, _event=None) -> str:
         review = self._split_review_window
         self._split_review_window = None
         self._split_review_photos = []
+        self._split_review_render = None
+        self._split_review_progress = None
+        self._split_review_stage_var = None
+        self._split_review_badge = None
+        self._split_review_detail = None
         if review is not None:
             try:
                 review.destroy()
