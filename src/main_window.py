@@ -3175,15 +3175,16 @@ class MainWindow:
                                                      a.downscale_width)
                 if candidate:
                     lead = int(a.seek_lead_frames)
+                    selected_index = candidate.visible_frame_for_lead(lead)
                     cached_indices = tuple(
-                        max(0, min(max(0, attempt.frame_count - 1), int(index) + lead))
+                        max(0, min(max(0, attempt.frame_count - 1), int(index)))
                         for index in candidate.usable_frame_indices
                     )
                     with self._takeoff_projection_lock:
                         self._takeoff_projection_indices[attempt_id] = tuple(sorted(set(cached_indices)))
                     self.attempts.set_takeoff_candidate(
                         attempt_id,
-                        candidate.frame_index + a.seek_lead_frames,
+                        selected_index,
                         candidate.confidence,
                         candidate.analysis_start_ns,
                         candidate.analysis_end_ns,

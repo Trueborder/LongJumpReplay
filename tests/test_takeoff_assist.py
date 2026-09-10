@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from src.models import FramePacket
-from src.takeoff_assist import detect_takeoff_candidate
+from src.takeoff_assist import TakeoffCandidate, detect_takeoff_candidate
 import src.takeoff_assist as takeoff_assist_module
 
 
@@ -12,6 +12,13 @@ def packet(index: int, frame: np.ndarray, fps: float = 60.0) -> FramePacket:
     ok, data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     assert ok
     return FramePacket(index, int(index / fps * 1e9), data.tobytes(), frame.shape[1], frame.shape[0])
+
+
+def test_seek_lead_is_clamped_to_a_frame_where_the_shoe_was_visible():
+    candidate = TakeoffCandidate(12, .8, 4.0, 0, 1, (10, 11, 12, 13))
+    assert candidate.visible_frame_for_lead(20) == 13
+    assert candidate.visible_frame_for_lead(-20) == 10
+    assert candidate.visible_frame_for_lead(0) == 12
 
 
 def test_takeoff_assist_finds_local_motion_in_board_roi():
@@ -72,6 +79,36 @@ def test_takeoff_assist_prefers_the_shoe_over_a_large_moving_shadow():
     )
     assert candidate is not None
     assert 22 <= candidate.frame_index <= 27
+
+
+def test_takeoff_assist_never_selects_the_empty_departure_frame():
+    packets = []
+    originals = []
+    for i in range(32):
+        frame = np.full((180, 320, 3), (70, 78, 92), dtype=np.uint8)
+        cv2.rectangle(frame, (82, 104), (250, 128), (215, 220, 225), -1)
+        cv2.line(frame, (84, 116), (248, 116), (24, 24, 27), 4)
+        if 10 <= i <= 15:
+            # This intentionally occupies more than the old 10% presence cap.
+            x = 126 + (i - 10) * 13
+            cv2.ellipse(frame, (x, 91), (43, 18), 0, 0, 360, (16, 24, 38), -1)
+        originals.append(frame)
+        packets.append(packet(i, frame, 60.0))
+
+    candidate = detect_takeoff_candidate(
+        packets,
+        freeze_timestamp_ns=packets[24].timestamp_ns,
+        roi=(.18, .30, .68, .46),
+        before_seconds=.4,
+        after_seconds=0,
+        target_width=220,
+    )
+
+    assert candidate is not None
+    assert 10 <= candidate.frame_index <= 15
+    # Frame 16 contains only the board: selecting it would reproduce the late,
+    # shoe-already-gone failure reported by operators.
+    assert int(originals[candidate.frame_index][70:112, 75:245].min()) < 30
 
 
 def test_long_takeoff_window_uses_coarse_then_exact_local_analysis(monkeypatch):

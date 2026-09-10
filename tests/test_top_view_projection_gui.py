@@ -1,7 +1,32 @@
 import tkinter as tk
+from tkinter import ttk
 
 from src.config import AppConfig, save_config
 from src.main_window import MainWindow
+from src.top_view_projection import TopViewProjectionWindow
+
+
+def test_failed_shoe_detection_uses_neutral_unavailable_split_result():
+    root = tk.Tk()
+    root.withdraw()
+    projection = TopViewProjectionWindow.__new__(TopViewProjectionWindow)
+    projection.language = "en"
+    projection._split_review_badge = tk.Label(root)
+    projection._split_review_detail = tk.Label(root)
+    projection._split_review_stage_var = tk.StringVar(root)
+    projection._split_review_progress = ttk.Progressbar(root)
+    projection._split_review_progress.pack()
+    rendered = []
+    projection._split_review_render = lambda: rendered.append(True)
+
+    projection._update_split_review_unavailable("No reliable shoe outline was found.")
+
+    assert projection._split_review_badge.cget("text") == "NOT AVAILABLE"
+    assert projection._split_review_badge.cget("background") == "#69737d"
+    assert projection._split_review_stage_var.get() == "Shoe detection failed."
+    assert projection._split_review_progress.winfo_manager() == ""
+    assert rendered == [True]
+    root.destroy()
 
 
 def test_top_down_projection_uses_current_frame_without_chooser(tmp_path):

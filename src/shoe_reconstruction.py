@@ -360,21 +360,34 @@ def _render_overhead(
                 position += 15.0
     sole_cm = _shoe_outline(params)
     sole_px = metric_to_canvas(sole_cm)
+    observed_px = None
+    if observed_footprint_normalized is not None and len(observed_footprint_normalized) >= 3:
+        observed_metric = np.asarray(observed_footprint_normalized, np.float32) * np.asarray([length_cm, width_cm], np.float32)
+        observed_px = metric_to_canvas(observed_metric)
+    # Preserve rectified camera pixels wherever the source image supports
+    # them. Only the model-only remainder receives a soft, low-opacity
+    # approximation, making measured and estimated regions unambiguous even
+    # when digital outlines are hidden.
+    model_mask = np.zeros(canvas.shape[:2], np.uint8)
+    observed_mask = np.zeros(canvas.shape[:2], np.uint8)
+    cv2.fillPoly(model_mask, [sole_px], 255)
+    if observed_px is not None:
+        cv2.fillPoly(observed_mask, [observed_px], 255)
+    estimated_only = cv2.bitwise_and(model_mask, cv2.bitwise_not(observed_mask))
+    if base_image is None and cv2.countNonZero(estimated_only):
+        if cv2.countNonZero(observed_mask):
+            visible_pixels = canvas[observed_mask > 0]
+            estimate_colour = np.median(visible_pixels, axis=0).astype(np.uint8)
+        else:
+            estimate_colour = np.asarray((125, 135, 145), np.uint8)
+        softened = cv2.GaussianBlur(canvas, (0, 0), 4.0)
+        colour_layer = np.empty_like(canvas)
+        colour_layer[:] = estimate_colour
+        approximation = cv2.addWeighted(softened, .55, colour_layer, .45, 0)
+        canvas[estimated_only > 0] = cv2.addWeighted(canvas, .38, approximation, .62, 0)[estimated_only > 0]
     if show_overlays:
-        overlay = canvas.copy()
-        cv2.fillPoly(overlay, [sole_px], (40, 190, 245))
-        cv2.addWeighted(overlay, .16, canvas, .84, 0, canvas)
         dashed_outline(sole_px, (35, 235, 255), 2)
-    upper = np.asarray(params.position_cm, dtype=np.float32) + (sole_cm - np.asarray(params.position_cm, dtype=np.float32)) * .76
-    upper_px = metric_to_canvas(upper)
-    if show_overlays:
-        hidden = canvas.copy()
-        cv2.fillPoly(hidden, [upper_px], (135, 145, 155))
-        cv2.addWeighted(hidden, .28, canvas, .72, 0, canvas)
-        dashed_outline(upper_px, (195, 202, 208), 2)
-        if observed_footprint_normalized is not None and len(observed_footprint_normalized) >= 3:
-            observed_metric = np.asarray(observed_footprint_normalized, np.float32) * np.asarray([length_cm, width_cm], np.float32)
-            observed_px = metric_to_canvas(observed_metric)
+        if observed_px is not None:
             cv2.polylines(canvas, [observed_px], True, (80, 220, 170), 3, cv2.LINE_AA)
     foul_metric = footprint_normalized[:0]
     if horizontal:
@@ -530,7 +543,10 @@ def reconstruct_shoe_overhead(
         return mask
     observed_mask = raster(observed_norm)
     estimated_mask = raster(normalized)
-    contact_mask = estimated_mask.copy() if verdict_status != "review" else np.zeros_like(estimated_mask)
+    # Keep contact evidence separate from the completed model. The selected
+    # visible outline is the only camera-supported contact approximation;
+    # reconstructed pixels must never become judging evidence.
+    contact_mask = observed_mask.copy() if verdict_status != "review" else np.zeros_like(observed_mask)
     profile = calibration.camera_profile or {}
     diagnostics = (
         f"accepted_observations={len(accepted)}",

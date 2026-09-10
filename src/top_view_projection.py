@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import ctypes
 import logging
 import math
 import os
@@ -64,6 +65,8 @@ class ProjectionCandidate:
 class FootEstimate:
     polygon_px: tuple[tuple[float, float], ...]
     confidence: float
+    search_roi_px: tuple[float, float, float, float] = ()
+    candidate_polygons_px: tuple[tuple[tuple[float, float], ...], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +77,42 @@ class ProjectionAnalysisResult:
     shoe_points_px: tuple[tuple[float, float], ...]
     shoe_confidence: float
     diagnostics: tuple[str, ...] = ()
+    shoe_search_roi_px: tuple[float, float, float, float] = ()
+    shoe_candidate_points_px: tuple[tuple[tuple[float, float], ...], ...] = ()
+
+
+def _client_animations_enabled() -> bool:
+    """Respect Windows' client-area animation preference and test overrides."""
+    override = os.environ.get("LONGJUMPREPLAY_REDUCED_MOTION", "").strip().lower()
+    if override in {"1", "true", "yes", "on"}:
+        return False
+    if os.name != "nt":
+        return True
+    try:
+        enabled = ctypes.c_int(1)
+        # SPI_GETCLIENTAREAANIMATION
+        if ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(enabled), 0):
+            return bool(enabled.value)
+    except (AttributeError, OSError):
+        pass
+    return True
+
+
+def _strong_ease_out(progress: float) -> float:
+    """Evaluate cubic-bezier(0.23, 1, 0.32, 1) at a time fraction."""
+    target = max(0.0, min(1.0, float(progress)))
+    low, high = 0.0, 1.0
+    parameter = target
+    for _ in range(10):
+        parameter = (low + high) * .5
+        inverse = 1.0 - parameter
+        x = 3.0 * inverse * inverse * parameter * .23 + 3.0 * inverse * parameter * parameter * .32 + parameter ** 3
+        if x < target:
+            low = parameter
+        else:
+            high = parameter
+    inverse = 1.0 - parameter
+    return 3.0 * inverse * inverse * parameter + 3.0 * inverse * parameter * parameter + parameter ** 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,7 +353,8 @@ def corrected_projection_calibration(calibration: ProjectionCalibration, frame_s
 
 
 def detect_board_corners(frame: np.ndarray, roi: Sequence[float] | None = None) -> tuple[tuple[float, float], ...] | None:
-    """Find the most board-like quadrilateral, including partially visible boards."""
+    """Find a light board using colour context, geometry and its dark strip."""
+    started = time.perf_counter()
     if frame is None or frame.size == 0:
         return None
     height, width = frame.shape[:2]
@@ -326,50 +366,126 @@ def detect_board_corners(frame: np.ndarray, roi: Sequence[float] | None = None) 
         x1, y1 = min(width, int((x + rw) * width)), min(height, int((y + rh) * height))
         if x1 > ox + 20 and y1 > oy + 20:
             crop = frame[oy:y1, ox:x1]
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 40, 130)
+    # Detection is bounded because startup calibration can receive a 4K frame.
+    analysis_scale = min(1.0, 1100.0 / max(crop.shape[:2]))
+    analysed = crop if analysis_scale >= 1.0 else cv2.resize(crop, None, fx=analysis_scale, fy=analysis_scale, interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(analysed, cv2.COLOR_BGR2GRAY)
+    hsv = cv2.cvtColor(analysed, cv2.COLOR_BGR2HSV)
+    lab = cv2.cvtColor(analysed, cv2.COLOR_BGR2LAB)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    _threshold, bright = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
-    bright_contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    edge_contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    contours = list(bright_contours) + list(edge_contours)
-    best = None
+    otsu_value, otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    light_floor = max(118.0, min(225.0, float(np.percentile(lab[:, :, 0], 68))))
+    neutral_light = ((lab[:, :, 0] >= light_floor) & ((hsv[:, :, 1] <= 105) | (gray >= max(175.0, otsu_value)))).astype(np.uint8) * 255
+    bright = cv2.bitwise_or(otsu, neutral_light)
+    short_side = min(analysed.shape[:2])
+    close_radius = max(2, min(8, int(round(short_side * .012))))
+    close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_radius * 2 + 1, close_radius * 2 + 1))
+    bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, close_kernel, iterations=2)
+    bright = cv2.morphologyEx(bright, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    edges = cv2.Canny(blurred, 38, 125)
+    bright_contours, _ = cv2.findContours(bright, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    hue = hsv[:, :, 0]
+    saturation = hsv[:, :, 1]
+    red_track = ((((hue <= 14) | (hue >= 165)) & (saturation >= 55) & (hsv[:, :, 2] >= 35)) | ((lab[:, :, 1] >= 143) & (lab[:, :, 1] > lab[:, :, 2] + 4))).astype(np.uint8)
+    best: np.ndarray | None = None
     best_score = 0.0
-    image_area = float(crop.shape[0] * crop.shape[1])
-    for contour in contours:
+    analysed_area = float(analysed.shape[0] * analysed.shape[1])
+    for contour in bright_contours:
         area = abs(float(cv2.contourArea(contour)))
-        if area < image_area * 0.04:
+        if area < analysed_area * .004 or area > analysed_area * .78:
             continue
         perimeter = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.035 * perimeter, True) if perimeter > 0 else contour
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            rectangularity = area / max(1.0, float(cv2.contourArea(cv2.boxPoints(cv2.minAreaRect(approx)).astype(np.float32))))
-            score = area / image_area * (.65 + .35 * min(1.0, rectangularity))
-            if score > best_score:
-                best_score = score
-                best = approx.reshape(4, 2).astype(np.float32)
+        if perimeter <= 0:
+            continue
+        hull = cv2.convexHull(contour)
+        approx = cv2.approxPolyDP(hull, .025 * cv2.arcLength(hull, True), True)
+        rect = cv2.minAreaRect(contour)
+        rect_width, rect_height = rect[1]
+        long_side = max(rect_width, rect_height)
+        narrow_side = max(1.0, min(rect_width, rect_height))
+        elongation = long_side / narrow_side
+        if long_side < short_side * .16 or narrow_side < 4 or elongation < 1.35 or elongation > 28.0:
+            continue
+        candidate = approx.reshape((-1, 2)).astype(np.float32) if len(approx) == 4 and cv2.isContourConvex(approx) else cv2.boxPoints(rect).astype(np.float32)
+        try:
+            ordered = order_board_corners(candidate)
+        except ValueError:
+            continue
+        candidate_mask = np.zeros(gray.shape, np.uint8)
+        cv2.fillConvexPoly(candidate_mask, np.rint(ordered).astype(np.int32), 255)
+        candidate_pixels = candidate_mask > 0
+        pixel_count = int(np.count_nonzero(candidate_pixels))
+        if pixel_count < 20:
+            continue
+        box_area = max(1.0, float(rect_width * rect_height))
+        rectangularity = min(1.0, area / box_area)
+        light_fraction = float(np.count_nonzero((bright > 0) & candidate_pixels)) / pixel_count
+        # A real embedded board is normally surrounded by tartan. The score is
+        # useful when available but deliberately optional for indoor fixtures.
+        ring_radius = max(4, int(round(narrow_side * .55)))
+        ring_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ring_radius * 2 + 1, ring_radius * 2 + 1))
+        ring = (cv2.dilate(candidate_mask, ring_kernel) > 0) & ~candidate_pixels
+        red_context = float(np.count_nonzero((red_track > 0) & ring)) / max(1, int(np.count_nonzero(ring)))
+        inside_mean = float(np.mean(gray[candidate_pixels]))
+        ring_mean = float(np.mean(gray[ring])) if np.any(ring) else inside_mean
+        contrast = max(0.0, min(1.0, (inside_mean - ring_mean) / 85.0))
+
+        canonical = np.asarray([[0, 0], [479, 0], [479, 139], [0, 139]], np.float32)
+        rectified = cv2.warpPerspective(gray, cv2.getPerspectiveTransform(ordered.astype(np.float32), canonical), (480, 140))
+        interior = rectified[:, 28:-28].astype(np.float32)
+        row_darkness = np.median(interior) - np.mean(interior, axis=1)
+        row_gradient = np.mean(np.abs(cv2.Sobel(interior, cv2.CV_32F, 0, 1, ksize=3)), axis=1)
+        margin = 12
+        line_strength = 0.0
+        if len(row_darkness) > margin * 2:
+            line_strength = min(1.0, max(0.0, (float(np.max(row_darkness[margin:-margin])) - 7.0) / 38.0))
+            line_strength = max(line_strength, min(1.0, max(0.0, (float(np.max(row_gradient[margin:-margin])) - 5.0) / 35.0)))
+
+        area_score = min(1.0, area / (analysed_area * .055))
+        elongation_score = min(1.0, max(0.0, (elongation - 1.25) / 2.3))
+        score = (
+            .22 * rectangularity
+            + .19 * light_fraction
+            + .15 * contrast
+            + .13 * area_score
+            + .12 * elongation_score
+            + .11 * red_context
+            + .08 * line_strength
+        )
+        if score > best_score:
+            best_score = score
+            best = ordered / analysis_scale
     if best is None:
-        # Partial visibility: a rotated bounding box is a conservative editable
-        # estimate, allowing the operator to correct the missing corners.
-        points = cv2.findNonZero(edges)
+        # Partial visibility remains an editable fallback. It uses line support
+        # only after colour/geometry candidates have failed.
+        light_support = cv2.dilate(bright, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+        points = cv2.findNonZero(cv2.bitwise_and(edges, light_support))
         if points is None or len(points) < 20:
             return None
-        best = cv2.boxPoints(cv2.minAreaRect(points)).astype(np.float32)
+        fallback_rect = cv2.minAreaRect(points)
+        fallback_long = max(fallback_rect[1])
+        fallback_short = max(1.0, min(fallback_rect[1]))
+        if fallback_long / fallback_short < 1.3 or fallback_short < 4.0:
+            return None
+        best = cv2.boxPoints(fallback_rect).astype(np.float32) / analysis_scale
     best[:, 0] += ox
     best[:, 1] += oy
     try:
         ordered = order_board_corners(best)
     except ValueError:
         return None
-    return tuple((float(x), float(y)) for x, y in ordered)
+    result = tuple((float(x), float(y)) for x, y in ordered)
+    _LOGGER.info("board_detection duration_ms=%.2f score=%.3f red_context_used=%s", (time.perf_counter() - started) * 1000.0, best_score, bool(np.any(red_track)))
+    return result
 
 
 def detect_foul_line(
     frame: np.ndarray,
     board_points_px: Sequence[Sequence[float]],
 ) -> tuple[tuple[float, float], tuple[float, float]] | None:
-    """Locate the strongest internal line parallel to the board's long edges."""
+    """Locate a dark, well-supported internal strip parallel to the long edges."""
+    started = time.perf_counter()
     board = order_board_corners(board_points_px)
     horizontal_length = (np.linalg.norm(board[1] - board[0]) + np.linalg.norm(board[2] - board[3])) / 2.0
     vertical_length = (np.linalg.norm(board[2] - board[1]) + np.linalg.norm(board[3] - board[0])) / 2.0
@@ -381,18 +497,30 @@ def detect_foul_line(
     transform = cv2.getPerspectiveTransform(board.astype(np.float32), destination)
     rectified = cv2.warpPerspective(frame, transform, (output_width, output_height))
     gray = cv2.GaussianBlur(cv2.cvtColor(rectified, cv2.COLOR_BGR2GRAY), (5, 5), 0)
-    gradient = np.abs(cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3))
-    profile = np.mean(gradient[:, int(output_width * .08):int(output_width * .92)], axis=1)
+    interior = gray[:, int(output_width * .06):int(output_width * .94)]
+    gradient = np.abs(cv2.Sobel(interior, cv2.CV_32F, 0, 1, ksize=3))
+    gradient_profile = np.mean(gradient, axis=1)
+    baseline = float(np.median(interior))
+    darkness_profile = np.maximum(0.0, baseline - np.mean(interior.astype(np.float32), axis=1))
+    dark_threshold = max(18.0, baseline * .22)
+    dark_coverage = np.mean(interior < baseline - dark_threshold, axis=1)
+    profile = gradient_profile / max(1.0, float(np.percentile(gradient_profile, 90)))
+    profile += darkness_profile / max(1.0, float(np.percentile(darkness_profile, 90)))
+    profile += np.clip(dark_coverage / .42, 0.0, 1.0)
     margin = max(8, int(output_height * .10))
     if profile.size <= margin * 2:
         return None
     row = margin + int(np.argmax(profile[margin:-margin]))
-    if float(profile[row]) < max(4.0, float(np.median(profile)) * 1.35):
+    support = float(dark_coverage[row])
+    gradient_support = float(gradient_profile[row])
+    if float(profile[row]) < max(1.15, float(np.median(profile)) * 1.35) or (support < .16 and gradient_support < 8.0):
         return None
     inverse = np.linalg.inv(transform)
     line = np.asarray([[[0.0, float(row)]], [[float(output_width - 1), float(row)]]], np.float32)
     source = cv2.perspectiveTransform(line, inverse).reshape((-1, 2))
-    return (float(source[0, 0]), float(source[0, 1])), (float(source[1, 0]), float(source[1, 1]))
+    result = (float(source[0, 0]), float(source[0, 1])), (float(source[1, 0]), float(source[1, 1]))
+    _LOGGER.info("foul_line_detection duration_ms=%.2f support=%.3f", (time.perf_counter() - started) * 1000.0, max(support, min(1.0, gradient_support / 30.0)))
+    return result
 
 
 def smooth_closed_outline(points: Sequence[Sequence[float]], samples: int = 20) -> tuple[tuple[float, float], ...]:
@@ -745,7 +873,12 @@ def estimate_foot_polygon(
             return None
         inverse = 1.0 / analysis_scale
         polygon = tuple((float(x * inverse), float(y * inverse)) for x, y in estimate.polygon_px)
-        return FootEstimate(polygon, estimate.confidence)
+        debug_roi = tuple(float(value * inverse) for value in estimate.search_roi_px)
+        debug_candidates = tuple(
+            tuple((float(x * inverse), float(y * inverse)) for x, y in candidate)
+            for candidate in estimate.candidate_polygons_px
+        )
+        return FootEstimate(polygon, estimate.confidence, debug_roi, debug_candidates)
     # The visible heel and upper can extend well beyond the board in a side
     # view. The old narrow crop physically discarded them and returned only
     # the toe, so retain a generous but still board-anchored search region.
@@ -783,6 +916,32 @@ def estimate_foot_polygon(
     mask = cv2.bitwise_or(mask, appearance_mask)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, join_kernel, iterations=2)
     mask[search_mask == 0] = 0
+    # Remove the athlete's exposed leg before components are joined. Requiring
+    # both skin-like chroma and saturation avoids classifying neutral floors,
+    # white shoes or the board as skin on synthetic/indoor footage.
+    ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    skin = (
+        (ycrcb[:, :, 1] >= 132)
+        & (ycrcb[:, :, 1] <= 183)
+        & (ycrcb[:, :, 2] >= 72)
+        & (ycrcb[:, :, 2] <= 138)
+        & (hsv[:, :, 1] >= 24)
+        & (hsv[:, :, 2] >= 55)
+        & ((hsv[:, :, 0] <= 28) | (hsv[:, :, 0] >= 172))
+    ).astype(np.uint8) * 255
+    skin = cv2.morphologyEx(skin, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    skin_reject = skin.copy()
+    if board_corners is not None and len(board_corners) == 4:
+        board_local = np.asarray(board_corners, np.float32) * np.asarray([frame.shape[1], frame.shape[0]], np.float32)
+        board_local -= np.asarray([x0, y0], np.float32)
+        board_mask = np.zeros(mask.shape, np.uint8)
+        cv2.fillConvexPoly(board_mask, np.rint(board_local).astype(np.int32), 255)
+        board_lengths = [float(np.linalg.norm(board_local[(index + 1) % 4] - board_local[index])) for index in range(4)]
+        keep_radius = max(7, int(round(min(board_lengths) * .34)))
+        near_board = cv2.dilate(board_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (keep_radius * 2 + 1, keep_radius * 2 + 1)))
+        skin_reject[near_board > 0] = 0
+    mask[skin_reject > 0] = 0
     if not np.any(mask):
         return None
 
@@ -800,8 +959,10 @@ def estimate_foot_polygon(
         gc_mask[seed > 0] = cv2.GC_PR_FGD
         sure = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=1)
         gc_mask[sure > 0] = cv2.GC_FGD
-        # Very low-saturation shadows are never allowed to become shoe pixels.
+        # Shadows and exposed skin are never allowed to become certain shoe
+        # pixels; GrabCut may retain only boundary pixels when evidence agrees.
         gc_mask[shadow > 0] = cv2.GC_PR_BGD
+        gc_mask[skin_reject > 0] = cv2.GC_BGD
         bgd_model = np.zeros((1, 65), np.float64)
         fgd_model = np.zeros((1, 65), np.float64)
         cv2.grabCut(crop, gc_mask, None, bgd_model, fgd_model, 2, cv2.GC_INIT_WITH_MASK)
@@ -819,7 +980,18 @@ def estimate_foot_polygon(
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     crop_area = float(mask.shape[0] * mask.shape[1])
     edges = cv2.Canny(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), 40, 125) > 0
+    board_source = None
+    board_long = float(max(crop.shape[:2]))
+    board_short = float(min(crop.shape[:2])) * .25
+    if board_corners is not None and len(board_corners) == 4:
+        board_source = np.asarray(board_corners, np.float32) * np.asarray([frame.shape[1], frame.shape[0]], np.float32)
+        board_edges = [float(np.linalg.norm(board_source[(index + 1) % 4] - board_source[index])) for index in range(4)]
+        board_long, board_short = max(board_edges), max(4.0, min(board_edges))
+    foul_source = None
+    if foul_line is not None and len(foul_line) == 2:
+        foul_source = np.asarray(foul_line, dtype=np.float32) * np.asarray([frame.shape[1], frame.shape[0]], dtype=np.float32)
     scored: list[tuple[float, np.ndarray]] = []
+    candidate_debug: list[tuple[tuple[float, float], ...]] = []
     for contour in contours:
         area = float(cv2.contourArea(contour))
         # Reject isolated lace highlights, tape corners, and codec specks. At
@@ -831,6 +1003,12 @@ def estimate_foot_polygon(
         aspect = width / max(1.0, float(height))
         if aspect < .18 or aspect > 8.0:
             continue
+        rect = cv2.minAreaRect(contour)
+        rect_long = max(float(rect[1][0]), float(rect[1][1]))
+        rect_short = max(1.0, min(float(rect[1][0]), float(rect[1][1])))
+        axis_aspect = rect_long / rect_short
+        if axis_aspect > 9.0 or rect_short < 3.0:
+            continue
         contour_mask = np.zeros(mask.shape, dtype=np.uint8)
         cv2.drawContours(contour_mask, [contour], -1, 255, thickness=-1)
         pixels = contour_mask > 0
@@ -838,25 +1016,46 @@ def estimate_foot_polygon(
         non_shadow = 1.0 - float(np.count_nonzero(shadow & pixels)) / max(1.0, float(np.count_nonzero(pixels)))
         if non_shadow < .35 and edge_density < .12:
             continue
+        global_contour = contour.reshape((-1, 2)).astype(np.float32) + np.asarray([x0, y0], np.float32)
+        debug_outline = cv2.approxPolyDP(global_contour.reshape((-1, 1, 2)), max(1.0, .01 * cv2.arcLength(global_contour.reshape((-1, 1, 2)), True)), True).reshape((-1, 2))
+        candidate_debug.append(tuple((float(x), float(y)) for x, y in debug_outline))
         hull_area = max(area, float(cv2.contourArea(cv2.convexHull(contour))))
         solidity = area / max(1.0, hull_area)
         compactness = area / max(1.0, float(width * height))
-        shape_balance = min(1.0, min(width, height) / max(1.0, max(width, height)) / .22)
-        size_ratio = area / crop_area
-        size_score = min(1.0, size_ratio / .012) if size_ratio < .012 else max(0.0, 1.0 - (size_ratio - .012) / .22)
+        shape_score = math.exp(-abs(math.log(max(1.0, axis_aspect) / 2.4)) * .72)
+        relative_length = rect_long / max(8.0, board_long)
+        completeness = min(1.0, relative_length / .16)
+        if relative_length > .72:
+            completeness *= max(.0, 1.0 - (relative_length - .72) / .40)
         line_proximity = 1.0
-        if foul_line is not None and len(foul_line) == 2:
-            source_line = np.asarray(foul_line, dtype=np.float32) * np.asarray([frame.shape[1], frame.shape[0]], dtype=np.float32)
-            centre = np.asarray([left + width / 2.0 + x0, top + height / 2.0 + y0], dtype=np.float32)
-            line_proximity = math.exp(-_line_distance(centre, source_line) / max(8.0, min(crop.shape[:2]) * .22))
+        if foul_source is not None:
+            closest_line = min(_line_distance(point, foul_source) for point in global_contour[::max(1, len(global_contour) // 80)])
+            line_proximity = math.exp(-closest_line / max(8.0, board_short * .65))
+        board_proximity = 1.0
+        if board_source is not None:
+            board_contour = board_source.reshape((-1, 1, 2))
+            closest_board = min(
+                max(0.0, -float(cv2.pointPolygonTest(board_contour, (float(point[0]), float(point[1])), True)))
+                for point in global_contour[::max(1, len(global_contour) // 80)]
+            )
+            board_proximity = math.exp(-closest_board / max(8.0, board_short * .85))
+        pixels_count = max(1, int(np.count_nonzero(pixels)))
+        candidate_skin = float(np.count_nonzero((skin_reject > 0) & pixels)) / pixels_count
+        candidate_red = float(np.count_nonzero((((hsv[:, :, 0] <= 14) | (hsv[:, :, 0] >= 165)) & (hsv[:, :, 1] >= 60)) & pixels)) / pixels_count
+        candidate_light = float(np.count_nonzero(((hsv[:, :, 1] < 45) & (hsv[:, :, 2] > 165)) & pixels)) / pixels_count
+        board_marking_penalty = max(0.0, (candidate_light - .62) / .38) if axis_aspect > 3.8 and solidity > .82 else 0.0
         score = (
-            .22 * min(1.0, edge_density / .11)
-            + .18 * non_shadow
-            + .12 * solidity
-            + .10 * compactness
-            + .08 * size_score
-            + .18 * line_proximity
-            + .12 * shape_balance
+            .16 * min(1.0, edge_density / .11)
+            + .11 * non_shadow
+            + .09 * solidity
+            + .09 * compactness
+            + .18 * completeness
+            + .15 * line_proximity
+            + .14 * board_proximity
+            + .08 * shape_score
+            - .18 * candidate_skin
+            - .14 * candidate_red
+            - .18 * board_marking_penalty
         )
         # Calibration is used for board proximity and orientation, never as a
         # hard shoe-size gate. A close/far camera or non-standard board must not
@@ -866,14 +1065,24 @@ def estimate_foot_polygon(
         return None
     confidence, contour = max(scored, key=lambda item: item[0])
     perimeter = cv2.arcLength(contour, True)
-    polygon = cv2.approxPolyDP(contour, max(1.2, 0.012 * perimeter), True).reshape((-1, 2))
+    # Preserve the toe curvature: coarse simplification is particularly
+    # damaging at the exact point used for judging.
+    polygon = cv2.approxPolyDP(contour, max(.8, 0.006 * perimeter), True).reshape((-1, 2))
     if len(polygon) < 3:
         return None
     polygon = polygon.astype(np.float32)
     polygon[:, 0] += x0
     polygon[:, 1] += y0
-    result = FootEstimate(tuple((float(x), float(y)) for x, y in polygon), max(0.0, min(1.0, confidence)))
-    _LOGGER.info("shoe_detection duration_ms=%.2f contour_points=%d confidence=%.3f", (time.perf_counter() - started) * 1000.0, len(polygon), result.confidence)
+    result = FootEstimate(
+        tuple((float(x), float(y)) for x, y in polygon),
+        max(0.0, min(1.0, confidence)),
+        (float(x0), float(y0), float(x1), float(y1)),
+        tuple(candidate_debug),
+    )
+    _LOGGER.info(
+        "shoe_detection duration_ms=%.2f candidates=%d contour_points=%d confidence=%.3f",
+        (time.perf_counter() - started) * 1000.0, len(candidate_debug), len(polygon), result.confidence,
+    )
     return result
 
 
@@ -2063,6 +2272,8 @@ class TopViewProjectionWindow:
         self._source_bounds = (0.0, 0.0, 1.0, 1.0)
         self._source_frame_size = (0, 0)
         self._selection_bounds = (0.0, 0.0, 1.0, 1.0)
+        self._shoe_search_roi: tuple[float, float, float, float] = ()
+        self._shoe_candidate_points: list[tuple[tuple[float, float], ...]] = []
         self._selection_photo = self._source_photo = self._board_photo = self._overhead_photo = self._zoom_photo = None
         self._fullscreen_window: tk.Toplevel | None = None
         self._fullscreen_canvas: tk.Canvas | None = None
@@ -2079,6 +2290,8 @@ class TopViewProjectionWindow:
         self._split_review_stage_var: tk.StringVar | None = None
         self._split_review_badge: tk.Label | None = None
         self._split_review_detail: tk.Label | None = None
+        self._split_review_reveal_image: np.ndarray | None = None
+        self._split_review_animation_job: str | None = None
         self._brush_trace: list[tuple[float, float]] = []
         self._compute_started_at = 0.0
         self._last_compute_duration_ms = 0.0
@@ -2210,6 +2423,14 @@ class TopViewProjectionWindow:
             style="Projection.TCheckbutton",
         )
         self.show_outlines_checkbutton.pack(side="left", padx=(0, 8))
+        self.debug_overlay_checkbutton = ttk.Checkbutton(
+            toolbar,
+            text=self._text("Detection debug", "Diagnostika detekce"),
+            variable=self.debug_overlay_var,
+            command=self._toggle_debug_overlay,
+            style="Projection.TCheckbutton",
+        )
+        self.debug_overlay_checkbutton.pack(side="left", padx=(0, 8))
         self.brush_snap_checkbutton = ttk.Checkbutton(
             toolbar,
             text=self._text("Brush edge snap", "Štětec s přichycením"),
@@ -2656,9 +2877,23 @@ class TopViewProjectionWindow:
                     # The outline remains visibly marked as uncertain and can be
                     # repaired with the precision editor before either compute.
                     diagnostics.append(f"outline_size_uncertain={dimensions[0]:.1f}x{dimensions[1]:.1f}cm")
-                    estimate = FootEstimate(estimate.polygon_px, min(.35, estimate.confidence))
+                    estimate = FootEstimate(
+                        estimate.polygon_px,
+                        min(.35, estimate.confidence),
+                        estimate.search_roi_px,
+                        estimate.candidate_polygons_px,
+                    )
                 self._queue.put((generation, "analysis_progress", (88, "tracing_shoe")))
-                result = ProjectionAnalysisResult(calibration, tuple(board), tuple(foul), shoe, estimate.confidence, tuple(diagnostics))
+                result = ProjectionAnalysisResult(
+                    calibration,
+                    tuple(board),
+                    tuple(foul),
+                    shoe,
+                    estimate.confidence,
+                    tuple(diagnostics),
+                    estimate.search_roi_px,
+                    estimate.candidate_polygons_px,
+                )
                 self._queue.put((generation, "analysis_result", result))
             except ReconstructionCancelled:
                 self._queue.put((generation, "analysis_cancelled", None))
@@ -2745,6 +2980,8 @@ class TopViewProjectionWindow:
             tuple((float(x), float(y)) for x, y in shoe),
             cached.confidence if cached is not None else 0.0,
             ("manual_setup", f"manual_focus={layer}"),
+            cached.search_roi_px if cached is not None else (),
+            cached.candidate_polygons_px if cached is not None else (),
         )
         self.manual_setup_button.pack_forget()
         self._show_workspace(result)
@@ -2777,6 +3014,8 @@ class TopViewProjectionWindow:
         else:
             self._foul_area_points = list(foul_area_from_line_px(self._foul_points, frame_size)) if len(self._foul_points) == 2 else []
         self._foot_confidence = result.shoe_confidence
+        self._shoe_search_roi = result.shoe_search_roi_px
+        self._shoe_candidate_points = list(result.shoe_candidate_points_px)
         if "manual_setup" not in result.diagnostics:
             self.on_calibration_saved(result.calibration)
         self.selection_page.grid_remove(); self.workspace_page.grid(row=1, column=0, sticky="nsew")
@@ -2827,6 +3066,7 @@ class TopViewProjectionWindow:
                 button.pack_forget()
             self.mouse_zoom_checkbutton.pack_forget()
             self.show_outlines_checkbutton.pack_forget()
+            self.debug_overlay_checkbutton.pack_forget()
             self.close_button.pack_forget()
             self.brush_snap_checkbutton.pack_forget()
             self.edit_done_button.pack(side="left", padx=(0, 5))
@@ -2839,6 +3079,7 @@ class TopViewProjectionWindow:
             self.edit_done_button.pack_forget()
             self.mouse_zoom_checkbutton.pack_forget()
             self.show_outlines_checkbutton.pack_forget()
+            self.debug_overlay_checkbutton.pack_forget()
             self.brush_snap_checkbutton.pack_forget()
             for button in self._toolbar_buttons:
                 button.pack_forget()
@@ -2855,6 +3096,7 @@ class TopViewProjectionWindow:
                 self._toolbar_category_labels[3].pack(side="left", padx=(4, 4))
             self.mouse_zoom_checkbutton.pack(side="left", padx=(2, 8))
             self.show_outlines_checkbutton.pack(side="left", padx=(0, 8))
+            self.debug_overlay_checkbutton.pack(side="left", padx=(0, 8))
             self.close_button.pack(side="right")
 
     def _set_precision_mode(self, active: bool) -> None:
@@ -2898,7 +3140,7 @@ class TopViewProjectionWindow:
         self._source_photo = self._photo(frame, (rw, rh)); self.source_canvas.create_image(left, top, image=self._source_photo, anchor="nw")
         self._source_bounds = (left, top, left + rw, top + rh); self._source_frame_size = (frame.shape[1], frame.shape[0])
         for layer, points, color in (("board", self._board_points, "#f5bd4f"), ("foul", self._foul_area_points or self._foul_points, "#ff6675"), ("shoe", self._foot_points, "#70d6a5")):
-            if not self.show_outlines_var.get() and layer != self._edit_layer:
+            if not self.show_outlines_var.get() and not self.debug_overlay_var.get() and layer != self._edit_layer:
                 continue
             coords = [value for point in points for value in self._frame_to_canvas(point)]
             if layer in {"board", "foul"} and len(points) >= 4: self.source_canvas.create_polygon(*coords, outline=color, fill="", width=3)
@@ -2908,6 +3150,17 @@ class TopViewProjectionWindow:
                 for index, point in enumerate(points):
                     x, y = self._frame_to_canvas(point); self.source_canvas.create_oval(x-5, y-5, x+5, y+5, fill=color, outline="#111722")
                     self.source_canvas.create_text(x+8, y-8, text=str(index+1), fill=color, anchor="sw")
+        if self.debug_overlay_var.get():
+            if len(self._shoe_search_roi) == 4:
+                x0, y0, x1, y1 = self._shoe_search_roi
+                left_top = self._frame_to_canvas((x0, y0)); right_bottom = self._frame_to_canvas((x1, y1))
+                self.source_canvas.create_rectangle(*left_top, *right_bottom, outline="#6db4ff", width=2, dash=(7, 4), tags="debug")
+                self.source_canvas.create_text(left_top[0] + 5, left_top[1] + 5, text="shoe search ROI", fill="#6db4ff", anchor="nw", tags="debug")
+            for candidate_points in self._shoe_candidate_points:
+                if len(candidate_points) < 3:
+                    continue
+                candidate_coords = [value for point in candidate_points for value in self._frame_to_canvas(point)]
+                self.source_canvas.create_line(*candidate_coords, *self._frame_to_canvas(candidate_points[0]), fill="#ef9b55", width=2, dash=(4, 3), tags="debug")
         if self.debug_overlay_var.get() and len(self._foot_points) >= 3:
             values = np.asarray(self._foot_points, dtype=np.float32)
             centre = values.mean(axis=0)
@@ -2916,7 +3169,14 @@ class TopViewProjectionWindow:
             span = max(20.0, float(np.ptp(values, axis=0).max()))
             start, end = centre - axis * span * .65, centre + axis * span * .65
             self.source_canvas.create_line(*self._frame_to_canvas(start), *self._frame_to_canvas(end), fill="#f2cf62", width=2, dash=(5, 3), tags="debug")
-            self.source_canvas.create_text(*self._frame_to_canvas(start), text="heel / toe axis", fill="#f2cf62", anchor="se", tags="debug")
+            toe = end
+            heel = start
+            if len(self._foul_points) == 2 and _line_distance(start, np.asarray(self._foul_points, np.float32)) < _line_distance(end, np.asarray(self._foul_points, np.float32)):
+                toe, heel = start, end
+            for point, label in ((heel, "heel"), (toe, "toe")):
+                px, py = self._frame_to_canvas(point)
+                self.source_canvas.create_oval(px - 4, py - 4, px + 4, py + 4, fill="#f2cf62", outline="#111722", tags="debug")
+                self.source_canvas.create_text(px + 7, py - 5, text=label, fill="#f2cf62", anchor="sw", tags="debug")
 
     def _source_press(self, event) -> str:
         if self._edit_layer is None: return "break"
@@ -3096,6 +3356,18 @@ class TopViewProjectionWindow:
                     if self._analysis_dialog: self._analysis_dialog.complete(self._text("Analysis complete.", "Analýza je dokončena.")); self._analysis_dialog.close(); self._analysis_dialog = None
                     self._cancel = None; self._show_workspace(payload)
                 elif kind in {"analysis_cancelled", "analysis_error"}:
+                    if kind == "analysis_error" and isinstance(payload, dict) and str(payload.get("layer") or "") == "shoe":
+                        message = str(payload.get("message") or "Shoe detection failed.")
+                        if self._analysis_dialog:
+                            self._analysis_dialog.close()
+                            self._analysis_dialog = None
+                        self._cancel = None
+                        self._analysis_failure = None
+                        self._state = "projection_unavailable"
+                        self.manual_setup_button.pack_forget()
+                        self._update_split_review_unavailable(message)
+                        self.status_var.set(message)
+                        continue
                     self._close_split_review()
                     if self._analysis_dialog: self._analysis_dialog.close(); self._analysis_dialog = None
                     self._cancel = None; self._state = "selecting_frame"
@@ -3327,7 +3599,12 @@ class TopViewProjectionWindow:
             result = None
             if current is not None:
                 result = current.overhead_image if self.show_outlines_var.get() or current.clean_overhead_image is None else current.clean_overhead_image
-            self._fit_review_image(left_canvas, original, holders[0])
+            if self._split_review_reveal_image is not None:
+                result = self._split_review_reveal_image
+            # Animation frames only replace the small computed raster. Avoid
+            # repeatedly scaling the large authoritative camera image.
+            if _event is not None or not holders[0]:
+                self._fit_review_image(left_canvas, original, holders[0])
             self._fit_review_image(right_canvas, result, holders[1], self._text("Waiting for computed top-down projection...", "Čekám na vypočtenou projekci shora..."))
             self._split_review_photos = holders[0] + holders[1]
         self._split_review_render = render
@@ -3349,6 +3626,15 @@ class TopViewProjectionWindow:
         status = result.verdict_status
         badge = projection_verdict_text(status)
         colour = "#ff6474" if status == "over" else "#70d6a5" if status == "clear" else "#f3c969"
+        final_image = result.overhead_image if self.show_outlines_var.get() or result.clean_overhead_image is None else result.clean_overhead_image
+        if _client_animations_enabled() and self._split_review_window is not None:
+            if self._split_review_stage_var is not None:
+                self._split_review_stage_var.set(self._text("Projection ready.", "Projekce je připravena."))
+            if self._split_review_progress is not None:
+                self._split_review_progress.configure(value=100)
+                self._split_review_progress.pack_forget()
+            self._start_split_review_reveal(final_image, badge, colour, result.fit_confidence)
+            return
         if self._split_review_badge is not None:
             self._split_review_badge.configure(text=badge, bg=colour)
         if self._split_review_detail is not None:
@@ -3361,6 +3647,78 @@ class TopViewProjectionWindow:
         if self._split_review_render is not None:
             self._split_review_render()
 
+    @staticmethod
+    def _blend_hex(first: str, second: str, amount: float) -> str:
+        progress = max(0.0, min(1.0, float(amount)))
+        start = tuple(int(first[index:index + 2], 16) for index in (1, 3, 5))
+        end = tuple(int(second[index:index + 2], 16) for index in (1, 3, 5))
+        values = tuple(round(a + (b - a) * progress) for a, b in zip(start, end))
+        return "#%02x%02x%02x" % values
+
+    def _start_split_review_reveal(self, final_image: np.ndarray, badge: str, colour: str, confidence: float) -> None:
+        """Fade completed pixels, then the existing result text, without blocking Tk."""
+        if self._split_review_animation_job is not None:
+            try:
+                self.window.after_cancel(self._split_review_animation_job)
+            except tk.TclError:
+                pass
+            self._split_review_animation_job = None
+        final = np.ascontiguousarray(final_image)
+        base = np.empty_like(final)
+        base[:] = (12, 17, 24)
+        image_started = time.perf_counter()
+
+        def image_step() -> None:
+            if self._closed or self._split_review_window is None:
+                self._split_review_animation_job = None
+                return
+            progress = min(1.0, (time.perf_counter() - image_started) * 1000.0 / 220.0)
+            eased = _strong_ease_out(progress)
+            self._split_review_reveal_image = cv2.addWeighted(final, eased, base, 1.0 - eased, 0)
+            if self._split_review_render is not None:
+                self._split_review_render()
+            if progress < 1.0:
+                self._split_review_animation_job = self.window.after(16, image_step)
+                return
+            self._split_review_reveal_image = None
+            if self._split_review_badge is not None:
+                self._split_review_badge.configure(text=badge, bg="#111a24", fg="#111a24")
+            if self._split_review_detail is not None:
+                self._split_review_detail.configure(
+                    text=self._text(f"Confidence {confidence:.0%}", f"Spolehlivost {confidence:.0%}"),
+                    fg="#111a24",
+                )
+
+            def begin_text() -> None:
+                text_started = time.perf_counter()
+
+                def text_step() -> None:
+                    if self._closed or self._split_review_window is None:
+                        self._split_review_animation_job = None
+                        return
+                    progress = min(1.0, (time.perf_counter() - text_started) * 1000.0 / 160.0)
+                    eased = _strong_ease_out(progress)
+                    if self._split_review_badge is not None:
+                        self._split_review_badge.configure(
+                            bg=self._blend_hex("#111a24", colour, eased),
+                            fg=self._blend_hex("#111a24", "#101820", eased),
+                        )
+                    if self._split_review_detail is not None:
+                        self._split_review_detail.configure(fg=self._blend_hex("#111a24", "#b8c5d2", eased))
+                    if progress < 1.0:
+                        self._split_review_animation_job = self.window.after(16, text_step)
+                    else:
+                        self._split_review_animation_job = None
+
+                if self._closed or self._split_review_window is None:
+                    self._split_review_animation_job = None
+                    return
+                text_step()
+
+            self._split_review_animation_job = self.window.after(45, begin_text)
+
+        image_step()
+
     def _update_split_review_error(self, message: str) -> None:
         if self._split_review_badge is not None:
             self._split_review_badge.configure(text=self._text("UNCERTAIN", "NEJISTÉ"), bg="#f3c969")
@@ -3368,6 +3726,23 @@ class TopViewProjectionWindow:
             self._split_review_detail.configure(text=message)
         if self._split_review_stage_var is not None:
             self._split_review_stage_var.set(self._text("Projection unavailable.", "Projekce není k dispozici."))
+        if self._split_review_progress is not None:
+            self._split_review_progress.pack_forget()
+        if self._split_review_render is not None:
+            self._split_review_render()
+
+    def _update_split_review_unavailable(self, message: str) -> None:
+        """Keep the source comparison visible when no trustworthy shoe exists."""
+        if self._split_review_badge is not None:
+            self._split_review_badge.configure(
+                text=self._text("NOT AVAILABLE", "NENÍ K DISPOZICI"),
+                bg="#69737d",
+                fg="#f2f4f6",
+            )
+        if self._split_review_detail is not None:
+            self._split_review_detail.configure(text=message, fg="#c5ccd3")
+        if self._split_review_stage_var is not None:
+            self._split_review_stage_var.set(self._text("Shoe detection failed.", "Detekce boty selhala."))
         if self._split_review_progress is not None:
             self._split_review_progress.pack_forget()
         if self._split_review_render is not None:
@@ -3382,6 +3757,13 @@ class TopViewProjectionWindow:
         self._split_review_stage_var = None
         self._split_review_badge = None
         self._split_review_detail = None
+        self._split_review_reveal_image = None
+        if self._split_review_animation_job is not None:
+            try:
+                self.window.after_cancel(self._split_review_animation_job)
+            except tk.TclError:
+                pass
+            self._split_review_animation_job = None
         if review is not None:
             try:
                 review.destroy()
@@ -3391,6 +3773,8 @@ class TopViewProjectionWindow:
             self.window.focus_force()
         except tk.TclError:
             pass
+        if self._state == "projection_unavailable" and not self._closed:
+            self.window.after_idle(self.close)
         return "break"
 
     def _render_result(self, target: str) -> None:

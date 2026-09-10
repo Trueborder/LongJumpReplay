@@ -28,6 +28,12 @@ class TakeoffCandidate:
     # of decoding and re-scanning the whole attempt a second time.
     usable_frame_indices: tuple[int, ...] = ()
 
+    def visible_frame_for_lead(self, lead_frames: int) -> int:
+        """Apply an operator lead without leaving the visible-shoe shortlist."""
+        visible = tuple(sorted(set((*self.usable_frame_indices, self.frame_index))))
+        target = self.frame_index + int(lead_frames)
+        return min(visible, key=lambda value: (abs(value - target), value))
+
 
 def _roi_pixels(frame: np.ndarray, roi: tuple[float, float, float, float], target_width: int) -> np.ndarray:
     h, w = frame.shape[:2]
@@ -60,21 +66,38 @@ def _transition_score(previous: np.ndarray, current: np.ndarray) -> tuple[float,
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     area = float(mask.shape[0] * mask.shape[1])
     background_level = float(np.median(current_gray))
+    current_hsv = cv2.cvtColor(current, cv2.COLOR_BGR2HSV)
+    background_saturation = float(np.median(current_hsv[:, :, 1]))
     presence = 0.0
     for contour in contours:
         contour_area = float(cv2.contourArea(contour))
-        if contour_area < area * 0.003 or contour_area > area * 0.10:
+        # A shoe can occupy a large share of a tightly calibrated board ROI,
+        # especially with a nearby camera. Broad illumination changes have
+        # already been removed above and are penalised through active_fraction.
+        if contour_area < area * 0.003 or contour_area > area * 0.24:
             continue
         x, y, w, h = cv2.boundingRect(contour)
         if x <= 1 or y <= 1 or x + w >= mask.shape[1] - 1 or y + h >= mask.shape[0] - 1:
             continue
+        aspect = max(w, h) / max(1.0, float(min(w, h)))
+        if aspect > 7.0 or min(w, h) < 3:
+            # Foul strips, lane markings and thin compression edges are not a
+            # visible shoe even when they have strong contrast.
+            continue
         contour_mask = np.zeros(mask.shape, dtype=np.uint8)
         cv2.drawContours(contour_mask, [contour], -1, 255, -1)
         contour_level = float(current_gray[contour_mask > 0].mean()) if np.any(contour_mask) else background_level
-        if contour_level > background_level - 35.0:
+        contour_saturation = float(current_hsv[:, :, 1][contour_mask > 0].mean()) if np.any(contour_mask) else background_saturation
+        dark_contrast = background_level - contour_level
+        colour_contrast = abs(contour_saturation - background_saturation)
+        if dark_contrast < 24.0 and colour_contrast < 34.0:
             continue
         compactness = min(1.0, contour_area / max(1.0, float(w * h)))
-        presence = max(presence, min(1.0, contour_area / (area * 0.08)) * (0.55 + 0.45 * compactness))
+        relative_area = contour_area / area
+        size_score = min(1.0, relative_area / .065)
+        if relative_area > .16:
+            size_score *= max(.25, 1.0 - (relative_area - .16) / .12)
+        presence = max(presence, size_score * (0.55 + 0.45 * compactness))
     return score, float(presence)
 
 
@@ -84,17 +107,29 @@ def _select_peak(scores: list[float], presence_scores: list[float]) -> tuple[int
     raw = np.asarray(scores, dtype=np.float32)
     smoothed = np.convolve(raw, np.asarray([0.2, 0.6, 0.2], dtype=np.float32), mode="same")
     presence = np.asarray(presence_scores, dtype=np.float32)
-    peak_pos = int(np.argmax(smoothed))
-    peak_value = float(smoothed[peak_pos])
+    # Motion often peaks when the shoe leaves the board ROI. That transition
+    # belongs to the previous visible shoe, but its current frame can be empty.
+    # Never select a frame unless the current image itself contains the compact
+    # shoe signal; combine motion and completeness only among visible frames.
+    visible = presence >= .08
+    if not bool(np.any(visible)):
+        return None
+    combined = smoothed * (.52 + .48 * np.clip(presence, 0.0, 1.0))
+    selectable = combined.copy()
+    selectable[~visible] = -1.0
+    peak_pos = int(np.argmax(selectable))
+    peak_value = float(selectable[peak_pos])
     onset_candidates = [
-        pos for pos in range(max(0, peak_pos - 5), peak_pos + 1)
-        if float(smoothed[pos]) >= peak_value * 0.62 and float(presence[pos]) >= 0.12
+        pos for pos in range(max(0, peak_pos - 4), peak_pos + 1)
+        if bool(visible[pos])
+        and float(selectable[pos]) >= peak_value * .72
+        and float(presence[pos]) >= max(.10, float(presence[peak_pos]) * .68)
     ]
     if onset_candidates:
         peak_pos = onset_candidates[0]
-    peak = float(smoothed[peak_pos])
-    baseline = float(np.median(smoothed))
-    spread = float(np.percentile(smoothed, 90) - baseline)
+    peak = float(selectable[peak_pos])
+    baseline = float(np.median(combined))
+    spread = float(np.percentile(combined, 90) - baseline)
     confidence = max(0.0, min(1.0, (peak - baseline) / max(1e-6, peak + spread)))
     return peak_pos, peak, confidence
 

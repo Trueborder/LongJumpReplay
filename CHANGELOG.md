@@ -1,5 +1,17 @@
 # LongJumpReplay changelog
 
+## 6.2.6 - 2026-09-10
+
+- Improves take-off board and foul-line detection with light-board, red-track,
+  geometric, and dark-strip evidence while retaining fast local processing.
+- Refines full-shoe selection around the board, exposes lightweight detection
+  diagnostics, and separates observed contact from estimated top-down pixels.
+- Keeps the fullscreen split review visible with a neutral **NOT AVAILABLE**
+  result when no trustworthy shoe is detected instead of opening the editor.
+- Prevents Take-off Assist from selecting an empty post-departure frame and
+  clamps configured lead offsets to frames where the shoe remains visible.
+- Adds a short non-blocking reveal for the completed projection and verdict.
+
 ## 6.2.5 - 2026-09-10
 
 - Makes the final fullscreen split review the first window shown by the button

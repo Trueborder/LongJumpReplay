@@ -195,7 +195,7 @@ def test_licence_page_shows_diagnostics_and_copies_safe_summary(monkeypatch):
     dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
     dialog._copy_support_summary()
     summary = dialog.clipboard_get()
-    assert "6.2.5" in summary
+    assert "6.2.6" in summary
     assert "lifetime" in summary
     assert "must-not-be-copied" not in summary
     assert "machine_id" not in summary

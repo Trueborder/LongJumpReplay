@@ -51,6 +51,8 @@ from src.top_view_projection import (
     snap_brush_trace_to_edges,
     smooth_closed_outline,
     unproject_points_from_pad,
+    _client_animations_enabled,
+    _strong_ease_out,
 )
 from src.shoe_reconstruction import (
     ReconstructionCancelled,
@@ -64,6 +66,14 @@ def _packet(frame: np.ndarray, index: int) -> FramePacket:
     ok, encoded = cv2.imencode(".jpg", frame)
     assert ok
     return FramePacket(index, index * 10_000_000, encoded.tobytes(), frame.shape[1], frame.shape[0])
+
+
+def test_result_reveal_easing_and_reduced_motion_override(monkeypatch):
+    assert _strong_ease_out(0.0) == pytest.approx(0.0, abs=.01)
+    assert _strong_ease_out(1.0) == pytest.approx(1.0, abs=.01)
+    assert _strong_ease_out(.5) > .5
+    monkeypatch.setenv("LONGJUMPREPLAY_REDUCED_MOTION", "1")
+    assert not _client_animations_enabled()
 
 
 def test_neighbour_outline_tracking_follows_frame_translation():
@@ -282,6 +292,45 @@ def test_automatic_analysis_finds_board_foul_line_and_curved_shoe_outline():
     assert rendered.shape == (330, 720, 3)
 
 
+def test_board_detector_prefers_light_rectangle_surrounded_by_red_track():
+    frame = np.full((420, 760, 3), (38, 48, 155), np.uint8)
+    expected = np.asarray(((115, 155), (650, 170), (625, 270), (130, 255)), np.int32)
+    cv2.fillConvexPoly(frame, expected, (224, 228, 232))
+    cv2.line(frame, (124, 211), (637, 225), (24, 25, 27), 7)
+    # A bright lane marking is long and white but too thin to be the board.
+    cv2.line(frame, (20, 55), (735, 75), (245, 245, 245), 5)
+    detected = detect_board_corners(frame, (0, 0, 1, 1))
+    assert detected is not None
+    assert np.max(np.linalg.norm(np.asarray(detected) - expected, axis=1)) < 18
+    foul = detect_foul_line(frame, detected)
+    assert foul is not None
+    assert 205 < float(np.mean(np.asarray(foul)[:, 1])) < 235
+
+
+def test_shoe_detector_uses_board_roi_rejects_skin_and_keeps_full_toe():
+    reference = np.full((360, 640, 3), (38, 48, 155), np.uint8)
+    board_px = np.asarray(((80, 190), (560, 190), (555, 275), (85, 275)), np.int32)
+    cv2.fillConvexPoly(reference, board_px, (224, 228, 232))
+    cv2.line(reference, (82, 225), (558, 225), (25, 25, 28), 6)
+    current = reference.copy()
+    cv2.ellipse(current, (340, 205), (92, 29), -4, 0, 360, (25, 42, 92), -1)
+    cv2.rectangle(current, (400, 115), (445, 196), (80, 125, 190), -1)
+    calibration = ProjectionCalibration(
+        tuple(tuple(point) for point in board_px / np.asarray((640, 360), np.float32)),
+        ((82 / 640, 225 / 360), (558 / 640, 225 / 360)),
+    )
+    estimate = estimate_foot_polygon(
+        current, (reference,), (0, 0, 1, 1), calibration.board_corners, calibration.foul_line,
+    )
+    assert estimate is not None
+    points = np.asarray(estimate.polygon_px)
+    assert points[:, 0].min() < 255
+    assert points[:, 0].max() > 425
+    assert points[:, 1].min() > 155
+    assert len(estimate.candidate_polygons_px) >= 1
+    assert len(estimate.search_roi_px) == 4
+
+
 def test_local_reconstruction_returns_mesh_and_overhead_image():
     frame = np.full((300, 600, 3), 180, np.uint8)
     reference = frame.copy()
@@ -293,6 +342,10 @@ def test_local_reconstruction_returns_mesh_and_overhead_image():
     assert result.fit_confidence >= .38
     assert len(result.mesh_geometry.vertices) > 20
     assert result.overhead_image.shape == (255, 900, 3)
+    assert result.observed_mask is not None
+    assert result.estimated_mask is not None
+    assert result.contact_mask is not None
+    assert np.array_equal(result.contact_mask, result.observed_mask)
     assert stages[-1] == ("complete", 100)
 
 
