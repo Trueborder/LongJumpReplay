@@ -37,6 +37,7 @@ DEFAULT_HOTKEYS = {
     "toggle_comparison": "c",
     "start_competition_wizard": "Control-n",
     "timer_toggle": "",
+    "open_top_view": "Return",
 }
 
 

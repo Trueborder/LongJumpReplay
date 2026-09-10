@@ -1921,16 +1921,23 @@ class _LegacyTopViewProjectionWindow:
 class ProjectionProgressDialog:
     """Small modal determinate dialog driven only from the Tk thread."""
 
-    def __init__(self, parent: tk.Misc, palette: dict[str, str], title: str, label: str, cancel: Callable[[], None], cancel_text: str = "Cancel", fullscreen: bool = False) -> None:
+    def __init__(self, parent: tk.Misc, palette: dict[str, str], title: str, label: str, cancel: Callable[[], None], cancel_text: str = "Cancel", fullscreen: bool = False, preview_frame: np.ndarray | None = None) -> None:
         self.window = tk.Toplevel(parent)
         self.window.title(title)
         self.window.transient(parent)
         self.window.resizable(False, False)
         self.window.configure(bg=palette["bg"])
         self.window.protocol("WM_DELETE_WINDOW", cancel)
+        self._preview_canvas: tk.Canvas | None = None
+        self._preview_photo: ImageTk.PhotoImage | None = None
+        self._preview_frame = None if preview_frame is None else np.ascontiguousarray(preview_frame.copy())
+        if fullscreen and self._preview_frame is not None:
+            self._preview_canvas = tk.Canvas(self.window, bg="#0b1018", highlightthickness=0)
+            self._preview_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self._preview_canvas.bind("<Configure>", lambda _event: self._render_preview())
         frame = ttk.Frame(self.window, style="Panel.TFrame", padding=28 if fullscreen else 18)
         if fullscreen:
-            frame.pack(anchor="center", padx=40, pady=40)
+            frame.place(relx=0.5, rely=0.86, anchor="center", relwidth=0.72)
         else:
             frame.pack(fill="both", expand=True)
         self.label_var = tk.StringVar(value=label)
@@ -1946,10 +1953,28 @@ class ProjectionProgressDialog:
             self.window.attributes("-fullscreen", True)
         self.window.grab_set()
         self.window.update_idletasks()
+        self._render_preview()
         parent_x = parent.winfo_rootx() if parent.winfo_exists() else 0
         parent_y = parent.winfo_rooty() if parent.winfo_exists() else 0
         self.window.geometry(f"+{parent_x + 90}+{parent_y + 90}")
         self.window.focus_force()
+
+    def _render_preview(self) -> None:
+        if self._preview_canvas is None or self._preview_frame is None:
+            return
+        frame = np.asarray(self._preview_frame)
+        if frame.ndim == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        elif frame.ndim == 3 and frame.shape[2] == 4:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        height, width = frame.shape[:2]
+        canvas_width = max(1, self._preview_canvas.winfo_width())
+        canvas_height = max(1, self._preview_canvas.winfo_height())
+        scale = min(canvas_width / max(1, width), canvas_height / max(1, height))
+        shown = cv2.resize(frame, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+        self._preview_photo = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(shown, cv2.COLOR_BGR2RGB)))
+        self._preview_canvas.delete("all")
+        self._preview_canvas.create_image((canvas_width - shown.shape[1]) / 2, (canvas_height - shown.shape[0]) / 2, image=self._preview_photo, anchor="nw")
 
     def update(self, value: float, label: str | None = None, detail: str | None = None) -> None:
         if label is not None:

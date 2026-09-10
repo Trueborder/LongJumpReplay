@@ -19,6 +19,7 @@ def test_old_partial_config_gets_new_defaults():
     assert config.attempts.retention_minutes == 10
     assert config.hotkeys.bindings['next_attempt'] == 'Control-Next'
     assert config.hotkeys.bindings['timer_toggle'] == ''
+    assert config.hotkeys.bindings['open_top_view'] == 'Return'
     assert config.athlete_timer.duration_seconds == 60
     assert config.display.window_maximized is False
     assert config.top_view_projection.legal_side_flipped is False

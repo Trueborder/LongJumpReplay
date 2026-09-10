@@ -47,6 +47,7 @@ ACTION_LABELS = {
     "toggle_comparison": ("Toggle three-frame comparison", "Přepnout porovnání snímků"),
     "start_competition_wizard": ("Start Competition Wizard", "Spustit průvodce soutěží"),
     "timer_toggle": ("", ""),  # Label is localized through src/i18n.py.
+    "open_top_view": ("Open top-down projection", "Otevřít projekci shora"),
 }
 
 SHUTTLE_ACTIONS = [

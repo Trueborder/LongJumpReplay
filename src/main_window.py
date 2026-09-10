@@ -868,6 +868,7 @@ class MainWindow:
             "toggle_comparison": self.toggle_comparison,
             "start_competition_wizard": self.start_competition_wizard,
             "timer_toggle": self.toggle_athlete_timer,
+            "open_top_view": self.open_top_view_projection,
         }
         if not (self.config.competition.enabled and self.config.competition.keyboard_competition_controls):
             for name in ("previous_athlete", "next_athlete", "mark_passed"):
@@ -2647,6 +2648,7 @@ class MainWindow:
             cancel_loading,
             cancel_text=self._t("projection.cancel"),
             fullscreen=True,
+            preview_frame=self._displayed_bgr,
         )
         result_queue: Queue[tuple[str, object]] = Queue()
         unique_references = tuple(index for index in dict.fromkeys(reference_indices) if index not in set(candidate_frame_indices))

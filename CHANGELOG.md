@@ -1,5 +1,12 @@
 # LongJumpReplay changelog
 
+## 6.2.3 - 2026-09-10
+
+- Shows the frozen original camera frame immediately in the fullscreen
+  projection loading surface while the computed top-down result is prepared.
+- Adds a configurable `Open top-down projection` application hotkey, enabled
+  by default on Enter.
+
 ## 6.2.2 - 2026-09-10
 
 - Opens Top-down projection in fullscreen immediately after Freeze, with a

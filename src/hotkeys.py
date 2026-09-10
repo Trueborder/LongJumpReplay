@@ -15,7 +15,7 @@ ONE_SHOT_ACTIONS = {
     "toggle_timeline", "toggle_live_preview", "toggle_fullscreen",
     "reset_view", "toggle_guide", "decision_valid", "decision_foul",
     "decision_review", "clear_all_recordings", "toggle_comparison",
-    "timer_toggle",
+    "timer_toggle", "open_top_view",
 }
 
 
