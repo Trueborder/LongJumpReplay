@@ -29,6 +29,44 @@ def test_failed_shoe_detection_uses_neutral_unavailable_split_result():
     root.destroy()
 
 
+def test_dismissing_failed_fullscreen_review_returns_to_projection_menu():
+    root = tk.Tk()
+    root.withdraw()
+    projection = TopViewProjectionWindow.__new__(TopViewProjectionWindow)
+    projection._closed = False
+    projection._state = "projection_unavailable"
+    projection.window = tk.Toplevel(root)
+    projection.selection_page = ttk.Frame(projection.window)
+    projection.selection_page.grid(row=1, column=0)
+    projection.workspace_page = ttk.Frame(projection.window)
+    projection.workspace_page.grid(row=1, column=0)
+    projection.manual_setup_button = ttk.Button(projection.selection_page)
+    projection.confirm_frame_button = ttk.Button(projection.selection_page)
+    projection.confirm_frame_button.pack(side="left")
+    projection._analysis_failure = {"layer": "shoe", "message": "No shoe"}
+    projection._split_review_window = tk.Toplevel(projection.window)
+    projection._split_review_photos = []
+    projection._split_review_render = None
+    projection._split_review_progress = None
+    projection._split_review_stage_var = None
+    projection._split_review_badge = None
+    projection._split_review_detail = None
+    projection._split_review_reveal_image = None
+    projection._split_review_animation_job = None
+    projection._render_selection = lambda: None
+    projection._text = lambda english, _czech: english
+    projection._close_split_review()
+    root.update_idletasks()
+
+    assert projection._state == "selecting_frame"
+    assert projection.selection_page.winfo_manager() == "grid"
+    assert projection.workspace_page.winfo_manager() == ""
+    assert projection.manual_setup_button.winfo_manager() == "pack"
+
+    projection.window.destroy()
+    root.destroy()
+
+
 def test_top_down_projection_uses_current_frame_without_chooser(tmp_path):
     config = AppConfig()
     config.camera.source_type = "synthetic"

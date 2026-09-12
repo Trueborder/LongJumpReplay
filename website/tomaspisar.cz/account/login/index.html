@@ -35,10 +35,10 @@
     </div>
   </header>
 
-  <main id="main" class="account-shell">
+  <main id="main" class="account-shell login-shell">
     <section class="account-login content-section" aria-labelledby="login-title">
       <div class="account-login-grid">
-        <div class="account-intro">
+        <div class="account-intro login-context">
           <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / CUSTOMER ACCOUNT" data-cs="LONGJUMPREPLAY / ZÁKAZNICKÝ ÚČET">LONGJUMPREPLAY / CUSTOMER ACCOUNT</span></p>
           <h1 id="login-title" data-en="Your licence, ready when you are." data-cs="Vaše licence, kdykoli ji potřebujete.">Your licence, ready when you are.</h1>
           <p class="hero-lede" data-en="Use your email address and a one-time code. There is no password to remember, and you can sign in even before buying a licence." data-cs="Použijte svou e-mailovou adresu a jednorázový kód. Nemusíte si pamatovat heslo a přihlásit se můžete i před zakoupením licence.">Use your email address and a one-time code. There is no password to remember, and you can sign in even before buying a licence.</p>
@@ -52,19 +52,27 @@
           </details>
         </div>
 
-        <div class="account-panel" aria-labelledby="form-title">
+        <div class="account-panel login-card" aria-labelledby="form-title">
           <div class="panel-heading">
             <span class="panel-icon" aria-hidden="true">↳</span>
             <div><p class="eyebrow" data-en="SECURE SIGN IN" data-cs="BEZPEČNÉ PŘIHLÁŠENÍ">SECURE SIGN IN</p><h2 id="form-title" data-en="Open your account" data-cs="Otevřete svůj účet">Open your account</h2></div>
           </div>
           <form id="login-form" novalidate>
+            <div id="email-step">
+              <p class="login-step-label" data-en="STEP 1 / EMAIL" data-cs="KROK 1 / E-MAIL">STEP 1 / EMAIL</p>
             <label for="email" data-en="Account email" data-cs="E-mail účtu">Account email</label>
             <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+            </div>
             <div id="code-field" hidden>
+              <p class="login-step-label" data-en="STEP 2 / VERIFICATION" data-cs="KROK 2 / OVĚŘENÍ">STEP 2 / VERIFICATION</p>
               <label for="code" data-en="Six-digit code" data-cs="Šestimístný kód">Six-digit code</label>
               <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
             </div>
-            <button class="button button-primary button-full" id="login-submit" type="submit" data-en="Email me a code" data-cs="Poslat kód e-mailem">Email me a code</button>
+            <button class="button button-primary button-full" id="login-submit" type="submit" data-en="Continue" data-cs="Pokračovat">Continue</button>
+            <div class="login-actions-secondary">
+              <button class="text-button" id="change-email" type="button" hidden data-en="Change email" data-cs="Změnit e-mail">Change email</button>
+              <button class="text-button" id="resend-code" type="button" hidden data-en="Resend code" data-cs="Poslat kód znovu">Resend code</button>
+            </div>
           </form>
           <p id="login-status" class="status" role="status" aria-live="polite"></p>
           <p class="form-note" data-en="Codes expire after 10 minutes. The address does not need to have a purchase yet." data-cs="Platnost kódu je 10 minut. Na této adrese zatím nemusí být žádný nákup.">Codes expire after 10 minutes. The address does not need to have a purchase yet.</p>

@@ -17,6 +17,10 @@ def test_templates_are_deterministic_and_preserve_valid_group_counts() -> None:
     assert c.final_round_enabled
     model.apply_template("simple")
     assert c.enabled and not c.final_round_enabled
+    assert c.decision_controls_enabled
+    assert c.show_competition_board
+    assert c.show_competitor_selector
+    assert c.auto_advance_on_attempt_complete
 
 
 def test_template_repairs_zero_enabled_group_count() -> None:

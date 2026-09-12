@@ -27,6 +27,7 @@ from .shoe_reconstruction import (
     estimate_camera_profile,
     reconstruct_shoe_overhead,
 )
+from .theme import center_popup
 
 
 STANDARD_BOARD_LENGTH_CM = 120.1
@@ -1397,6 +1398,7 @@ class _LegacyTopViewProjectionWindow:
         self.instruction_var = tk.StringVar(value="")
 
         self.window = tk.Toplevel(master)
+        center_popup(self.window)
         self.window.title(self._text("Top-view projection", "Projekce shora"))
         self.window.geometry("1180x760")
         self.window.minsize(900, 620)
@@ -1960,6 +1962,7 @@ class _LegacyTopViewProjectionWindow:
 
     def _open_camera_profile_wizard(self) -> None:
         dialog = tk.Toplevel(self.window)
+        center_popup(dialog)
         dialog.title(self._text("Advanced camera profile", "Pokročilý profil kamery"))
         dialog.transient(self.window)
         dialog.configure(bg=self.palette["bg"])
@@ -2132,6 +2135,8 @@ class ProjectionProgressDialog:
 
     def __init__(self, parent: tk.Misc, palette: dict[str, str], title: str, label: str, cancel: Callable[[], None], cancel_text: str = "Cancel", fullscreen: bool = False, preview_frame: np.ndarray | None = None) -> None:
         self.window = tk.Toplevel(parent)
+        if not fullscreen:
+            center_popup(self.window)
         self.window.title(title)
         self.window.transient(parent)
         self.window.resizable(False, False)
@@ -2163,9 +2168,6 @@ class ProjectionProgressDialog:
         self.window.grab_set()
         self.window.update_idletasks()
         self._render_preview()
-        parent_x = parent.winfo_rootx() if parent.winfo_exists() else 0
-        parent_y = parent.winfo_rooty() if parent.winfo_exists() else 0
-        self.window.geometry(f"+{parent_x + 90}+{parent_y + 90}")
         self.window.focus_force()
 
     def _render_preview(self) -> None:
@@ -2307,6 +2309,8 @@ class TopViewProjectionWindow:
         self._result_magnifier_job: str | None = None
 
         self.window = tk.Toplevel(master)
+        if not start_fullscreen:
+            center_popup(self.window)
         self.window.title(self._text("Top-down projection", "Projekce shora"))
         self.window.geometry("1220x790")
         self.window.minsize(940, 650)
@@ -2373,7 +2377,7 @@ class TopViewProjectionWindow:
         style.configure("Projection.Accent.TButton", padding=(10, 4), font=("Segoe UI Semibold", 10))
         style.configure("Projection.TCheckbutton", padding=(5, 3), font=("Segoe UI", 10))
         style.configure("ProjectionCategory.TLabel", font=("Segoe UI Semibold", 8), foreground=palette["muted"], background=palette["surface2"])
-        self.mouse_zoom_var = tk.BooleanVar(value=True)
+        self.mouse_zoom_var = tk.BooleanVar(value=False)
         self.brush_snap_var = tk.BooleanVar(value=False)
         # Keep the source camera view clean by default; computed geometry can
         # still be enabled explicitly with Show outlines when needed.
@@ -3362,7 +3366,9 @@ class TopViewProjectionWindow:
                             self._analysis_dialog.close()
                             self._analysis_dialog = None
                         self._cancel = None
-                        self._analysis_failure = None
+                        # Keep the failure available to the manual setup action
+                        # after the operator dismisses the fullscreen review.
+                        self._analysis_failure = dict(payload)
                         self._state = "projection_unavailable"
                         self.manual_setup_button.pack_forget()
                         self._update_split_review_unavailable(message)
@@ -3773,8 +3779,23 @@ class TopViewProjectionWindow:
             self.window.focus_force()
         except tk.TclError:
             pass
-        if self._state == "projection_unavailable" and not self._closed:
-            self.window.after_idle(self.close)
+        if not self._closed and self._state in {"analysing_frame", "projection_unavailable"}:
+            # A fullscreen failure review is transient. Returning from it must
+            # reveal the projection menu so the operator can choose manual
+            # setup or re-run the frame workflow instead of losing the window.
+            self._state = "selecting_frame"
+            self.workspace_page.grid_remove()
+            self.selection_page.grid(row=1, column=0, sticky="nsew")
+            if self._analysis_failure is not None:
+                layer = str(self._analysis_failure.get("layer") or "shoe")
+                label = {
+                    "board": self._text("Set board manually", "Nastavit prkno ručně"),
+                    "foul": self._text("Set foul line manually", "Nastavit odrazovou čáru ručně"),
+                    "shoe": self._text("Set shoe outline manually", "Nastavit obrys boty ručně"),
+                }.get(layer, self._text("Set up manually", "Nastavit ručně"))
+                self.manual_setup_button.configure(text=label)
+                self.manual_setup_button.pack(side="left", padx=(0, 6), before=self.confirm_frame_button)
+            self._render_selection()
         return "break"
 
     def _render_result(self, target: str) -> None:
@@ -4056,7 +4077,7 @@ class TopViewProjectionWindow:
         self.on_calibration_saved(self.calibration); self._invalidate_results()
 
     def _open_camera_profile_wizard(self) -> None:
-        dialog = tk.Toplevel(self.window); dialog.title(self._text("Advanced camera profile", "Pokročilý profil kamery")); dialog.transient(self.window)
+        dialog = tk.Toplevel(self.window); center_popup(dialog); dialog.title(self._text("Advanced camera profile", "Pokročilý profil kamery")); dialog.transient(self.window)
         frame = ttk.Frame(dialog, style="Panel.TFrame", padding=16); frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=self._text("Optional checkerboard camera profile", "Volitelný profil kamery se šachovnicí"), style="Title.TLabel").pack(anchor="w")
         result_var = tk.StringVar(value="")

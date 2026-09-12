@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from tkinter import ttk
 
 from src.camera_devices import CameraDevice
-from src.config import AppConfig, load_config, save_config
+from src.config import MIN_TIMELINE_HEIGHT, AppConfig, load_config, save_config
 from src.main_window import MainWindow
 from src.playback import PlaybackMode
 
@@ -200,7 +200,7 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
     config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
     config.display.window_geometry = '1100x700'
-    config.display.timeline_height = 100
+    config.display.timeline_height = 150
     config.display.show_attempts_panel = False
     config.display.show_timeline = False
     config.display.show_status_bar = False
@@ -229,7 +229,7 @@ def test_resizable_panes_start_with_visible_video_and_timeline(tmp_path):
     root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
     assert sizes['video'] > 250
-    assert 200 <= sizes['timeline'] <= 280
+    assert 140 <= sizes['timeline'] <= 190
     assert sizes['timeline_hint'] <= 2
     assert sizes['status'] >= 20
     assert sizes['replay_width'] > 400
@@ -260,7 +260,7 @@ def test_withdrawn_startup_waits_for_real_geometry_before_positioning_timeline(t
     root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
     assert sizes['video'] > 250
-    assert 200 <= sizes['timeline'] <= 280
+    assert 140 <= sizes['timeline'] <= 190
 
 
 def test_applying_unchanged_settings_preserves_timeline_size(monkeypatch, tmp_path):
@@ -355,8 +355,8 @@ def test_showing_timeline_restores_a_usable_height(tmp_path):
     root.after(950, inspect)
     root.after(5500, lambda: root.destroy() if root.winfo_exists() else None)
     root.mainloop()
-    assert result['height'] >= 200
-    assert result['saved_height'] >= MainWindow.TIMELINE_USABLE_HEIGHT
+    assert result['height'] >= 140
+    assert result['saved_height'] >= MIN_TIMELINE_HEIGHT
 
 
 def test_window_interaction_suspends_expensive_redraws(tmp_path):

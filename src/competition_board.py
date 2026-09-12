@@ -42,6 +42,7 @@ class CompetitionBoard(ttk.Frame):
         on_mark_empty_cell: Callable[[int, int, AttemptDecision], None] | None = None,
         on_delete_attempt: Callable[[int], None] | None = None,
         on_edit_measurement: Callable[[int], None] | None = None,
+        on_edit_attempt: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
         self.palette = palette
@@ -51,6 +52,7 @@ class CompetitionBoard(ttk.Frame):
         self.on_mark_empty_cell = on_mark_empty_cell
         self.on_delete_attempt = on_delete_attempt
         self.on_edit_measurement = on_edit_measurement
+        self.on_edit_attempt = on_edit_attempt
         self.canvas = tk.Canvas(self, highlightthickness=1, highlightbackground=palette["border"], bd=0, background=palette["surface"], takefocus=True)
         self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.hbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
@@ -76,6 +78,7 @@ class CompetitionBoard(ttk.Frame):
         self._active_attempt = 1
         self._language = "en"
         self.canvas.bind("<Button-1>", self._click)
+        self.canvas.bind("<Double-Button-1>", self._double_click)
         self.canvas.bind("<Button-3>", self._right_click)
         self.canvas.bind("<Up>", lambda _event: self.move_focus(0, -1))
         self.canvas.bind("<Down>", lambda _event: self.move_focus(0, 1))
@@ -294,6 +297,17 @@ class CompetitionBoard(ttk.Frame):
         self.canvas.focus_set()
         self.focus_cell(hit)
         self._activate_cell(hit)
+
+    def _double_click(self, event) -> str:
+        hit = self._hit(event.x, event.y)
+        if hit is None:
+            return "break"
+        attempt_id = self._cell_attempts.get(hit)
+        if attempt_id is not None and self.on_edit_attempt is not None:
+            self.canvas.focus_set()
+            self.focus_cell(hit)
+            self.on_edit_attempt(attempt_id)
+        return "break"
 
     def _activate_cell(self, hit: tuple[int, int]) -> None:
         attempt_id = self._cell_attempts.get(hit)

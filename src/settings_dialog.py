@@ -138,6 +138,23 @@ class SettingsDialog(tk.Toplevel):
     def _txt(self, en: str, cs: str) -> str:
         return cs if self.lang == "cs" else en
 
+    def _build_deferred_pages(self) -> None:
+        builders = getattr(self, "_deferred_builders", ())
+        self._deferred_builders = ()
+        for page_key, builder in builders:
+            if not self.winfo_exists():
+                return
+            self._build_on_page(page_key, builder)
+        for page_key, inner in self._page_inners.items():
+            canvas = self._page_canvases.get(page_key)
+            if canvas:
+                self._bind_scroll_descendants(inner, canvas)
+        self._attach_dirty_traces()
+
+    def _ensure_all_pages_built(self) -> None:
+        if getattr(self, "_deferred_builders", ()):
+            self._build_deferred_pages()
+
     def _action_label(self, action: str) -> str:
         if action == "timer_toggle":
             return self.tr("settings.athlete_timer_hotkey")
@@ -242,26 +259,27 @@ class SettingsDialog(tk.Toplevel):
         self.search_results_tree.bind("<Escape>", self._clear_search)
 
         self.search_var.trace_add("write", lambda *_: self._filter_navigation())
-        self._build_on_page("general", self._build_general)
-        self._build_on_page("general", self._build_appearance)
-        self._build_on_page("camera_recording", self._build_recording_mode)
-        self._build_on_page("camera_recording", self._build_camera)
-        self._build_on_page("camera_recording", self._build_replay)
-        self._build_on_page("competition", self._build_competition)
-        self._build_on_page("competition", self._build_rounds)
-        self._build_on_page("competition", self._build_timer)
-        self._build_on_page("competition", self._build_final)
-        self._build_on_page("judging", self._build_decisions)
-        self._build_on_page("judging", self._build_evidence)
-        self._build_on_page("board_assist", self._build_board)
-        self._build_on_page("board_assist", self._build_assist)
-        self._build_on_page("workspace_controls", self._build_views)
-        self._build_on_page("workspace_controls", self._build_hotkeys)
-        self._build_on_page("workspace_controls", self._build_shuttle)
+        builders = (
+            ("general", self._build_general), ("general", self._build_appearance),
+            ("camera_recording", self._build_recording_mode), ("camera_recording", self._build_camera),
+            ("camera_recording", self._build_replay), ("competition", self._build_competition),
+            ("competition", self._build_rounds), ("competition", self._build_timer),
+            ("competition", self._build_final), ("judging", self._build_decisions),
+            ("judging", self._build_evidence), ("board_assist", self._build_board),
+            ("board_assist", self._build_assist), ("workspace_controls", self._build_views),
+            ("workspace_controls", self._build_hotkeys), ("workspace_controls", self._build_shuttle),
+            ("licence", self._build_licence), ("advanced", self._build_performance),
+            ("advanced", self._build_camera_advanced), ("advanced", self._build_advanced),
+        )
+        # Build the visible page first so the dialog opens before the heavier
+        # camera, roster, hotkey and performance controls are created.
+        for page_key, builder in builders[:2]:
+            self._build_on_page(page_key, builder)
+        # Licence diagnostics are kept available immediately because the
+        # Settings entry point can be used to activate or inspect an install.
         self._build_on_page("licence", self._build_licence)
-        self._build_on_page("advanced", self._build_performance)
-        self._build_on_page("advanced", self._build_camera_advanced)
-        self._build_on_page("advanced", self._build_advanced)
+        self._deferred_builders = tuple(item for item in builders[2:] if item[0] != "licence")
+        self.after_idle(self._build_deferred_pages)
         for page_key, inner in self._page_inners.items():
             canvas = self._page_canvases.get(page_key)
             if canvas:
@@ -873,10 +891,10 @@ class SettingsDialog(tk.Toplevel):
         performance_intro.grid(row=0, column=0, columnspan=5, sticky="ew", pady=(0, 9))
         self._bind_responsive_wrap(performance_intro, minimum=220, maximum=760)
         preset_names = {
-            "quiet": self._txt("Quiet", "Tichý"),
-            "balanced": self._txt("Balanced", "Vyvážený"),
-            "high": self._txt("High", "Výkonný"),
-            "evidence": self._txt("Evidence focus", "Důkazní detail"),
+            "quiet": self._txt("Smooth live", "Plynulé živé video"),
+            "balanced": self._txt("Balanced judging", "Vyvážené rozhodování"),
+            "high": self._txt("Fast review", "Rychlá kontrola"),
+            "evidence": self._txt("Evidence review", "Kontrola důkazů"),
             "custom": self._txt("Custom", "Vlastní"),
         }
         for column, value in enumerate(preset_names):
@@ -922,10 +940,10 @@ class SettingsDialog(tk.Toplevel):
             return
         preset = self._vars.get("performance_preset", tk.StringVar(value="balanced")).get()
         descriptions = {
-            "quiet": self._txt("Lowest fan noise and CPU use. Best for webcams and older laptops.", "Nejnižší hluk ventilátoru a využití CPU. Vhodné pro webkamery a slabší notebooky."),
-            "balanced": self._txt("Recommended default. Smooth controls without wasting CPU on invisible detail.", "Doporučené výchozí nastavení. Plynulé ovládání bez zbytečné spotřeby CPU."),
-            "high": self._txt("Faster preview and seeking for powerful computers. Higher fan noise.", "Rychlejší náhled a posun pro výkonné počítače. Vyšší hluk ventilátoru."),
-            "evidence": self._txt("Prioritises a full-resolution preview and higher-detail board analysis. Higher CPU use; buffer quality remains explicit.", "Upřednostňuje náhled v plném rozlišení a podrobnější analýzu prkna. Vyšší využití CPU; kvalita bufferu zůstává samostatnou volbou."),
+            "quiet": self._txt("Smooth live preview with low CPU use. Capture and evidence quality are unchanged.", "Plynulý živý náhled s nízkým využitím CPU. Kvalita snímání a důkazů se nemění."),
+            "balanced": self._txt("Recommended for judging: responsive controls and moderate presentation workload.", "Doporučeno pro rozhodování: rychlé ovládání a mírná zátěž zobrazení."),
+            "high": self._txt("Fast review for powerful computers. It increases presentation refresh work only.", "Rychlá kontrola pro výkonné počítače. Zvyšuje pouze obnovování zobrazení."),
+            "evidence": self._txt("Prioritises full-resolution presentation and detailed board review without changing retained evidence.", "Upřednostňuje zobrazení v plném rozlišení a podrobnou kontrolu prkna bez změny uložených důkazů."),
             "custom": self._txt("Manual values are active. Presets change display workload only; they do not alter camera capture or evidence quality.", "Jsou aktivní ruční hodnoty. Profily mění pouze zátěž zobrazení; nemění záznam kamery ani kvalitu důkazu."),
         }
         self.preset_description.configure(text=descriptions.get(preset, ""))
@@ -1290,12 +1308,12 @@ class SettingsDialog(tk.Toplevel):
         }
         self._vars.update(vals)
         self._row(f, r, "Enable Take-off Assist", "Zapnout asistenta odrazu", vals["assist_enabled"], "check", impact="high"); r += 1
-        self._row(f, r, "Seek to candidate after Freeze", "Po zmrazení přesunout na kandidáta", vals["assist_auto_seek"], "check", impact="low"); r += 1
-        self._row(f, r, "Enable Quick Review", "Zapnout rychlou kontrolu", vals["quick_review"], "check", impact="high"); r += 1
-        self._row(f, r, "Quick Review speed", "Rychlost rychlé kontroly", vals["quick_speed"], impact="medium"); r += 1
-        self._row(f, r, "Analyse seconds before Freeze", "Analyzovat sekundy před zmrazením", vals["assist_before"], impact="high"); r += 1
-        self._row(f, r, "Analyse seconds after Freeze", "Analyzovat sekundy po zmrazení", vals["assist_after"], impact="medium"); r += 1
-        self._row(f, r, "Minimum confidence (0–1)", "Minimální jistota (0–1)", vals["assist_confidence"], impact="low"); r += 1
+        self._row(f, r, "Seek to candidate after Freeze", "Po zmrazení přesunout na kandidáta", vals["assist_auto_seek"], "check", desc_en="Moves the replay to the detected take-off frame when Quick Review is off.", desc_cs="Při vypnuté rychlé kontrole přesune replay na nalezený snímek odrazu.", impact="low"); r += 1
+        self._row(f, r, "Enable Quick Review", "Zapnout rychlou kontrolu", vals["quick_review"], "check", desc_en="Shows a short smooth replay around the detected take-off, then stops on the candidate.", desc_cs="Zobrazí krátký plynulý replay kolem nalezeného odrazu a zastaví na kandidátovi.", impact="high"); r += 1
+        self._row(f, r, "Quick Review speed", "Rychlost rychlé kontroly", vals["quick_speed"], desc_en="Controls how quickly the short review advances; it does not change camera capture.", desc_cs="Určuje rychlost krátké kontroly; nemění snímání kamery.", impact="medium"); r += 1
+        self._row(f, r, "Analyse seconds before Freeze", "Analyzovat sekundy před zmrazením", vals["assist_before"], desc_en="How far before Freeze the detector searches for the local motion peak.", desc_cs="Jak dlouho před zmrazením hledá detektor místní vrchol pohybu.", impact="high"); r += 1
+        self._row(f, r, "Analyse seconds after Freeze", "Analyzovat sekundy po zmrazení", vals["assist_after"], desc_en="Adds post-Freeze frames for delayed camera or operator timing.", desc_cs="Přidá snímky po zmrazení pro opožděnou kameru nebo reakci obsluhy.", impact="medium"); r += 1
+        self._row(f, r, "Minimum confidence (0–1)", "Minimální jistota (0–1)", vals["assist_confidence"], desc_en="Candidates below this confidence remain warnings and do not move the replay.", desc_cs="Kandidáti pod touto jistotou zůstanou varováním a replay se neposune.", impact="low"); r += 1
         self._row(f, r, "Analysis width", "Šířka analýzy", vals["assist_width"], desc_en="Higher values cost more CPU. 160–240 is normally sufficient.", desc_cs="Vyšší hodnoty více zatěžují CPU. Obvykle stačí 160–240.", impact="very_high")
 
     def _build_hotkeys(self, f: ttk.Frame) -> None:
@@ -1413,6 +1431,7 @@ class SettingsDialog(tk.Toplevel):
         return result
 
     def _apply_vars(self) -> AppConfig:
+        self._ensure_all_pages_built()
         w = self.working
         w.general.language = language_from_option(str(self._vars["language"].get()))
         w.general.confirm_destructive_actions = bool(self._vars["confirm_destructive"].get())

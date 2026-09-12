@@ -111,6 +111,8 @@ class ProfessionalTimeline(tk.Canvas):
         self._seek_job: str | None = None
         self._zoom_dragging = False
         self._zoom_commit_job: str | None = None
+        self._return_animation_job: str | None = None
+        self._animated_playhead_ns: int | None = None
 
         self._create_item_pool()
         self.bind("<Configure>", self._on_configure)
@@ -130,7 +132,7 @@ class ProfessionalTimeline(tk.Canvas):
         p = self.palette
         self._items: dict[str, int] = {}
         self._items["background"] = self.create_rectangle(0, 0, 1, 1, fill=p["surface"], outline="")
-        self._items["mode"] = self.create_text(self.SIDE_PAD, 10, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 8))
+        self._items["mode"] = self.create_text(self.SIDE_PAD, 10, anchor="w", text=tr(self.language, "timeline.title"), fill=p["muted"], font=("Segoe UI Semibold", 9))
         self._items["timecode"] = self.create_text(1, 11, anchor="center", text="+0.000s", fill=p["text"], font=("Consolas", 10, "bold"))
         self._items["zoom"] = self.create_text(1, 9, anchor="e", text=format_timeline_span(self.detail_seconds), fill=p["muted"], font=("Segoe UI", 8))
         self._items["zoom_track"] = self.create_line(1, 27, 2, 27, fill=p["border"], width=4)
@@ -143,7 +145,7 @@ class ProfessionalTimeline(tk.Canvas):
             ("prediction", p["prediction"], "timeline.prediction"),
         ):
             self._items[f"legend_{key}_swatch"] = self.create_rectangle(legend_x, 22, legend_x + 9, 29, fill=colour, outline="")
-            self._items[f"legend_{key}_label"] = self.create_text(legend_x + 13, 25, anchor="w", text=tr(self.language, label_key), fill=p["muted"], font=("Segoe UI", 7))
+            self._items[f"legend_{key}_label"] = self.create_text(legend_x + 13, 25, anchor="w", text=tr(self.language, label_key), fill=p["muted"], font=("Segoe UI", 8))
             legend_x += 82 if key != "prediction" else 0
 
         self._items["detail_bg"] = self.create_rectangle(1, self.DETAIL_TOP, 2, self.DETAIL_BOTTOM, fill=p["timeline"], outline=p["border"])
@@ -151,7 +153,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._items["unavailable_left"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 1, self.DETAIL_BOTTOM - 1, fill=p["bg"], outline="", stipple="gray50")
         self._items["unavailable_right"] = self.create_rectangle(1, self.DETAIL_TOP + 1, 1, self.DETAIL_BOTTOM - 1, fill=p["bg"], outline="", stipple="gray50")
         self._items["freeze_line"] = self.create_line(0, 0, 0, 0, fill=p["warning"], width=2, state="hidden")
-        self._items["freeze_label"] = self.create_text(0, 0, anchor="s", text=tr(self.language, "timeline.freeze"), fill=p["warning"], font=("Segoe UI Semibold", 7), state="hidden")
+        self._items["freeze_label"] = self.create_text(0, 0, anchor="s", text=tr(self.language, "timeline.freeze"), fill=p["warning"], font=("Segoe UI Semibold", 8), state="hidden")
         self._items["record_start_line"] = self.create_line(0, 0, 0, 0, fill=p["recorded"], width=2, state="hidden")
         self._items["record_end_line"] = self.create_line(0, 0, 0, 0, fill=p["recorded"], width=2, state="hidden")
         self._items["record_start_label"] = self.create_text(0, 0, anchor="se", text="", fill=p["text"], font=("Consolas", 7), state="hidden")
@@ -270,6 +272,39 @@ class ProfessionalTimeline(tk.Canvas):
     def redraw(self) -> None:
         self.request_render(force=True)
 
+    def animate_return_to_live(self) -> None:
+        """Ease the detail ruler from the frozen frame back to live media."""
+        if self.model is None:
+            self.detail_center_ns = None
+            return
+        self._animated_playhead_ns = int(self.model.playhead_ns)
+        if self._return_animation_job is not None:
+            try:
+                self.after_cancel(self._return_animation_job)
+            except tk.TclError:
+                pass
+        self._return_animation_step()
+
+    def _return_animation_step(self) -> None:
+        self._return_animation_job = None
+        if self.model is None or self._animated_playhead_ns is None:
+            self._animated_playhead_ns = None
+            self.request_render(force=True)
+            return
+        target = int(self.model.playhead_ns)
+        current = self._animated_playhead_ns
+        remaining = target - current
+        if abs(remaining) <= 2_000_000:
+            self._animated_playhead_ns = None
+            self.request_render(force=True)
+            return
+        self._animated_playhead_ns = int(current + remaining * .24)
+        self.request_render(force=True)
+        try:
+            self._return_animation_job = self.after(16, self._return_animation_step)
+        except tk.TclError:
+            self._animated_playhead_ns = None
+
     def _on_configure(self, event) -> None:
         size = (event.width, event.height)
         if size != self._last_size:
@@ -313,7 +348,7 @@ class ProfessionalTimeline(tk.Canvas):
             self._hide_pools()
             return
 
-        playhead = model.playhead_ns
+        playhead = self._animated_playhead_ns if self._animated_playhead_ns is not None else model.playhead_ns
         detail_start, detail_end = centered_window(playhead, self.detail_seconds)
         rel = (playhead - model.reference_ns) / 1e9
         mode_text = tr(self.language, "timeline.live_buffer") if model.is_live else (tr(self.language, "timeline.attempt_review") if model.freeze_ns is not None else tr(self.language, "timeline.buffer_review"))

@@ -56,6 +56,11 @@ def test_first_available_camera_prefers_camera_zero_and_waits_for_probe_results(
     assert first_available_camera({0: False, 1: None}) is None
 
 
+def test_camera_waiting_message_uses_file_loading_copy_for_file_sources():
+    file_source = camera_waiting_messages(Translator("en"), "file", 0, False)
+    assert file_source == ("Loading file source", "Opening the selected video file…")
+
+
 def test_board_target_formats_numeric_athlete_number():
     assert Translator("en")("board.target", athlete=7, attempt=1, limit=3) == "Athlete #07  ·  Attempt 1/3"
     assert Translator("cs")("board.target", athlete=7, attempt=1, limit=3) == "Závodník #07  ·  Pokus 1/3"

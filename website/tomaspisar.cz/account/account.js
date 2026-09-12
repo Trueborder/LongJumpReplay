@@ -9,6 +9,7 @@
   const $ = (selector) => document.querySelector(selector);
   const copy = {
     en: {
+      expiredCode: 'This code has expired. Request a new one.', verified: 'Verified. Opening your account…',
       sending: 'Sending code…', checking: 'Checking code…', sent: 'A code is on the way. It is valid for 10 minutes.',
       invalidEmail: 'Enter a valid email address.', invalidCode: 'Enter the six-digit code from your email.',
       genericError: 'Something went wrong. Please try again.', noDevices: 'No activated computers.',
@@ -27,6 +28,7 @@
       method: 'Method', lastActive: 'Last active', actions: 'Actions', details: 'Details', delete: 'Delete', emailMethod: 'Email', keyMethod: 'Key'
     },
     cs: {
+      expiredCode: 'Kód vypršel. Požádejte o nový.', verified: 'Ověřeno. Otevírám účet…',
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
       invalidEmail: 'Zadejte platnou e-mailovou adresu.', invalidCode: 'Zadejte šestimístný kód z e-mailu.',
       genericError: 'Něco se nepodařilo. Zkuste to znovu.', noDevices: 'Žádné aktivované počítače.',
@@ -124,12 +126,33 @@
       try {
         await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
         state.codeSent = true;
+        $('#email-step').hidden = true;
         $('#code-field').hidden = false;
-        $('#login-submit').textContent = state.lang === 'cs' ? 'Přihlásit' : 'Sign in';
+        $('#change-email').hidden = false;
+        $('#resend-code').hidden = false;
+        $('#login-submit').textContent = state.lang === 'cs' ? 'Ověřit kód' : 'Verify code';
         setStatus(t('sent'), '#login-status');
         $('#code').focus();
       } catch (error) { setStatus(error.message, '#login-status'); }
       finally { setLoginBusy(false); }
+    };
+
+    const changeEmail = () => {
+      state.codeSent = false;
+      $('#email-step').hidden = false;
+      $('#code-field').hidden = true;
+      $('#change-email').hidden = true;
+      $('#resend-code').hidden = true;
+      $('#login-submit').textContent = state.lang === 'cs' ? 'PokraÄovat' : 'Continue';
+      $('#code').value = '';
+      setStatus('', '#login-status');
+      $('#email').focus();
+    };
+
+    const resendCode = () => {
+      if (!state.email) return changeEmail();
+      $('#email').value = state.email;
+      requestCode();
     };
 
     const verifyCode = async () => {
@@ -139,11 +162,19 @@
       setLoginBusy(true);
       try {
         await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) });
-        window.location.replace('/dashboard/overview');
-      } catch (error) { setStatus(error.message, '#login-status'); }
+        setStatus(t('verified'), '#login-status');
+        window.setTimeout(() => window.location.replace('/dashboard/overview'), 180);
+      } catch (error) {
+        const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired');
+        setStatus(expired ? t('expiredCode') : error.message, '#login-status');
+        $('#code').setAttribute('aria-invalid', 'true');
+      }
       finally { setLoginBusy(false); }
     };
 
+    $('#change-email').addEventListener('click', changeEmail);
+    $('#resend-code').addEventListener('click', resendCode);
+    $('#code').addEventListener('input', () => $('#code').removeAttribute('aria-invalid'));
     form.addEventListener('submit', (event) => { event.preventDefault(); state.codeSent ? verifyCode() : requestCode(); });
     api('/api/portal/account').then(() => window.location.replace('/dashboard/overview')).catch(() => $('#email').focus());
   };

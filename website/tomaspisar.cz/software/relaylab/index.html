@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="RelayLab calculates a medley relay lineup from public Czech Swimming results.">
+  <link rel="canonical" href="https://tomaspisar.cz/software/relaylab/">
+  <meta property="og:title" content="RelayLab — Medley relay optimizer">
+  <meta property="og:description" content="Build a medley relay lineup from official swimming results.">
+  <meta property="og:type" content="website">
+  <title>RelayLab — Medley relay optimizer</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/overrides.css">
+  <link rel="stylesheet" href="/software/relaylab/relaylab.css">
+</head>
+<body>
+  <a class="skip-link" href="#main" data-ui="skip">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="/"><span class="brand-mark">TP</span><span>Tomáš Pisár<small>Software / Development</small></span></a>
+    <button class="menu-toggle" data-menu-toggle type="button" aria-label="Open menu"></button>
+    <nav class="main-nav" aria-label="Primary navigation">
+      <a href="/software/" data-ui="software">Software</a><a href="/download/" data-ui="downloads">Downloads</a><a href="/about/" data-ui="about">About</a><a href="/contact/" data-ui="contact">Contact</a><a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="Účet">Account</a>
+    </nav>
+    <div class="header-actions"><button class="language-button" data-lang-toggle data-lang-label type="button">CZ</button></div>
+  </header>
+
+  <main id="main" class="relaylab-page">
+    <section class="relaylab-workspace relaylab-shell" aria-labelledby="workspace-title">
+      <div class="workspace-heading"><div><p class="relaylab-kicker">01 / TEAM BUILDER</p><h1 id="workspace-title" data-en="Team builder." data-cs="Sestavení týmu.">Team builder.</h1></div><p class="workspace-note" data-en="Add four or more swimmers. RelayLab will never assign one swimmer twice." data-cs="Přidejte čtyři nebo více plavců. RelayLab nikdy nepřiřadí jednoho plavce dvakrát.">Add four or more swimmers. RelayLab will never assign one swimmer twice.</p></div>
+      <div class="workspace-grid">
+        <section class="squad-panel panel" aria-labelledby="squad-title">
+          <div class="panel-header"><div><span class="panel-index">A</span><h2 id="squad-title" data-en="Add swimmers" data-cs="Přidat plavce">Add swimmers</h2></div><span class="count-badge" id="squad-count">0 / 16</span></div>
+          <label class="field-label" for="swimmer-search" data-en="Search swimmer" data-cs="Hledat plavce">Search swimmer</label>
+          <div class="search-wrap"><span class="search-icon" aria-hidden="true"></span><input id="swimmer-search" type="search" autocomplete="off" spellcheck="false" placeholder="Name, swimmer number, or profile URL" data-placeholder-en="Name, swimmer number, or profile URL" data-placeholder-cs="Jméno, číslo plavce nebo URL profilu" aria-describedby="search-help" aria-controls="suggestions" aria-expanded="false"><span class="search-spinner" id="search-spinner" aria-hidden="true"></span><ul class="suggestions" id="suggestions" role="listbox" hidden></ul></div>
+          <p class="field-help" id="search-help" data-en="Type a name for suggestions, or paste a swimmer number/profile URL and press Enter." data-cs="Napište jméno pro návrhy, nebo vložte číslo plavce či URL profilu a stiskněte Enter.">Type a name for suggestions, or paste a swimmer number/profile URL and press Enter.</p>
+          <div class="squad-list" id="squad-list"><div class="empty-squad" id="empty-squad"><span class="empty-mark" aria-hidden="true">+</span><p data-en="Your relay starts here." data-cs="Vaše štafeta začíná zde.">Your relay starts here.</p><small data-en="Search above to add the first swimmer." data-cs="Prvního plavce přidejte vyhledáním výše.">Search above to add the first swimmer.</small></div></div>
+          <button class="unregistered-button" id="open-unregistered" type="button"><span aria-hidden="true">+</span><span data-en="Add unregistered swimmer" data-cs="Přidat neregistrovaného plavce">Add unregistered swimmer</span></button>
+        </section>
+
+        <section class="settings-panel panel" aria-labelledby="settings-title">
+          <div class="panel-header"><div><span class="panel-index">B</span><h2 id="settings-title" data-en="Relay brief" data-cs="Zadání štafety">Relay brief</h2></div><span class="brief-state" data-en="Editable" data-cs="Upravitelné">Editable</span></div>
+          <fieldset class="setting-group distance-group"><legend data-en="Distance" data-cs="Délka">Distance</legend><div class="segmented"><label><input type="radio" name="distance" value="25"><span>4 × 25</span></label><label><input type="radio" name="distance" value="50" checked><span>4 × 50</span></label><label><input type="radio" name="distance" value="100"><span>4 × 100</span></label></div></fieldset>
+          <fieldset class="setting-group"><legend data-en="Pool length" data-cs="Délka bazénu">Pool length</legend><div class="segmented"><label><input type="radio" name="pool" value="25" checked><span>25 m</span></label><label><input type="radio" name="pool" value="50"><span>50 m</span></label></div></fieldset>
+          <label class="field-label" for="period" data-en="Performance period" data-cs="Období výkonů">Performance period</label><select id="period"><option value="last12" data-en="Last 12 months" data-cs="Posledních 12 měsíců">Last 12 months</option><option value="season" data-en="Current season" data-cs="Aktuální sezóna">Current season</option><option value="all" data-en="All time" data-cs="Všechny výsledky">All time</option><option value="custom" data-en="Custom dates" data-cs="Vlastní období">Custom dates</option></select>
+          <div class="custom-dates" id="custom-dates" hidden><div><label class="field-label" for="date-from" data-en="From" data-cs="Od">From</label><input id="date-from" type="date"></div><div><label class="field-label" for="date-to" data-en="To" data-cs="Do">To</label><input id="date-to" type="date"></div></div>
+          <label class="switch-row"><input id="include-relay" type="checkbox"><span class="switch" aria-hidden="true"></span><span><strong data-en="Include relay splits" data-cs="Zahrnout štafetové úseky">Include relay splits</strong><small data-en="Flying starts are shown as recorded." data-cs="Letmé starty se zobrazí tak, jak byly zaznamenány.">Flying starts are shown as recorded.</small></span></label>
+          <div class="brief-note"><span class="note-icon" aria-hidden="true">i</span><p data-en="The recommendation is a starting point. Check the lineup before submitting your relay." data-cs="Doporučení je výchozí bod. Před přihlášením štafety zkontrolujte sestavu.">The recommendation is a starting point. Check the lineup before submitting your relay.</p></div>
+          <button class="relaylab-calculate" id="calculate" type="button"><span data-en="Calculate lineup" data-cs="Spočítat sestavu">Calculate lineup</span><span class="button-arrow" aria-hidden="true">→</span></button>
+        </section>
+      </div>
+    </section>
+
+    <section class="relaylab-results relaylab-shell" id="results" aria-labelledby="results-title" hidden><div class="section-rule"></div><div class="results-heading"><div><p class="relaylab-kicker">02 / RECOMMENDATION</p><h2 id="results-title" data-en="Recommended lineup." data-cs="Doporučená sestava.">Recommended lineup.</h2></div><div class="total-readout"><span data-en="Projected total" data-cs="Odhadovaný součet">Projected total</span><strong id="best-total">—</strong></div></div><div id="result-warning" class="result-warning" hidden role="status"></div><div id="best-lineup" class="best-lineup"></div><div class="alternatives" id="alternatives"></div></section>
+  </main>
+  <dialog class="swimmer-dialog unregistered-dialog" id="unregistered-dialog" aria-labelledby="unregistered-title">
+    <header class="swimmer-dialog-header"><div><p class="relaylab-kicker">TEAM BUILDER</p><h2 id="unregistered-title" data-en="Unregistered swimmer" data-cs="Neregistrovaný plavec">Unregistered swimmer</h2><p data-en="Add a name and the four relay times." data-cs="Přidejte jméno a čtyři časy pro štafetu.">Add a name and the four relay times.</p></div><button class="swimmer-dialog-close" id="close-unregistered" type="button" aria-label="Close">×</button></header>
+    <form id="unregistered-form" class="unregistered-form" method="dialog">
+      <label class="field-label" for="unregistered-name" data-en="Swimmer name" data-cs="Jméno plavce">Swimmer name</label><input id="unregistered-name" name="name" type="text" required autocomplete="name" placeholder="Name">
+      <div class="unregistered-time-grid"><div><label class="field-label" for="unregistered-backstroke" data-en="Backstroke" data-cs="Znak">Backstroke</label><input id="unregistered-backstroke" name="backstroke" type="text" inputmode="decimal" placeholder="m:ss.cc" required></div><div><label class="field-label" for="unregistered-breaststroke" data-en="Breaststroke" data-cs="Prsa">Breaststroke</label><input id="unregistered-breaststroke" name="breaststroke" type="text" inputmode="decimal" placeholder="m:ss.cc" required></div><div><label class="field-label" for="unregistered-butterfly" data-en="Butterfly" data-cs="Motýlek">Butterfly</label><input id="unregistered-butterfly" name="butterfly" type="text" inputmode="decimal" placeholder="m:ss.cc" required></div><div><label class="field-label" for="unregistered-freestyle" data-en="Freestyle" data-cs="Volný způsob">Freestyle</label><input id="unregistered-freestyle" name="freestyle" type="text" inputmode="decimal" placeholder="m:ss.cc" required></div></div>
+      <p id="unregistered-error" class="unregistered-error" role="alert" hidden></p><button class="relaylab-calculate" type="submit"><span data-en="Add swimmer" data-cs="Přidat plavce">Add swimmer</span><span class="button-arrow" aria-hidden="true">→</span></button>
+    </form>
+  </dialog>
+  <dialog class="swimmer-dialog" id="swimmer-dialog" aria-labelledby="swimmer-dialog-title">
+    <header class="swimmer-dialog-header"><div><p class="relaylab-kicker">SWIMMER / TIMES</p><h2 id="swimmer-dialog-title">Swimmer</h2><p id="swimmer-dialog-meta"></p></div><button class="swimmer-dialog-close" id="close-swimmer-dialog" type="button" aria-label="Close">×</button></header>
+    <p id="swimmer-dialog-status" class="swimmer-dialog-status"></p>
+    <div class="swimmer-times-wrap"><table class="swimmer-times"><thead><tr><th data-en="Leg" data-cs="Úsek">Leg</th><th data-en="Time" data-cs="Čas">Time</th><th data-en="Date" data-cs="Datum">Date</th><th data-en="Pool" data-cs="Bazén">Pool</th><th data-en="Venue" data-cs="Místo">Venue</th></tr></thead><tbody id="swimmer-dialog-times"></tbody></table></div>
+    <footer class="swimmer-dialog-footer"><a id="swimmer-dialog-profile" href="#" target="_blank" rel="noopener noreferrer" data-en="Open official Czech Swimming profile ↗" data-cs="Otevřít oficiální profil ČSPS ↗">Open official Czech Swimming profile ↗</a></footer>
+  </dialog>
+  <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><span>RelayLab / <a href="https://vysledky.czechswimming.cz/" target="_blank" rel="noopener noreferrer">Czech Swimming ↗</a></span></footer>
+  <script src="/site.config.js"></script><script src="/script.js"></script><script src="/software/relaylab/relaylab-core.js"></script><script src="/software/relaylab/relaylab.js"></script>
+</body>
+</html>

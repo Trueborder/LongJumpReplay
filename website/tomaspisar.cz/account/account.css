@@ -71,6 +71,28 @@
   .account-panel { border-radius: 20px; }
 }
 
+/* Focused OTP composition: keep the existing product palette while making
+   the account action the clear centre of the page. */
+.portal-login-page .login-shell { width: min(980px, calc(100% - 2rem)); }
+.portal-login-page .account-login { position: relative; min-height: calc(100dvh - 7rem); padding-block: clamp(3rem, 8vw, 6rem); }
+.portal-login-page .account-login-grid { display: block; width: min(520px, 100%); margin: 0 auto; }
+.portal-login-page .login-context { position: absolute; inset: 11% 0 auto; z-index: 0; max-width: 900px; margin: 0 auto; text-align: center; opacity: .2; pointer-events: none; }
+.portal-login-page .login-context h1 { max-width: 900px; margin-inline: auto; font-size: clamp(3.2rem, 8vw, 6.6rem); }
+.portal-login-page .login-context .hero-lede, .portal-login-page .login-context details { display: none; }
+.portal-login-page .login-card { position: relative; z-index: 1; margin-top: clamp(5rem, 13vw, 9rem); background: color-mix(in srgb, var(--surface) 97%, transparent); box-shadow: 0 28px 90px color-mix(in srgb, var(--shadow) 90%, transparent); }
+.login-step-label { margin: 0 0 .55rem; color: var(--cyan); font: 500 .62rem var(--mono); letter-spacing: .1em; }
+.login-actions-secondary { display: flex; justify-content: space-between; gap: 1rem; min-height: 2.5rem; padding-top: .55rem; }
+.login-actions-secondary .text-button[hidden] { display: none; }
+.portal-login-page .login-card input[aria-invalid="true"] { border-color: var(--coral); box-shadow: 0 0 0 4px color-mix(in srgb, var(--coral) 14%, transparent); }
+.portal-login-page .login-card .status { min-height: 2.2em; }
+
+@media (max-width: 650px) {
+  .portal-login-page .login-shell { width: calc(100% - 1.5rem); }
+  .portal-login-page .login-context { inset: 7% 0 auto; }
+  .portal-login-page .login-card { margin-top: 6.4rem; }
+  .login-actions-secondary { align-items: flex-start; }
+}
+
 /* Portal routes: /login and /dashboard */
 .portal-login-page .account-login { min-height: calc(100dvh - 7rem); }
 .panel-heading { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }

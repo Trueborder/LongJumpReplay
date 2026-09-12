@@ -40,11 +40,13 @@ class AttemptManager:
         export_config: ExportConfig,
         cache_directory: Path,
         event_queue: Queue[tuple[str, object]],
+        persistent_directory: Path | None = None,
     ) -> None:
         self.ring_buffer = ring_buffer
         self.config = config
         self.export_config = export_config
         self.cache_directory = cache_directory
+        self.persistent_directory = persistent_directory or cache_directory / "recordings"
         self.event_queue = event_queue
         self._lock = RLock()
         self._attempts: list[AttemptSession] = []
@@ -112,7 +114,7 @@ class AttemptManager:
                 freeze_timestamp_ns=last.timestamp_ns,
                 pre_seconds=0.0,
                 post_seconds=0.0,
-                expires_at_wall_time=now + self.config.retention_minutes * 60,
+                expires_at_wall_time=float("inf"),
                 state=AttemptState.ENCODING,
                 packets=list(packets),
                 frame_count=len(packets),
@@ -132,6 +134,7 @@ class AttemptManager:
                 competitor_number=competitor_number,
                 competitor_attempt_number=competitor_attempt_number,
                 competition_phase=competition_phase,
+                persistent=True,
             )
             self._next_id += 1
             self._attempts.append(attempt)
@@ -142,6 +145,15 @@ class AttemptManager:
 
     def start(self) -> None:
         self.cache_directory.mkdir(parents=True, exist_ok=True)
+        self.persistent_directory.mkdir(parents=True, exist_ok=True)
+        incomplete = self.persistent_directory / ".incomplete"
+        if incomplete.exists():
+            for path in incomplete.glob("recording_*.*"):
+                if path.is_file():
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
         self._recover_cache_index()
         self._stop.clear()
         self._thread = Thread(target=self._loop, name="attempt-manager", daemon=True)
@@ -153,7 +165,7 @@ class AttemptManager:
         if self._thread and self._thread.is_alive():
             self._thread.join(max(.0, deadline - time.perf_counter()))
         with self._lock:
-            self._cancelled_attempt_ids.update(a.attempt_id for a in self._attempts)
+            self._cancelled_attempt_ids.update(a.attempt_id for a in self._attempts if not a.persistent)
             workers = list(self._workers.items())
             for cap in self._video_caps.values():
                 cap.release()
@@ -407,6 +419,17 @@ class AttemptManager:
         self.event_queue.put(("takeoff_candidate", (attempt_id, attempt.takeoff_candidate_index, attempt.takeoff_confidence)))
         return True
 
+    def set_thumbnail_frame(self, attempt_id: int, frame_index: int) -> bool:
+        """Persist the operator's preferred library thumbnail frame."""
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or attempt.frame_count <= 0:
+                return False
+            attempt.thumbnail_frame_index = max(0, min(attempt.frame_count - 1, int(frame_index)))
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
     def clear_all(self) -> int:
         """Remove every temporary attempt, including selected records.
 
@@ -414,14 +437,17 @@ class AttemptManager:
         cancelled, so any late output is deleted instead of reappearing.
         """
         with self._lock:
-            attempts = list(self._attempts)
-            self._cancelled_attempt_ids.update(a.attempt_id for a in attempts)
-            self._pending_exports.clear()
-            for cap in self._video_caps.values():
-                cap.release()
-            self._video_caps.clear()
-            self._frame_cache.clear()
-            self._attempts.clear()
+            attempts = [a for a in self._attempts if not a.persistent]
+            attempt_ids = {a.attempt_id for a in attempts}
+            self._cancelled_attempt_ids.update(attempt_ids)
+            for attempt_id in attempt_ids:
+                self._pending_exports.pop(attempt_id, None)
+                cap = self._video_caps.pop(attempt_id, None)
+                if cap is not None:
+                    cap.release()
+                self._frame_cache.pop(attempt_id, None)
+                self._video_next_index.pop(attempt_id, None)
+            self._attempts = [a for a in self._attempts if a.persistent]
             for attempt in attempts:
                 for path in (attempt.temp_video_path, attempt.temp_metadata_path):
                     if path:
@@ -445,7 +471,7 @@ class AttemptManager:
 
     def _clear_matching(self, predicate) -> int:
         with self._lock:
-            targets = [attempt for attempt in self._attempts if predicate(attempt)]
+            targets = [attempt for attempt in self._attempts if not attempt.persistent and predicate(attempt)]
             if not targets:
                 return 0
             target_ids = {attempt.attempt_id for attempt in targets}
@@ -627,14 +653,30 @@ class AttemptManager:
         worker.start()
 
     def _encode_attempt(self, attempt_id: int, packets: list[FramePacket]) -> None:
+        staging_directory: Path | None = None
         try:
+            with self._lock:
+                attempt = self._find_locked(attempt_id)
+                persistent = bool(attempt and attempt.persistent)
+            output_directory = self.persistent_directory if persistent else self.cache_directory
+            base_name = f"recording_{attempt_id:04d}" if persistent else f"attempt_{attempt_id:04d}"
+            if persistent:
+                # Encode away from the visible library. A crash or cancelled
+                # worker can therefore leave no half-written recording item.
+                staging_directory = self.persistent_directory / ".incomplete"
+                staging_directory.mkdir(parents=True, exist_ok=True)
+                output_directory = staging_directory
             result = export_clip(
                 packets,
-                self.cache_directory,
+                output_directory,
                 preferred_codec=self.config.temp_codec,
                 write_sidecar_json=False,
-                base_name=f"attempt_{attempt_id:04d}",
+                base_name=base_name,
             )
+            if persistent:
+                final_video = self.persistent_directory / result.video_path.name
+                result.video_path.replace(final_video)
+                result = replace(result, video_path=final_video)
             with self._lock:
                 attempt = self._find_locked(attempt_id)
                 if attempt is None or attempt_id in self._cancelled_attempt_ids:
@@ -643,7 +685,7 @@ class AttemptManager:
                     if result.sidecar_path: result.sidecar_path.unlink(missing_ok=True)
                     return
                 attempt.temp_video_path = result.video_path
-                attempt.temp_metadata_path = result.sidecar_path
+                attempt.temp_metadata_path = None
                 attempt.frame_count = result.frame_count
                 attempt.fps = result.fps
                 attempt.state = AttemptState.READY
@@ -662,6 +704,13 @@ class AttemptManager:
                     attempt.state, attempt.error = AttemptState.ERROR, str(exc)
             self.event_queue.put(("attempt_error", (attempt_id, str(exc))))
         finally:
+            if staging_directory is not None:
+                try:
+                    for path in staging_directory.glob("recording_*.*"):
+                        if path.is_file():
+                            path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             with self._lock:
                 self._workers.pop(f"attempt-encode-{attempt_id}", None)
 
@@ -719,7 +768,7 @@ class AttemptManager:
     def _cleanup(self) -> None:
         now = time.time()
         with self._lock:
-            expired = [a for a in self._attempts if a.expires_at_wall_time <= now and not a.selected and not a.protected and a.state not in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING}]
+            expired = [a for a in self._attempts if not a.persistent and a.expires_at_wall_time <= now and not a.selected and not a.protected and a.state not in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING}]
             for attempt in expired:
                 self._delete_locked(attempt)
                 self.event_queue.put(("attempt_deleted", attempt.attempt_id))
@@ -727,7 +776,7 @@ class AttemptManager:
 
     def _enforce_limits_locked(self) -> None:
         def removable() -> Iterable[AttemptSession]:
-            return (a for a in self._attempts if not a.selected and not a.protected and a.state not in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING})
+            return (a for a in self._attempts if not a.persistent and not a.selected and not a.protected and a.state not in {AttemptState.COLLECTING, AttemptState.ENCODING, AttemptState.EXPORTING})
         while len(self._attempts) > self.config.max_attempts:
             victim = next(iter(removable()), None)
             if victim is None: break
@@ -766,7 +815,8 @@ class AttemptManager:
         return copy
 
     def _write_metadata_locked(self, attempt: AttemptSession) -> None:
-        path = self.cache_directory / f"attempt_{attempt.attempt_id:04d}.session.json"
+        directory = self.persistent_directory if attempt.persistent else self.cache_directory
+        path = directory / (f"recording_{attempt.attempt_id:04d}.session.json" if attempt.persistent else f"attempt_{attempt.attempt_id:04d}.session.json")
         data = {
             "attempt_id": attempt.attempt_id,
             "created_wall_time": attempt.created_wall_time,
@@ -775,6 +825,7 @@ class AttemptManager:
             "post_seconds": attempt.post_seconds,
             "expires_at_wall_time": attempt.expires_at_wall_time,
             "state": attempt.state.value,
+            "persistent": attempt.persistent,
             "decision": attempt.decision.value,
             "decision_wall_time": attempt.decision_wall_time,
             "competitor_group": attempt.competitor_group,
@@ -789,6 +840,7 @@ class AttemptManager:
             "fps": attempt.fps,
             "frame_count": attempt.frame_count,
             "freeze_frame_index": attempt.freeze_frame_index,
+            "thumbnail_frame_index": attempt.thumbnail_frame_index,
             "takeoff_candidate_index": attempt.takeoff_candidate_index,
             "takeoff_confidence": attempt.takeoff_confidence,
             "takeoff_analysis_start_ns": attempt.takeoff_analysis_start_ns,
@@ -816,57 +868,78 @@ class AttemptManager:
     def _recover_cache_index(self) -> None:
         # Sessions from a previous crash remain useful until their recorded expiry.
         now = time.time()
-        for path in sorted(self.cache_directory.glob("attempt_*.session.json")):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if float(data.get("expires_at_wall_time", 0)) <= now:
-                    path.unlink(missing_ok=True)
-                    video_name = data.get("video")
-                    if video_name: (self.cache_directory / video_name).unlink(missing_ok=True)
-                    continue
+        sources = [(self.cache_directory, False)]
+        if self.persistent_directory.resolve() != self.cache_directory.resolve():
+            sources.append((self.persistent_directory, True))
+        for directory, persistent in sources:
+            directory.mkdir(parents=True, exist_ok=True)
+            for path in sorted(directory.glob("*.session.json")):
+                self._recover_session(path, directory, persistent, now)
+
+    def _recover_session(self, path: Path, directory: Path, persistent: bool, now: float) -> None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            expires = float(data.get("expires_at_wall_time", 0))
+            if not persistent and expires <= now:
+                path.unlink(missing_ok=True)
                 video_name = data.get("video")
-                video_path = self.cache_directory / video_name if video_name else None
-                if not video_path or not video_path.exists():
-                    continue
-                attempt = AttemptSession(
-                    attempt_id=int(data["attempt_id"]),
-                    created_monotonic_ns=0,
-                    created_wall_time=float(data["created_wall_time"]),
-                    freeze_timestamp_ns=int(data["freeze_timestamp_ns"]),
-                    pre_seconds=float(data["pre_seconds"]),
-                    post_seconds=float(data["post_seconds"]),
-                    expires_at_wall_time=float(data["expires_at_wall_time"]),
-                    state=AttemptState.READY,
-                    decision=AttemptDecision(data.get("decision", "Not decided").replace("Pending", "Not decided")),
-                    decision_wall_time=float(data.get("decision_wall_time", 0.0)),
-                    competitor_group=str(data.get("competitor_group", "")),
-                    competitor_number=int(data.get("competitor_number", 0)),
-                    competitor_attempt_number=int(data.get("competitor_attempt_number", 0)),
-                    competition_phase=str(data.get("competition_phase", "qualification")),
-                    rotation_completed=bool(data.get("rotation_completed", False)),
-                    counts_for_rotation=bool(data.get("counts_for_rotation", True)),
-                    quality_warning=str(data.get("quality_warning", "")),
-                    adjudication_record_id=str(data.get("adjudication_record_id", "")),
-                    temp_video_path=video_path,
-                    temp_metadata_path=path,
-                    fps=float(data["fps"]),
-                    frame_count=int(data["frame_count"]),
-                    freeze_frame_index=int(data["freeze_frame_index"]),
-                    takeoff_candidate_index=data.get("takeoff_candidate_index"),
-                    takeoff_confidence=float(data.get("takeoff_confidence", 0.0)),
-                    takeoff_analysis_start_ns=int(data["takeoff_analysis_start_ns"]) if data.get("takeoff_analysis_start_ns") is not None else None,
-                    takeoff_analysis_end_ns=int(data["takeoff_analysis_end_ns"]) if data.get("takeoff_analysis_end_ns") is not None else None,
-                    width=int(data.get("width", 0)),
-                    height=int(data.get("height", 0)),
-                    media_start_timestamp_ns=int(data.get("media_start_timestamp_ns", 0)),
-                    media_end_timestamp_ns=int(data.get("media_end_timestamp_ns", 0)),
-                    media_start_wall_time_ns=int(data.get("media_start_wall_time_ns", 0)),
-                    markers=[AttemptMarker(int(m["timestamp_ns"]), str(m.get("label", "Marker"))) for m in data.get("markers", [])],
-                    export_path=Path(data["export_path"]) if data.get("export_path") else None,
-                    evidence_raw_path=Path(data["evidence_raw_path"]) if data.get("evidence_raw_path") else None,
-                    evidence_annotated_path=Path(data["evidence_annotated_path"]) if data.get("evidence_annotated_path") else None,
-                )
-                self._attempts.append(attempt)
-                self._next_id = max(self._next_id, attempt.attempt_id + 1)
-            except Exception:
-                continue
+                if video_name:
+                    (directory / video_name).unlink(missing_ok=True)
+                return
+            video_name = data.get("video")
+            video_path = directory / video_name if video_name else None
+            if not video_path or not video_path.exists():
+                # A persistent session file with no finished media is an
+                # interrupted recording marker, not a playable library item.
+                # Remove only that orphan marker; never touch unrelated files.
+                if persistent:
+                    path.unlink(missing_ok=True)
+                return
+            attempt = AttemptSession(
+                attempt_id=int(data["attempt_id"]),
+                created_monotonic_ns=0,
+                created_wall_time=float(data["created_wall_time"]),
+                freeze_timestamp_ns=int(data["freeze_timestamp_ns"]),
+                pre_seconds=float(data["pre_seconds"]),
+                post_seconds=float(data["post_seconds"]),
+                expires_at_wall_time=expires,
+                state=AttemptState.READY,
+                decision=AttemptDecision(data.get("decision", "Not decided").replace("Pending", "Not decided")),
+                decision_wall_time=float(data.get("decision_wall_time", 0.0)),
+                competitor_group=str(data.get("competitor_group", "")),
+                competitor_number=int(data.get("competitor_number", 0)),
+                competitor_attempt_number=int(data.get("competitor_attempt_number", 0)),
+                competition_phase=str(data.get("competition_phase", "qualification")),
+                persistent=bool(data.get("persistent", persistent)),
+                rotation_completed=bool(data.get("rotation_completed", False)),
+                counts_for_rotation=bool(data.get("counts_for_rotation", True)),
+                quality_warning=str(data.get("quality_warning", "")),
+                adjudication_record_id=str(data.get("adjudication_record_id", "")),
+                temp_video_path=video_path,
+                temp_metadata_path=path,
+                fps=float(data["fps"]),
+                frame_count=int(data["frame_count"]),
+                freeze_frame_index=int(data["freeze_frame_index"]),
+                thumbnail_frame_index=(
+                    int(data["thumbnail_frame_index"])
+                    if data.get("thumbnail_frame_index") is not None
+                    else None
+                ),
+                takeoff_candidate_index=data.get("takeoff_candidate_index"),
+                takeoff_confidence=float(data.get("takeoff_confidence", 0.0)),
+                takeoff_analysis_start_ns=int(data["takeoff_analysis_start_ns"]) if data.get("takeoff_analysis_start_ns") is not None else None,
+                takeoff_analysis_end_ns=int(data["takeoff_analysis_end_ns"]) if data.get("takeoff_analysis_end_ns") is not None else None,
+                width=int(data.get("width", 0)),
+                height=int(data.get("height", 0)),
+                media_start_timestamp_ns=int(data.get("media_start_timestamp_ns", 0)),
+                media_end_timestamp_ns=int(data.get("media_end_timestamp_ns", 0)),
+                media_start_wall_time_ns=int(data.get("media_start_wall_time_ns", 0)),
+                markers=[AttemptMarker(int(m["timestamp_ns"]), str(m.get("label", "Marker"))) for m in data.get("markers", [])],
+                export_path=Path(data["export_path"]) if data.get("export_path") else None,
+                evidence_raw_path=Path(data["evidence_raw_path"]) if data.get("evidence_raw_path") else None,
+                evidence_annotated_path=Path(data["evidence_annotated_path"]) if data.get("evidence_annotated_path") else None,
+            )
+            self._attempts.append(attempt)
+            self._next_id = max(self._next_id, attempt.attempt_id + 1)
+        except Exception:
+            return

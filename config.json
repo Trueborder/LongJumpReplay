@@ -1,15 +1,15 @@
 {
   "general": {
-    "language": "cs",
+    "language": "en",
     "confirm_destructive_actions": false,
     "show_tooltips": true,
     "onboarding_completed": true,
-    "progress_details_expanded": false,
+    "progress_details_expanded": true,
     "recording_mode_prompted": true
   },
   "camera": {
     "source_type": "file",
-    "device_index": 1,
+    "device_index": 0,
     "file_path": "C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
     "width": 1280,
     "height": 720,
@@ -38,6 +38,7 @@
     "max_attempts": 24,
     "max_cache_gb": 4.0,
     "cache_directory": "cache",
+    "recordings_directory": "recordings",
     "temp_codec": "mp4v",
     "auto_select_new": true
   },
@@ -45,7 +46,7 @@
     "duration_seconds": 60
   },
   "competition": {
-    "enabled": false,
+    "enabled": true,
     "decision_controls_enabled": true,
     "require_decision_before_continue": false,
     "default_decision": "Not decided",
@@ -76,7 +77,7 @@
     "final_round_enabled": true,
     "finalists_count": 8,
     "final_attempts": 3,
-    "final_order": "manual",
+    "final_order": "reverse",
     "finalist_numbers_by_group": {
       "Boys": [],
       "Girls": []
@@ -107,18 +108,18 @@
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
     "attempts_panel_width": 502,
-    "timeline_height": 225,
+    "timeline_height": 164,
     "guide_enabled": false,
-    "guide_x_ratio": 0.8387097120285034,
-    "guide_y_ratio": 0.4556451439857483,
-    "guide_angle_deg": 5.478636681430089,
+    "guide_x_ratio": 0.8225806355476379,
+    "guide_y_ratio": 0.29569894075393677,
+    "guide_angle_deg": 6.091106143098891,
     "guide_width_px": 10,
     "board_roi_enabled": true,
-    "board_roi_x": 0.2815726101398468,
+    "board_roi_x": 0.3753226101398468,
     "board_roi_y": 0.0,
-    "board_roi_width": 0.7184274196624756,
-    "board_roi_height": 0.9315770864486694,
-    "board_roi_visible": false,
+    "board_roi_width": 0.6246774196624756,
+    "board_roi_height": 0.6143727898597717,
+    "board_roi_visible": true,
     "comparison_enabled": true,
     "comparison_offset_frames": 1,
     "remember_geometry": true,
@@ -159,51 +160,51 @@
     "enabled": true,
     "board_corners": [
       [
-        0.6239919662475586,
+        0.6229838728904724,
         0.01344086043536663
       ],
       [
-        0.8477822542190552,
-        0.0026881720405071974
+        0.8558467626571655,
+        0.011648746207356453
       ],
       [
-        0.9959677457809448,
-        0.8915770649909973
+        0.9994640350341797,
+        0.572670042514801
       ],
       [
-        0.32157260179519653,
-        0.8342293500900269
+        0.41532260179519653,
+        0.5743727684020996
       ]
     ],
     "foul_line": [
       [
-        0.7958669662475586,
-        0.008960573002696037
+        0.7928427457809448,
+        0.017025088891386986
       ],
       [
-        0.8815524578094482,
-        0.9023297429084778
+        0.852318525314331,
+        0.5743727684020996
       ]
     ],
     "foul_area": [
       [
-        0.7590725421905518,
-        0.0008960573468357325
+        0.7580645084381104,
+        0.017025088891386986
       ],
       [
-        0.7681452035903931,
-        0.9130824208259583
+        0.7641128897666931,
+        0.5743727684020996
       ],
       [
-        0.9949597120285034,
-        0.8915770649909973
+        0.940524160861969,
+        0.5743727684020996
       ],
       [
-        0.8326613306999207,
+        0.8276209235191345,
         0.017025088891386986
       ]
     ],
-    "camera_signature": "file|1|DSHOW|MJPG|C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
+    "camera_signature": "file|0|DSHOW|MJPG|C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
     "reference_width": 1920,
     "reference_height": 1080,
     "pad_length_cm": 120.1,
@@ -250,7 +251,8 @@
       "toggle_guide": "g",
       "toggle_comparison": "c",
       "start_competition_wizard": "Control-n",
-      "timer_toggle": ""
+      "timer_toggle": "",
+      "open_top_view": "Return"
     }
   },
   "shuttle": {

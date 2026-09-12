@@ -272,3 +272,22 @@ def test_startup_check_does_not_contact_server_without_authorization(monkeypatch
 
 def test_customer_portal_url_opens_the_dedicated_login_route():
     assert activation.PORTAL_LOGIN_URL == "https://account.tomaspisar.cz/login"
+
+
+def test_authorization_permits_supports_future_feature_entitlements(monkeypatch):
+    monkeypatch.setattr(
+        activation,
+        "current_authorization",
+        lambda: (True, "authorization.accepted", {"features": ["takeoff_assist"]}),
+    )
+    assert activation.authorization_permits("takeoff_assist")
+    assert not activation.authorization_permits("future_feature")
+
+
+def test_authorization_permits_keeps_legacy_paid_grants_compatible(monkeypatch):
+    monkeypatch.setattr(
+        activation,
+        "current_authorization",
+        lambda: (True, "authorization.accepted", {"license_id": "legacy"}),
+    )
+    assert activation.authorization_permits("takeoff_assist")

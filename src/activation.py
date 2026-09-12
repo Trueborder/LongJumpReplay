@@ -280,6 +280,25 @@ def authorization_details() -> tuple[bool, str, dict[str, object] | None, int | 
     return valid, reason, payload, last_successful_check()
 
 
+def authorization_permits(feature: str) -> bool:
+    """Check a paid feature while remaining compatible with older grants.
+
+    Current paid grants are product-wide. A future grant may include a
+    ``features`` list (for example ``takeoff_assist`` for Pro); accepting the
+    absent field preserves existing customers while making entitlement checks
+    feature-based instead of executable-based.
+    """
+    valid, _reason, payload = current_authorization()
+    if not valid or not payload:
+        return False
+    features = payload.get("features")
+    if features is None:
+        return True
+    if isinstance(features, (list, tuple, set, frozenset)):
+        return feature in {str(value) for value in features}
+    return False
+
+
 def check_startup_authorization(
     opener: Callable[..., Any] = urlopen,
 ) -> StartupAuthorizationCheck:

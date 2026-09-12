@@ -323,7 +323,7 @@ class BoardCalibrationWizard:
         if len(self.board) != 4 or len(self.foul_area) != 4:
             return
         self.detect_button.pack_forget(); self.current_frame_button.pack_forget(); self.reset_button.pack_forget(); self.preview_button.pack_forget(); self.skip_button.pack_forget()
-        self.back_button.pack(side="left", padx=(0, 6)); self.confirm_button.pack(side="left")
+        self.confirm_button.pack(side="left", padx=(0, 6)); self.back_button.pack(side="left")
         self.status_var.set(self.t("calibration.preview_help"))
         self._render(preview=True)
 

@@ -87,6 +87,10 @@ class CompetitionSetupModel:
             c.keyboard_competition_controls = False
             return
         c.enabled = True
+        c.decision_controls_enabled = True
+        c.auto_advance_on_attempt_complete = True
+        c.show_competitor_selector = True
+        c.show_competition_board = True
         c.default_attempts_per_competitor = 3
         c.require_decision_before_continue = False
         c.next_athlete_overlay = True

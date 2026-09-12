@@ -15,6 +15,8 @@ from tkinter import ttk
 import uuid
 import webbrowser
 
+from .theme import center_popup
+
 
 def _run_background(
     window: tk.Misc,
@@ -244,6 +246,7 @@ def ensure_license_or_trial(
     status = refresh_trial_status()
     accepted = False
     dialog = tk.Toplevel(root)
+    center_popup(dialog)
     dialog.title(copy["title"])
     dialog.resizable(False, False)
     dialog.minsize(680, 0)
@@ -391,6 +394,7 @@ def ensure_license_or_trial(
     def show_key_activation() -> None:
         """Alternative activation using the reusable key from the portal."""
         key_dialog = tk.Toplevel(dialog)
+        center_popup(key_dialog)
         key_dialog.title(copy["key_title"])
         key_dialog.resizable(False, False)
         key_dialog.grab_set()

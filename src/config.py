@@ -44,7 +44,7 @@ DEFAULT_HOTKEYS = {
 _LOGGER = logging.getLogger(__name__)
 
 MIN_ATTEMPTS_PANEL_WIDTH = 220
-MIN_TIMELINE_HEIGHT = 100
+MIN_TIMELINE_HEIGHT = 150
 MAX_TIMELINE_HEIGHT = 500
 
 
@@ -96,6 +96,7 @@ class AttemptsConfig:
     max_attempts: int = 24
     max_cache_gb: float = 4.0
     cache_directory: str = "cache"
+    recordings_directory: str = "recordings"
     temp_codec: str = "mp4v"
     auto_select_new: bool = True
 
@@ -165,7 +166,7 @@ class DisplayConfig:
     show_capture_warnings: bool = True
     show_takeoff_assist_badge: bool = True
     attempts_panel_width: int = 360
-    timeline_height: int = 220
+    timeline_height: int = 164
     guide_enabled: bool = False
     guide_x_ratio: float = 0.5
     guide_y_ratio: float = 0.5

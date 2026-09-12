@@ -16,6 +16,43 @@
   const cfg = window.SITE_CONFIG || {};
   const product = cfg.products?.longJumpReplay || {};
 
+  // Product pages keep the global site navigation, then add a small local
+  // wayfinding row so downloads, licensing, and privacy stay in the product
+  // namespace instead of being mistaken for site-wide pages.
+  const productContext = location.pathname.startsWith('/software/relaylab/')
+    ? { name: 'RelayLab', route: '/software/relaylab/', links: [{ label: 'Overview', cs: 'Přehled', href: '/software/relaylab/' }] }
+    : location.pathname.startsWith('/software/longjumpreplay/')
+      ? { name: 'LongJumpReplay', route: '/software/longjumpreplay/', links: [
+          { label: 'Overview', cs: 'Přehled', href: '/software/longjumpreplay/' },
+          { label: 'Download', cs: 'Stažení', href: '/software/longjumpreplay/download/' },
+          { label: 'Licensing', cs: 'Licence', href: '/software/longjumpreplay/licensing/' },
+          { label: 'Privacy', cs: 'Soukromí', href: '/software/longjumpreplay/privacy/' }
+        ] }
+      : null;
+  if (productContext && !document.querySelector('[data-product-context]')) {
+    const header = document.querySelector('.site-header');
+    if (header) {
+      const context = document.createElement('nav');
+      context.className = 'product-context-nav';
+      context.dataset.productContext = '';
+      context.setAttribute('aria-label', `${productContext.name} navigation`);
+      const label = document.createElement('span');
+      label.className = 'product-context-name';
+      label.textContent = productContext.name;
+      context.append(label);
+      productContext.links.forEach(({ label: linkLabel, cs, href }) => {
+        const link = document.createElement('a');
+        link.href = href;
+        link.dataset.en = linkLabel;
+        link.dataset.cs = cs;
+        link.textContent = linkLabel;
+        if (location.pathname === href) link.setAttribute('aria-current', 'page');
+        context.append(link);
+      });
+      header.insertAdjacentElement('afterend', context);
+    }
+  }
+
   /* ---------------------------------------------------------------- cookies
      Language is stored in a first-party cookie so the choice follows the
      visitor across pages and survives a return visit.
@@ -97,9 +134,35 @@
     }
   });
 
+  // Keep footer structure consistent even though a few older pages have
+  // slightly different link sets. The shell gives the footer a clear identity
+  // area, navigation area, and controls area without duplicating HTML in every
+  // page template.
+  const footerShell = (footer) => {
+    let shell = footer.querySelector('[data-footer-shell]');
+    if (shell) return shell;
+    shell = document.createElement('div');
+    shell.className = 'site-footer-shell';
+    shell.dataset.footerShell = '';
+    const identity = document.createElement('div');
+    identity.className = 'site-footer-identity';
+    const links = document.createElement('nav');
+    links.className = 'site-footer-links';
+    links.setAttribute('aria-label', 'Footer');
+    const children = [...footer.children];
+    children.forEach((child, index) => (index < 2 ? identity : links).append(child));
+    shell.append(identity, links);
+    footer.append(shell);
+    return shell;
+  };
+
+  let showConsentBanner = () => {};
+
   document.querySelectorAll('.site-footer').forEach((footer) => {
+    const shell = footerShell(footer);
+    const links = shell.querySelector('.site-footer-links');
     const github = cfg.developer?.github;
-    if (!github || footer.querySelector('[data-github-link]')) return;
+    if (!github || links.querySelector('[data-github-link]')) return;
     const link = document.createElement('a');
     link.href = github;
     link.target = '_blank';
@@ -107,7 +170,7 @@
     link.dataset.githubLink = '';
     link.textContent = 'GitHub ↗';
     link.setAttribute('aria-label', 'GitHub profile');
-    footer.append(link);
+    links.append(link);
   });
 
   const ui = {
@@ -124,15 +187,17 @@
   };
 
   document.querySelectorAll('.site-footer').forEach((footer) => {
-    if (footer.querySelector('[data-cookie-settings]')) return;
+    const links = footer.querySelector('.site-footer-links') || footerShell(footer).querySelector('.site-footer-links');
+    if (links.querySelector('[data-cookie-settings]')) return;
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'cookie-settings-button';
+    button.className = 'cookie-settings-control';
     button.dataset.cookieSettings = '';
     button.dataset.ui = 'cookies';
+    button.setAttribute('aria-haspopup', 'dialog');
     button.textContent = 'Cookie settings';
     button.addEventListener('click', () => showConsentBanner(true));
-    footer.append(button);
+    links.append(button);
   });
 
   const menu = document.querySelector('[data-menu-toggle]');
@@ -414,14 +479,15 @@
     }
   };
 
-  const showConsentBanner = (force = false) => {
+  showConsentBanner = (force = false) => {
     if (!force && (consent === 'accepted' || consent === 'declined')) return;
-    document.querySelector('.cookie-banner')?.remove();
+    document.querySelector('.consent-dialog')?.remove();
     const copy = CONSENT_COPY[lang] || CONSENT_COPY.en;
 
-    const banner = document.createElement('section');
-    banner.className = 'cookie-banner';
-    banner.setAttribute('role', 'region');
+    const banner = document.createElement('dialog');
+    banner.className = 'consent-dialog';
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-modal', 'true');
     banner.setAttribute('aria-label', copy.label);
 
     const text = document.createElement('p');
@@ -433,7 +499,7 @@
     text.append(more);
 
     const actions = document.createElement('div');
-    actions.className = 'cookie-actions';
+    actions.className = 'consent-actions';
 
     const decide = (choice) => {
       consent = choice;
@@ -444,6 +510,7 @@
       } else {
         forgetPrefs();
       }
+      if (banner.open && typeof banner.close === 'function') banner.close();
       banner.remove();
     };
 
@@ -462,6 +529,8 @@
     actions.append(decline, accept);
     banner.append(text, actions);
     document.body.append(banner);
+    if (force && typeof banner.showModal === 'function') banner.showModal();
+    else banner.setAttribute('open', '');
     if (force) decline.focus();
   };
 

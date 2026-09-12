@@ -95,6 +95,38 @@ def test_explicit_recording_creates_marked_attempt(tmp_path, jpeg_frame):
     manager.stop()
 
 
+def test_explicit_recording_is_persistent_and_recovered(tmp_path, jpeg_frame):
+    jpeg, _ = jpeg_frame
+    ring = TimeRingBuffer(2, 128)
+    cache = tmp_path / "cache"
+    recordings = tmp_path / "recordings"
+    manager = AttemptManager(ring, AttemptsConfig(retention_minutes=1), ExportConfig(), cache, Queue(), recordings)
+    manager.start()
+    base = time.monotonic_ns()
+    wall = time.time_ns()
+    assert manager.start_recording()
+    for index in range(5):
+        manager.append_recording_packet(FramePacket(index, base + index * 20_000_000, jpeg, 160, 90, wall + index * 20_000_000))
+    attempt_id = manager.stop_recording("Boys", 2, 3)
+    assert attempt_id is not None
+    ready = _wait_for(manager, attempt_id, {AttemptState.READY, AttemptState.ERROR})
+    assert ready and ready.state is AttemptState.READY, ready.error if ready else "missing"
+    assert ready.persistent
+    assert ready.temp_video_path and ready.temp_video_path.parent == recordings
+    assert ready.temp_metadata_path and ready.temp_metadata_path.exists()
+    assert manager.clear_all() == 0
+    assert ready.temp_video_path.exists()
+    manager.stop()
+
+    recovered_manager = AttemptManager(ring, AttemptsConfig(), ExportConfig(), cache, Queue(), recordings)
+    recovered_manager.start()
+    recovered = recovered_manager.get_attempt(attempt_id)
+    assert recovered and recovered.persistent
+    assert recovered.temp_video_path and recovered.temp_video_path.exists()
+    assert recovered.duration_seconds > 0
+    recovered_manager.stop()
+
+
 def test_in_progress_attempt_cannot_be_deleted(tmp_path, jpeg_frame):
     jpeg, _ = jpeg_frame
     ring = TimeRingBuffer(2, 128)
@@ -189,6 +221,7 @@ def test_ready_attempt_is_recovered_from_temporary_cache(tmp_path, jpeg_frame):
     analysis_start = ready.start_timestamp_ns + 20_000_000
     analysis_end = ready.end_timestamp_ns - 20_000_000
     assert manager.set_takeoff_candidate(ready.attempt_id, 2, .82, analysis_start, analysis_end)
+    assert manager.set_thumbnail_frame(ready.attempt_id, 3)
     manager.stop()
 
     recovered_manager = AttemptManager(ring, config, ExportConfig(), cache, Queue())
@@ -197,6 +230,7 @@ def test_ready_attempt_is_recovered_from_temporary_cache(tmp_path, jpeg_frame):
     assert recovered and recovered.state is AttemptState.READY
     assert recovered.takeoff_analysis_start_ns == analysis_start
     assert recovered.takeoff_analysis_end_ns == analysis_end
+    assert recovered.thumbnail_frame_index == 3
     assert recovered.temp_video_path and recovered.temp_video_path.exists()
     assert recovered_manager.get_frame(recovered.attempt_id, recovered.freeze_frame_index).frame_bgr is not None
     recovered_manager.stop()

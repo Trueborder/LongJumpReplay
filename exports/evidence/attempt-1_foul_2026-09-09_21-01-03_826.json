@@ -1,0 +1,31 @@
+{
+  "attempt_id": 1,
+  "group": "",
+  "competitor": 0,
+  "try": 0,
+  "decision": "Foul",
+  "created_local": "2026-09-09T21:01:03.852713+02:00",
+  "adjudication_record_id": "27ebfa5b-6ee4-45e9-bcee-3efd185f5ae6",
+  "frame_index": 900,
+  "frame_timestamp_ns": 7962703000000,
+  "capture_fps": 120.02755832742065,
+  "quality_warning": "",
+  "guide": {
+    "x": 0.4587669372558594,
+    "y": 0.6666666865348816,
+    "angle_deg": 0.0
+  },
+  "board_roi": [
+    0.3490625023841858,
+    0.4169444441795349,
+    0.3010937571525574,
+    0.49944448471069336
+  ],
+  "evidence_layers": {
+    "raw_file": "original camera pixels decoded from the retained attempt",
+    "annotated_file": "derived copy with software overlays",
+    "judge_metadata": "separate fields in this JSON document"
+  },
+  "raw_file": "attempt-1_foul_2026-09-09_21-01-03_826_raw.png",
+  "annotated_file": "attempt-1_foul_2026-09-09_21-01-03_826_annotated.png"
+}

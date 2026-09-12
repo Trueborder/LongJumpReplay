@@ -1,5 +1,19 @@
 # Long Jump Replay — Project Knowledge
 
+## Screen-centred application popups (2026-09-12)
+
+- `src/theme.py::configure_popup()` schedules centring after idle so the final requested dialog size is known. Application-owned dialogs using the shared helper therefore open in the middle of the screen without per-dialog geometry duplication.
+- Licensing and Top-down Projection windows that create `Toplevel` directly use the same centring utility. Deliberate full-screen review/projection surfaces are excluded.
+
+## Recording review integration and compact timeline (2026-09-12)
+
+- The Recordings panel is a direct attempt-library view, without a separate search field. It shows a larger recording number and thumbnail, supports Open/Edit/Export/Delete plus the competition verdict actions, and uses the verdict colour for the active row.
+- Double-clicking either a competition-board attempt or its recording opens the same attempt editor. The editor synchronizes replay first and edits verdict, distance and wind through the existing adjudication store; measurements remain available only in competition mode after a Valid verdict.
+- Recording thumbnail preference is persisted in attempt metadata. Opening Top-down Projection commits the currently displayed frame; otherwise thumbnail generation falls back to the Take-off Assist candidate and then the frozen frame. Thumbnail extraction stays asynchronous and its cache key includes the selected frame.
+- Event templates explicitly restore competition controls and board visibility after Judge-only replay. The notebook tab must be changed back to `normal` even when Tk still reports the hidden tab in `tabs()`.
+- The timeline defaults to a compact 164-pixel target with a 150-pixel minimum, while the existing sash remains vertically resizable and stored non-legacy user heights remain respected.
+- Camera startup feedback is source-aware: file input shows `Loading file source`, while camera input keeps the device-search wording.
+
 ## One-second review and live calibration snapshot (2026-09-09, 6.2.1)
 
 - The logarithmic timeline detail range is exactly 1 to 3600 seconds and still
@@ -1289,13 +1303,37 @@ A change is done only when:
 - Detection logs include board, foul-line, and shoe timing plus shoe candidate count and confidence. A lightweight Detection debug switch shows the board, foul area, shoe ROI, candidate contours, selected contour, longitudinal axis, heel, and toe without re-running analysis.
 - The top-down raster keeps rectified observed pixels unchanged. Only the model-only area receives a blurred, low-opacity colour approximation with a dashed outline, and the contact mask is derived from the observed outline rather than the completed model.
 - The fullscreen comparison reveals the completed projection with a 220 ms opacity transition followed by a 160 ms result-text transition. Both run through Tk's event loop without delaying computation, respect Windows client-area animation settings, and are cancelled when the review closes.
-- If automatic shoe detection produces no trustworthy outline, the fullscreen split review stays open with the original frame, the progress indicator stops, and a neutral gray **NOT AVAILABLE** badge replaces the verdict. This failure does not open the shoe editor; closing the review returns directly to the main replay window. Board and foul-line failures retain their existing manual calibration recovery.
+- If automatic shoe detection produces no trustworthy outline, the fullscreen split review stays open with the original frame, the progress indicator stops, and a neutral gray **NOT AVAILABLE** badge replaces the verdict. Dismissing the review returns to the projection frame/manual-setup menu instead of closing the projection window, with the failed layer's manual action preserved. Board and foul-line failures retain their existing manual calibration recovery.
 - Take-off Assist now requires a compact shoe-presence signal in the selected frame instead of allowing the smoothed disappearance-motion peak to select an empty frame. Its relative-size gate accepts close-up shoes occupying up to 24% of the board ROI, rejects thin markings, and uses colour contrast as well as darkness. Configured lead-frame offsets are clamped to frames that passed the visible-shoe gate, and the cached projection references remain the original visible frames.
+
+### Operator workflow and performance maintenance (2026-09-11)
+
+- The main header now has a fourth Camera selector beside File, View, and Help, separated by a small gap. It lists detected cameras and routes a selection through the normal restart-safe camera settings path.
+- The calibration wizard remains the shared board and take-off-line reconstruction editor. Its preview state places Confirm calibration before Back to edit, and returning from frozen replay animates the timeline back toward live media.
+- Top-down visualization mouse magnification defaults off for new windows. The Settings dialog renders its General page first and defers secondary page construction until the event loop is idle, reducing perceived open latency.
+- Performance buttons are presented as task-oriented Smooth live, Balanced judging, Fast review, Evidence review, and Custom modes. These modes adjust presentation workload only; retained evidence quality remains explicit.
+- Take-off Assist waits briefly for pinned packets before declaring failure, and its configured Quick Review remains the smooth candidate-review path. Physical ShuttleXpress validation still requires connected hardware; parser, debounce, mapping, and action-queue behavior are covered by tests.
 
 ### RelayLab swimming application (2026-09-10)
 
-- The authoritative static-site checkout now includes RelayLab at `website/tomaspisar.cz/swimming/relaylab/`. Its simplified surface keeps only the Team builder and Recommended lineup: name autocomplete, exact Czech Swimming ID/profile URL lookup, 4×50/4×100 relay settings, matching 25/50 m pool results, date filters, optional relay splits, and an exhaustive unique-swimmer lineup optimizer.
+### Recording library and product boundaries (2026-09-12)
+
+- The Python/Tkinter application remains the authoritative LongJumpReplay desktop product. `native/` is a separate preview implementation and must not be treated as a second production pipeline.
+- Live capture continues through `CaptureEngine` and `TimeRingBuffer`. Explicit Capture Mode uses the same encoded packet listener and creates durable recordings under the configured `recordings/` directory; Freeze attempts remain bounded temporary cache items until exported.
+- `AttemptManager` writes durable session metadata atomically, stages persistent video under `recordings/.incomplete/`, recovers finished recordings on restart, and leaves temporary cache cleanup independent of the recording library. Incomplete persistent markers are removed during recovery without touching unrelated user files.
+- The recordings panel is the existing operator surface: it has a metadata search field, saved/temporary media state, date/time, duration, thumbnail fallback, asynchronous cached thumbnails, Open/Export/Delete actions, and an Open recordings folder command. Thumbnails are generated by `RecordingThumbnailWorker`, never by the Tk event loop.
+- Mutable paths are resolved through `src/portable_paths.py` and `AppDataPaths`: cache, recordings, exports/evidence, adjudication, and recording thumbnails. Existing configured absolute paths remain valid; the new default recordings directory is additive and does not migrate or delete old files.
+- `ProfessionalTimeline` keeps its pooled fixed-playhead renderer and animated return-to-live transition. The default vertical pane is compact (208 px usable baseline, down from the former 220 px) while the existing sash remains resizable within the configured bounds.
+- Performance profiles are real presentation/analysis workload controls. They do not silently reduce retained evidence quality. The explicit Older PC profile remains the only frame-dropping tradeoff.
+- ShuttleXpress remains optional HID input routed through the shared action queue: jog steps frames, the spring-loaded shuttle selects attempts, and configurable button actions preserve keyboard/controller independence. Physical device behavior still needs testing on a connected Contour unit.
+- The website login remains email OTP backed by `/api/portal/request-code` and `/api/portal/verify-code`; the centered LongJumpReplay login composition adds code resend, change-email, expired-code, loading, and success states without changing authentication architecture. The logged-in portal continues using the same account/licensing backend and responsive site tokens.
+- LongJumpReplay and RelayLab are separated by product routes and modules inside the shared static website because the current deployment paths and worker routing are shared. Do not move them into independent repositories or change deployment roots without updating the site worker and release configuration together.
+- Paid feature checks are capability-based through `authorization_permits()`. Existing grants without a feature list remain compatible; future grants can explicitly include `takeoff_assist` for Pro. Trial capabilities remain replay-only and do not reset after restart/reinstall on the same Windows machine when DPAPI state is available.
+
+- The authoritative static-site checkout now includes RelayLab at `website/tomaspisar.cz/swimming/relaylab/`. Its simplified surface keeps only the Team builder and Recommended lineup: name autocomplete, exact Czech Swimming ID/profile URL lookup, 4×25/4×50/4×100 relay settings, matching 25/50 m pool results, date filters, optional relay splits, and an exhaustive unique-swimmer lineup optimizer.
 - The public Czech Swimming site rejects browser cross-origin requests, so `website/main-site-worker.ts` owns same-origin `GET /api/swimming/search` and `GET /api/swimming/swimmers/:id/times` routes. The proxy returns only RelayLab fields, validates IDs/query length, uses an eight-second upstream timeout, and applies edge caching while browser responses remain revalidatable.
 - RelayLab uses a simplified light UI with restrained teal/coral accents, visible keyboard focus, 44px-class controls, responsive 375px-safe layout, and reduced-motion handling. `relaylab-core.js` is CommonJS-compatible for focused Node tests; `relaylab-core.test.cjs` covers exact filtering, relay split opt-in, unique assignments, ties, and manual completion in the core engine.
 - The `/software/` catalog now lists RelayLab as `02 / WEB APP` beside LongJumpReplay, using the shared product-card layout and a link to `/swimming/relaylab/`.
 - RelayLab uses one combined swimmer search field for names, exact swimmer numbers, and profile URLs. Clicking an added swimmer opens an accessible times dialog with the official Czech Swimming profile link.
+- A small `Add unregistered swimmer` action opens a compact manual form for name plus four relay times. These swimmers are included in optimization and shown in the times dialog without an official-profile link.
+- The distance control includes 4×25, 4×50, and 4×100. For 4×25, the 25 m pool is selected automatically and the 50 m pool option is disabled because a 25 m leg cannot be swum in a 50 m pool.

@@ -4,8 +4,22 @@ import os
 from pathlib import Path
 import shutil
 import sys
+from dataclasses import dataclass
 
 APP_NAME = "LongJumpReplay"
+
+
+@dataclass(frozen=True, slots=True)
+class AppDataPaths:
+    """Central user-data layout shared by the desktop application."""
+
+    root: Path
+    cache: Path
+    recordings: Path
+    exports: Path
+    evidence: Path
+    adjudication: Path
+    thumbnails: Path
 
 
 def is_frozen() -> bool:
@@ -67,6 +81,29 @@ def resolve_user_path(config_path: Path, value: str) -> Path:
     # failures when the shared portable folder is under Program Files or OneDrive.
     base = writable_data_directory() if is_frozen() else config_path.parent
     return (base / expanded).resolve()
+
+
+def app_data_paths(
+    config_path: Path,
+    *,
+    cache_directory: str = "cache",
+    recordings_directory: str = "recordings",
+    export_directory: str = "exports",
+    evidence_directory: str = "evidence",
+) -> AppDataPaths:
+    """Resolve mutable paths from one config/user-data root."""
+    cache = resolve_user_path(config_path, cache_directory)
+    recordings = resolve_user_path(config_path, recordings_directory)
+    exports = resolve_user_path(config_path, export_directory)
+    return AppDataPaths(
+        root=cache.parent,
+        cache=cache,
+        recordings=recordings,
+        exports=exports,
+        evidence=exports / evidence_directory,
+        adjudication=cache.parent / "adjudication",
+        thumbnails=recordings / ".thumbnails",
+    )
 
 
 def crash_log_path(config_path: Path) -> Path:

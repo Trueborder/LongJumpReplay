@@ -92,6 +92,13 @@ class AttemptSession:
     packets: list[FramePacket] = field(default_factory=list)
     temp_video_path: Path | None = None
     temp_metadata_path: Path | None = None
+    # Explicit Capture Mode recordings are durable library items. Freeze
+    # attempts remain temporary working media unless the operator exports them.
+    persistent: bool = False
+    thumbnail_path: Path | None = None
+    # Explicitly set when the operator opens Top-down Projection.  When absent,
+    # the library falls back to Take-off Assist and then the frozen frame.
+    thumbnail_frame_index: int | None = None
     export_path: Path | None = None
     evidence_raw_path: Path | None = None
     evidence_annotated_path: Path | None = None
