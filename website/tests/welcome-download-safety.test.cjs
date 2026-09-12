@@ -5,8 +5,7 @@ const path = require('node:path');
 
 const siteRoot = path.join(__dirname, '..', 'tomaspisar.cz');
 const html = fs.readFileSync(path.join(siteRoot, 'welcome', 'index.html'), 'utf8');
-const downloadIndex = fs.readFileSync(path.join(siteRoot, 'download', 'index.html'), 'utf8');
-const downloadLjr = fs.readFileSync(path.join(siteRoot, 'download', 'ljr', 'index.html'), 'utf8');
+const downloadPage = fs.readFileSync(path.join(siteRoot, 'software', 'longjumpreplay', 'download', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(siteRoot, 'overrides.css'), 'utf8');
 const script = fs.readFileSync(path.join(siteRoot, 'script.js'), 'utf8');
 
@@ -34,9 +33,8 @@ test('download warning opens after the installer download starts', () => {
   assert.match(css, /\.download-safety-dialog::backdrop/);
 });
 
-test('every download page creates the warning dialog when its installer link is clicked', () => {
-  assert.match(downloadIndex, /data-installer-url/);
-  assert.match(downloadLjr, /data-installer-url/);
+test('the canonical download page creates the warning dialog when its installer link is clicked', () => {
+  assert.match(downloadPage, /data-installer-url/);
   assert.match(script, /if \(installerLinks\.length && !downloadSafetyDialog\)/);
   assert.match(script, /template\.innerHTML = `[\s\S]*data-download-safety-dialog/);
   assert.match(script, /document\.body\.append\(downloadSafetyDialog\)/);
@@ -44,8 +42,7 @@ test('every download page creates the warning dialog when its installer link is 
 });
 
 test('customer downloads keep the cache-safe stable installer alias', () => {
-  assert.match(downloadIndex, /data-installer-url href="https:\/\/files\.tomaspisar\.cz\/LJR_setup\.exe"/);
-  assert.match(downloadLjr, /data-installer-url href="https:\/\/files\.tomaspisar\.cz\/LJR_setup\.exe"/);
+  assert.match(downloadPage, /data-installer-url href="https:\/\/files\.tomaspisar\.cz\/LJR_setup\.exe"/);
   assert.match(script, /element\.href = product\.installerUrl/);
   assert.doesNotMatch(script, /element\.href = installer\.href/);
 });
