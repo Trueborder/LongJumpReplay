@@ -507,7 +507,7 @@
 ## 1. Project identity
 
 - **Project:** Long Jump Replay
-- **Current source version:** 4.0.0
+- **Current source version:** 6.2.7
 - **Primary platform:** Windows 11 x64
 - **Language:** Python 3.12
 - **GUI toolkit:** Tkinter / ttk

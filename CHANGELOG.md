@@ -1,5 +1,16 @@
 # LongJumpReplay changelog
 
+## 6.2.7 - 2026-09-12
+
+- Publishes the current recording library, persistent Capture Mode recordings,
+  asynchronous thumbnails, recording verdict actions, and the synchronized
+  attempt editor.
+- Compacts the default timeline layout while keeping vertical resizing and
+  frame navigation responsive.
+- Centers application popups, shows source-aware file-loading feedback, and
+  keeps the competition board visible when switching from Judge-only mode to
+  an event.
+
 ## 6.2.6 - 2026-09-10
 
 - Improves take-off board and foul-line detection with light-board, red-track,
