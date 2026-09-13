@@ -8,11 +8,9 @@ from src.progress import ProgressState, StartupProgressEvent
 
 
 @pytest.mark.parametrize("language", ["en", "cs"])
-def test_startup_progress_is_monotonic_and_details_are_remembered(language):
+def test_startup_progress_is_monotonic_without_details_toggle(language):
     root = tk.Tk(); root.withdraw()
     window = StartupWindow(root, language)
-    remembered = []
-    window.set_preference_callback(remembered.append)
     observed = []
     for event in (
         StartupProgressEvent("settings", "Settings", 1, 1, .1),
@@ -26,9 +24,7 @@ def test_startup_progress_is_monotonic_and_details_are_remembered(language):
     assert observed[-1] == 99
     window.emit(StartupProgressEvent("services", "Ready", 4, 4, .1, state=ProgressState.COMPLETED))
     assert float(window.overall_bar.cget("value")) == 100
-    window.details_button.invoke(); root.update_idletasks()
-    assert remembered == [True]
-    assert window.details_frame.winfo_manager()
+    assert not hasattr(window, "details_button")
     root.destroy()
 
 

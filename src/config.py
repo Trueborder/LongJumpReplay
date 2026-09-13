@@ -56,7 +56,6 @@ class GeneralConfig:
     confirm_destructive_actions: bool = True
     show_tooltips: bool = True
     onboarding_completed: bool = False
-    progress_details_expanded: bool = False
 
 
 @dataclass(slots=True)
@@ -569,6 +568,9 @@ def config_from_dict(data: dict[str, Any]) -> AppConfig:
     if isinstance(data.get("general"), dict):
         general = dict(data["general"])
         general.pop("recording_mode_prompted", None)
+        # The startup Details disclosure was removed; discard its old
+        # preference while preserving the rest of an existing config.
+        general.pop("progress_details_expanded", None)
         data["general"] = general
     if isinstance(data.get("camera"), dict) and isinstance(data["camera"].get("backend"), str):
         camera = dict(data["camera"])

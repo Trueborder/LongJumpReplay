@@ -587,3 +587,34 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 @media (max-width:650px) {
   .relaylab-product-image { min-height: 220px; }
 }
+
+.not-found-page {
+  min-height: min(680px, calc(100dvh - var(--header-height) - 104px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.not-found-code {
+  margin: 0 0 .35rem;
+  color: var(--amber);
+  font: 500 clamp(4.5rem, 13vw, 10rem)/.82 var(--display);
+  letter-spacing: -.08em;
+}
+
+.not-found-page h1 {
+  max-width: 850px;
+  margin-bottom: 1.25rem;
+}
+
+.not-found-page > p:not(.eyebrow):not(.not-found-code) {
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.8vw, 1.2rem);
+  line-height: 1.65;
+}
+
+.not-found-actions {
+  margin-top: 2rem;
+}

@@ -5,8 +5,7 @@
     "language_migration_pending": false,
     "confirm_destructive_actions": false,
     "show_tooltips": true,
-    "onboarding_completed": true,
-    "progress_details_expanded": true
+    "onboarding_completed": true
   },
   "camera": {
     "source_type": "file",

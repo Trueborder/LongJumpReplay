@@ -1350,13 +1350,24 @@ A change is done only when:
   fully loaded application. Startup progress events now flush idle drawing
   only; the main window is painted, the splash is destroyed, and then the
   normal `mainloop()` begins.
-- The splash uses compact custom dark rounded progress tracks and a rounded,
-  keyboard-focusable Details action. Both bars remain bound to the existing
-  real overall/current-stage values; no artificial timing or progress was
-  added.
-- Its rare startup entrance uses a 200 ms opacity-only strong ease-out fade.
-  Windows' client-area animation preference disables that fade when reduced
-  motion is requested; progress and layout never animate with it.
+- The splash uses compact custom dark rounded progress tracks and a rounded
+  action style for startup failures. The Details disclosure and its persisted
+  preference were removed; progress events still update only the visible
+  current-stage status and real overall/current-stage values.
+- Its rare startup entrance uses a visible 280 ms opacity-only strong ease-out
+  fade (120 ms when Windows' client-area animation preference requests reduced
+  motion); progress and layout never animate with it.
 - The splash and PyInstaller bootloader continue using the existing athlete
   artwork in `assets/long_jump_splash.png`; the website's separate take-off-board
   hero remains website-only.
+- Shared `themed_message()` dialogs now show semantic circular symbols for
+  information, warnings, errors, and confirmation questions. Legacy info calls
+  infer warning/error symbols from their title/message, while new call sites can
+  use explicit warning/error helpers.
+
+## 2026-09-13 website not-found fallback
+
+- The static site includes a responsive bilingual `404.html` that uses the
+  existing header, typography, colours, language switch, footer, and catalog
+  actions. `website/wrangler.jsonc` sets Workers Assets to `404-page` handling
+  so unknown public paths render this page rather than a generic response.

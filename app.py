@@ -308,24 +308,24 @@ def _animate_splash_window(root: tk.Tk, splash: tk.Toplevel, width: int, height:
     try:
         splash.geometry(f"{width}x{height}+{x}+{y}")
         if opening:
-            animate = _windows_client_animations_enabled()
-            if animate:
-                splash.attributes("-alpha", 0.0)
+            # Keep the entrance visible even when Windows reduces client-area
+            # animation.  The reduced-motion path is shorter, not skipped.
+            reduced_motion = not _windows_client_animations_enabled()
+            splash.attributes("-alpha", 0.0)
             splash.deiconify()
             splash.update_idletasks()
-            if animate:
-                duration = 200 if duration_ms is None else max(0, int(duration_ms))
-                if duration > 0:
-                    started = time.perf_counter()
-                    while True:
-                        elapsed = (time.perf_counter() - started) * 1000.0
-                        fraction = min(1.0, elapsed / duration)
-                        splash.attributes("-alpha", _strong_ease_out(fraction))
-                        splash.update()
-                        if fraction >= 1.0:
-                            break
-                        time.sleep(0.012)
-                splash.attributes("-alpha", 1.0)
+            duration = (120 if reduced_motion else 280) if duration_ms is None else max(0, int(duration_ms))
+            if duration > 0:
+                started = time.perf_counter()
+                while True:
+                    elapsed = (time.perf_counter() - started) * 1000.0
+                    fraction = min(1.0, elapsed / duration)
+                    splash.attributes("-alpha", _strong_ease_out(fraction))
+                    splash.update()
+                    if fraction >= 1.0:
+                        break
+                    time.sleep(0.012)
+            splash.attributes("-alpha", 1.0)
         else:
             splash.withdraw()
     except tk.TclError:
@@ -354,16 +354,16 @@ class StartupWindow:
         self.overall = ProgressController()
         self.task = ProgressController()
         self._phase_id = ""
-        self._history: list[str] = []
-        self._details_expanded = details_expanded
-        self._preference_callback = None
+        # ``details_expanded`` remains accepted for old callers/configs, but
+        # the startup Details disclosure was intentionally removed from the UI.
+        del details_expanded
         splash = self.window = tk.Toplevel(root)
         splash.withdraw()
         splash.overrideredirect(True)
         splash.configure(bg="#07111e")
         try: splash.attributes("-topmost", True)
         except tk.TclError: pass
-        self.width, self.closed_height, self.expanded_height = 840, 460, 600
+        self.width, self.closed_height = 840, 460
         self._center(self.closed_height)
         canvas = self.canvas = tk.Canvas(splash, width=self.width, height=self.closed_height, highlightthickness=0, bg="#07111e")
         canvas.pack(fill="x")
@@ -407,20 +407,10 @@ class StartupWindow:
         self.task_bar.place(x=48, y=342)
         self.detail_label = tk.Label(canvas, text="", bg="#0d1928", fg="#8faed1", font=("Segoe UI", 8), anchor="w", width=48)
         self.detail_label.place(x=48, y=365)
-        self.details_button = RoundedActionButton(canvas, "", self._toggle_details, width=96, height=30)
-        self.details_button.place(x=40, y=420)
-        self.details_frame = tk.Frame(splash, bg="#091522", padx=38, pady=12)
-        self.history = tk.Text(
-            self.details_frame, height=6, wrap="word", state="disabled", takefocus=False,
-            bg="#0d1928", fg="#aebed2", insertbackground="#f4f7fb", relief="flat",
-            borderwidth=0, padx=12, pady=10, font=("Segoe UI", 9),
-        )
-        self.history.pack(fill="both", expand=True)
-        self._sync_details()
         splash.update_idletasks()
         _animate_splash_window(
             root, splash, self.width,
-            self.expanded_height if self._details_expanded else self.closed_height,
+            self.closed_height,
             opening=True,
         )
         root.update()
@@ -432,23 +422,6 @@ class StartupWindow:
     def _center(self, height: int) -> None:
         screen_w, screen_h = self.window.winfo_screenwidth(), self.window.winfo_screenheight()
         self.window.geometry(f"{self.width}x{height}+{max(0, (screen_w-self.width)//2)}+{max(0, (screen_h-height)//2)}")
-
-    def set_preference_callback(self, callback) -> None:
-        self._preference_callback = callback
-
-    def _toggle_details(self) -> None:
-        self._details_expanded = not self._details_expanded
-        self._sync_details()
-        if self._preference_callback: self._preference_callback(self._details_expanded)
-
-    def _sync_details(self) -> None:
-        self.details_button.configure(text=self._txt("Hide details", "Skrýt podrobnosti") if self._details_expanded else self._txt("Details", "Podrobnosti"))
-        if self._details_expanded:
-            self.details_frame.pack(fill="both", expand=True)
-            self._center(self.expanded_height)
-        else:
-            self.details_frame.pack_forget()
-            self._center(self.closed_height)
 
     def emit(self, event) -> None:
         from src.progress import ProgressState
@@ -465,13 +438,6 @@ class StartupWindow:
         self.task_bar.configure(value=max(float(self.task_bar.cget("value")), fraction * 100.0))
         self.task_label.configure(text=event.operation_label)
         self.detail_label.configure(text=event.detail)
-        history_line = event.detail or event.operation_label
-        if history_line and (not self._history or self._history[-1] != history_line):
-            self._history.append(history_line)
-            self.history.configure(state="normal")
-            self.history.insert("end", history_line.rstrip("…") + "\n")
-            self.history.see("end")
-            self.history.configure(state="disabled")
         # Redraw idle work without entering a nested event loop. Once camera
         # polling starts, root.update() can keep consuming recurring callbacks
         # forever and prevent the splash from reaching destroy().
@@ -481,7 +447,6 @@ class StartupWindow:
         self.task_bar.stop()
         self.task_label.configure(text=self._txt("LongJumpReplay could not start", "LongJumpReplay se nepodařilo spustit"), fg="#ff9b9b")
         self.detail_label.configure(text=self._txt("Open the log for details, then exit and try again.", "Otevřete protokol s podrobnostmi, ukončete aplikaci a zkuste to znovu."))
-        self.details_button.place_forget()
         RoundedActionButton(self.canvas, self._txt("Open log", "Otevřít protokol"), command=lambda: os.startfile(log_path), width=110).place(x=40, y=420)
         RoundedActionButton(self.canvas, self._txt("Exit", "Ukončit"), command=self.root.destroy, width=86).place(x=158, y=420)
         self.window.update_idletasks()
@@ -507,7 +472,11 @@ class StartupWindow:
 
 
 def _startup_splash(root: tk.Tk, language: str = "en", details_expanded: bool = False) -> StartupWindow:
-    """Create the detailed modal startup window."""
+    """Create the compact startup window.
+
+    The third argument is retained as a compatibility shim for older callers;
+    startup details are no longer exposed in the product UI.
+    """
     return StartupWindow(root, language, details_expanded)
 
 
@@ -565,7 +534,7 @@ def _check_license_with_splash(
 
 def main() -> int:
     """Start with real milestones and keep the boot splash until Tk has painted."""
-    from src.config import load_config, save_config
+    from src.config import load_config
     from src.portable_paths import crash_log_path, prepare_config_path, runtime_log_path
     from src.progress import ProgressState, StartupProgressEvent
     from src.runtime_diagnostics import configure_runtime_logging, log_event
@@ -596,15 +565,9 @@ def main() -> int:
     try:
         config = load_config(config_path)
         root = tk.Tk(); root.withdraw()
-        startup = _startup_splash(root, config.general.language, config.general.progress_details_expanded)
+        startup = _startup_splash(root, config.general.language)
         _close_boot_splash()
         is_cs = config.general.language == "cs"
-
-        def remember_details(expanded: bool) -> None:
-            config.general.progress_details_expanded = expanded
-            save_config(config, config_path)
-
-        startup.set_preference_callback(remember_details)
         startup.emit(StartupProgressEvent("settings", "Nastavuji protokolování a předvolby…" if is_cs else "Loading settings and logging…", 1, 1, .1, "Nastavení a protokolování připraveno" if is_cs else "Settings and logging ready"))
         if args.splash_preview:
             startup.emit(StartupProgressEvent("interface", "Náhled úvodního okna" if is_cs else "Startup window preview", 5, 8, .4, "Stisknutím Esc zavřete" if is_cs else "Press Esc to close"))

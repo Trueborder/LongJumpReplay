@@ -250,6 +250,31 @@ def style_popup_menu(menu: tk.Menu, parent: tk.Misc) -> None:
         pass
 
 
+def _dialog_kind_from_text(title: str, message: str) -> str:
+    """Choose a useful semantic icon for legacy informational call sites."""
+    text = f"{title} {message}".lower()
+    if any(token in text for token in ("error", "failed", "could not", "cannot", "unable", "invalid", "exception")):
+        return "error"
+    if any(token in text for token in ("warning", "conflict", "unsaved", "nothing was changed")):
+        return "warning"
+    return "info"
+
+
+def _dialog_icon(parent: tk.Misc, palette: dict[str, str], kind: str) -> tk.Canvas:
+    """Create a compact Windows-like semantic symbol without external assets."""
+    symbols = {
+        "info": ("i", palette["accent"], palette["text"]),
+        "warning": ("!", palette["warning"], "#111722"),
+        "error": ("×", palette["danger"], palette["text"]),
+        "question": ("?", palette["accent"], palette["text"]),
+    }
+    symbol, fill, foreground = symbols.get(kind, symbols["info"])
+    icon = tk.Canvas(parent, width=30, height=30, highlightthickness=0, bd=0, bg=palette["surface"])
+    icon.create_oval(2, 2, 28, 28, fill=fill, outline="")
+    icon.create_text(15, 15, text=symbol, fill=foreground, font=("Segoe UI Semibold", 13))
+    return icon
+
+
 def themed_message(
     parent: tk.Misc,
     title: str,
@@ -257,6 +282,7 @@ def themed_message(
     *,
     buttons: tuple[tuple[str, str, str], ...] = (("OK", "ok", "Primary.TButton"),),
     width: int = 440,
+    kind: str = "info",
 ) -> str:
     """Show a blocking, ttk-themed message/confirmation dialog."""
     palette = _theme_palette_for(parent)
@@ -272,7 +298,10 @@ def themed_message(
     result = tk.StringVar(dialog, value="")
     body = ttk.Frame(dialog, style="Dialog.TFrame", padding=(17, 14, 17, 10))
     body.pack(fill="both", expand=True)
-    ttk.Label(body, text=title, style="DialogTitle.TLabel").pack(anchor="w")
+    header = ttk.Frame(body, style="Dialog.TFrame")
+    header.pack(fill="x")
+    _dialog_icon(header, palette, kind).pack(side="left", padx=(0, 10))
+    ttk.Label(header, text=title, style="DialogTitle.TLabel").pack(side="left", anchor="center")
     ttk.Label(body, text=message, style="DialogBody.TLabel", wraplength=width - 34, justify="left").pack(anchor="w", pady=(6, 13))
     footer = ttk.Frame(body, style="Dialog.TFrame")
     footer.pack(fill="x")
@@ -302,13 +331,22 @@ def themed_message(
 
 
 def show_themed_info(parent: tk.Misc, title: str, message: str) -> None:
-    themed_message(parent, title, message)
+    themed_message(parent, title, message, kind=_dialog_kind_from_text(title, message))
+
+
+def show_themed_warning(parent: tk.Misc, title: str, message: str) -> None:
+    themed_message(parent, title, message, kind="warning")
+
+
+def show_themed_error(parent: tk.Misc, title: str, message: str) -> None:
+    themed_message(parent, title, message, kind="error")
 
 
 def ask_themed_yes_no(parent: tk.Misc, title: str, message: str, *, yes: str = "Yes", no: str = "No") -> bool:
     return themed_message(
         parent, title, message,
         buttons=((no, "no", "Secondary.TButton"), (yes, "yes", "Primary.TButton")),
+        kind="question",
     ) == "yes"
 
 
@@ -318,6 +356,7 @@ def ask_themed_yes_no_cancel(
     value = themed_message(
         parent, title, message,
         buttons=((cancel, "cancel", "Secondary.TButton"), (no, "no", "Secondary.TButton"), (yes, "yes", "Primary.TButton")),
+        kind="question",
     )
     return True if value == "yes" else False if value == "no" else None
 
