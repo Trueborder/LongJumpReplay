@@ -123,19 +123,216 @@ def _runtime_asset_path(relative: str) -> Path:
     return bundle_root / relative
 
 
+def _rounded_rectangle(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, radius: float, **kwargs) -> int:
+    radius = max(0.0, min(float(radius), (x2 - x1) / 2, (y2 - y1) / 2))
+    points = (
+        x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
+        x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
+        x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1,
+    )
+    return canvas.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
+
+
+class RoundedProgressBar(tk.Canvas):
+    """Compact dark determinate bar with a real numeric Tk-compatible value."""
+
+    def __init__(self, master: tk.Misc, *, length: int = 336, height: int = 12, maximum: float = 100.0) -> None:
+        super().__init__(
+            master, width=length, height=height, background="#0d1928",
+            highlightthickness=0, borderwidth=0, takefocus=False,
+        )
+        self._value = 0.0
+        self._maximum = max(1.0, float(maximum))
+        self._length = length
+        self._height = height
+        self.bind("<Configure>", lambda _event: self._draw(), add="+")
+        self._draw()
+
+    def _draw(self) -> None:
+        self.delete("all")
+        width = max(2, self.winfo_width() if self.winfo_width() > 1 else self._length)
+        height = max(4, self.winfo_height() if self.winfo_height() > 1 else self._height)
+        radius = height / 2
+        _rounded_rectangle(self, 0, 0, width, height, radius, fill="#263a55", outline="")
+        _rounded_rectangle(self, 1, 1, width - 1, height - 1, radius - 1, fill="#111f31", outline="")
+        fraction = min(1.0, max(0.0, self._value / self._maximum))
+        if fraction <= 0:
+            return
+        fill_width = max(height - 2, (width - 2) * fraction)
+        _rounded_rectangle(self, 1, 1, min(width - 1, fill_width), height - 1, radius - 1, fill="#4f8cff", outline="")
+
+    def configure(self, cnf=None, **kwargs):  # type: ignore[override]
+        if cnf:
+            kwargs.update(cnf)
+        if "value" in kwargs:
+            self._value = min(self._maximum, max(0.0, float(kwargs.pop("value"))))
+        if "maximum" in kwargs:
+            self._maximum = max(1.0, float(kwargs.pop("maximum")))
+        result = super().configure(**kwargs) if kwargs else None
+        self._draw()
+        return result
+
+    config = configure
+
+    def cget(self, key: str):  # type: ignore[override]
+        if key == "value":
+            return self._value
+        if key == "maximum":
+            return self._maximum
+        return super().cget(key)
+
+    def stop(self) -> None:
+        return
+
+
+class RoundedActionButton(tk.Canvas):
+    """Keyboard-accessible compact action used by the unthemed startup window."""
+
+    def __init__(self, master: tk.Misc, text: str, command, *, width: int = 96, height: int = 32) -> None:
+        super().__init__(
+            master, width=width, height=height, background="#0d1928", cursor="hand2",
+            highlightthickness=0, borderwidth=0, takefocus=True,
+        )
+        self._text = text
+        self._command = command
+        self._hovered = False
+        self._pressed = False
+        self._disabled = False
+        self.bind("<Enter>", self._enter)
+        self.bind("<Leave>", self._leave)
+        self.bind("<ButtonPress-1>", self._press)
+        self.bind("<ButtonRelease-1>", self._release)
+        self.bind("<FocusIn>", lambda _event: self._draw())
+        self.bind("<FocusOut>", lambda _event: self._draw())
+        self.bind("<Return>", self._keyboard_invoke)
+        self.bind("<space>", self._keyboard_invoke)
+        self._draw()
+
+    def _draw(self) -> None:
+        self.delete("all")
+        width = max(2, self.winfo_width() if self.winfo_width() > 1 else int(self["width"]))
+        height = max(2, self.winfo_height() if self.winfo_height() > 1 else int(self["height"]))
+        fill = "#111a28" if self._disabled else "#142238" if self._pressed else "#1c3150" if self._hovered else "#17263b"
+        border = "#273448" if self._disabled else "#4f8cff" if self.focus_get() is self else "#58789f" if self._hovered else "#354b68"
+        text = "#66758a" if self._disabled else "#f4f7fb"
+        _rounded_rectangle(self, 1, 1, width - 1, height - 1, 8, fill=fill, outline=border, width=1)
+        self.create_text(width / 2, height / 2, text=self._text, fill=text, font=("Segoe UI Semibold", 9))
+
+    def _enter(self, _event=None) -> None:
+        if not self._disabled:
+            self._hovered = True
+            self._draw()
+
+    def _leave(self, _event=None) -> None:
+        self._hovered = self._pressed = False
+        self._draw()
+
+    def _press(self, _event=None) -> None:
+        if not self._disabled:
+            self.focus_set()
+            self._pressed = True
+            self._draw()
+
+    def _release(self, event=None) -> None:
+        was_pressed = self._pressed
+        self._pressed = False
+        inside = event is None or (0 <= event.x < self.winfo_width() and 0 <= event.y < self.winfo_height())
+        self._draw()
+        if was_pressed and inside:
+            self.invoke()
+
+    def _keyboard_invoke(self, _event=None) -> str:
+        self.invoke()
+        return "break"
+
+    def invoke(self):
+        if not self._disabled and self._command:
+            return self._command()
+        return None
+
+    def configure(self, cnf=None, **kwargs):  # type: ignore[override]
+        if cnf:
+            kwargs.update(cnf)
+        if "text" in kwargs:
+            self._text = str(kwargs.pop("text"))
+        if "command" in kwargs:
+            self._command = kwargs.pop("command")
+        if "state" in kwargs:
+            self._disabled = str(kwargs.pop("state")) == "disabled"
+        result = super().configure(**kwargs) if kwargs else None
+        self._draw()
+        return result
+
+    config = configure
+
+
+def _windows_client_animations_enabled() -> bool:
+    """Honor Windows' client-area animation accessibility preference."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        enabled = ctypes.c_int()
+        # SPI_GETCLIENTAREAANIMATION
+        if ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(enabled), 0):
+            return bool(enabled.value)
+    except (AttributeError, OSError):
+        pass
+    return True
+
+
+def _strong_ease_out(progress: float) -> float:
+    """Evaluate cubic-bezier(0.23, 1, 0.32, 1) at a time fraction."""
+    target = min(1.0, max(0.0, float(progress)))
+
+    def component(value: float, first: float, second: float) -> float:
+        inverse = 1.0 - value
+        return 3.0 * inverse * inverse * value * first + 3.0 * inverse * value * value * second + value ** 3
+
+    low, high = 0.0, 1.0
+    for _ in range(12):
+        parameter = (low + high) / 2.0
+        if component(parameter, 0.23, 0.32) < target:
+            low = parameter
+        else:
+            high = parameter
+    return component((low + high) / 2.0, 1.0, 1.0)
+
+
 def _animate_splash_window(root: tk.Tk, splash: tk.Toplevel, width: int, height: int, opening: bool, duration_ms: int | None = None) -> None:
-    """Keep the compatibility hook, but show and hide the splash instantly."""
+    """Fade in the occasional startup surface without animating its geometry."""
     screen_w, screen_h = splash.winfo_screenwidth(), splash.winfo_screenheight()
     x = max(0, (screen_w - width) // 2)
     y = max(0, (screen_h - height) // 2)
     try:
         splash.geometry(f"{width}x{height}+{x}+{y}")
         if opening:
+            animate = _windows_client_animations_enabled()
+            if animate:
+                splash.attributes("-alpha", 0.0)
             splash.deiconify()
             splash.update_idletasks()
+            if animate:
+                duration = 200 if duration_ms is None else max(0, int(duration_ms))
+                if duration > 0:
+                    started = time.perf_counter()
+                    while True:
+                        elapsed = (time.perf_counter() - started) * 1000.0
+                        fraction = min(1.0, elapsed / duration)
+                        splash.attributes("-alpha", _strong_ease_out(fraction))
+                        splash.update()
+                        if fraction >= 1.0:
+                            break
+                        time.sleep(0.012)
+                splash.attributes("-alpha", 1.0)
         else:
             splash.withdraw()
     except tk.TclError:
+        try:
+            splash.attributes("-alpha", 1.0)
+        except tk.TclError:
+            pass
         return
 
 
@@ -163,51 +360,69 @@ class StartupWindow:
         splash = self.window = tk.Toplevel(root)
         splash.withdraw()
         splash.overrideredirect(True)
-        splash.configure(bg="#0b111b")
+        splash.configure(bg="#07111e")
         try: splash.attributes("-topmost", True)
         except tk.TclError: pass
-        self.width, self.closed_height = 820, 450
+        self.width, self.closed_height, self.expanded_height = 840, 460, 600
         self._center(self.closed_height)
-        canvas = self.canvas = tk.Canvas(splash, width=self.width, height=self.closed_height, highlightthickness=0, bg="#0b111b")
+        canvas = self.canvas = tk.Canvas(splash, width=self.width, height=self.closed_height, highlightthickness=0, bg="#07111e")
         canvas.pack(fill="x")
         hero_path = _runtime_asset_path("assets/long_jump_splash.png")
         if hero_path.exists():
             try:
-                photo = tk.PhotoImage(file=str(hero_path)).subsample(2, 2)
-                canvas.create_image(self.width // 2, self.closed_height // 2, image=photo, anchor="center")
+                from PIL import Image, ImageDraw, ImageEnhance, ImageOps, ImageTk
+
+                with Image.open(hero_path) as source:
+                    hero = ImageOps.fit(source.convert("RGB"), (self.width, self.closed_height), method=Image.Resampling.LANCZOS, centering=(0.5, 0.52))
+                hero = ImageEnhance.Brightness(hero).enhance(0.72).convert("RGBA")
+                shade = Image.new("RGBA", hero.size, (0, 0, 0, 0))
+                shade_draw = ImageDraw.Draw(shade)
+                for x in range(420, 506):
+                    shade_draw.line((x, 0, x, self.closed_height), fill=(7, 17, 30, int(185 * (1 - (x - 420) / 86) ** 2)))
+                shade_draw.rectangle((420, self.closed_height - 105, self.width, self.closed_height), fill=(4, 11, 20, 44))
+                hero = Image.alpha_composite(hero, shade)
+                photo = ImageTk.PhotoImage(hero, master=splash)
+                canvas.create_image(0, 0, image=photo, anchor="nw")
                 splash._splash_photo = photo
-            except tk.TclError:
+            except (OSError, tk.TclError):
                 pass
-        canvas.create_rectangle(0, 0, 430, self.closed_height, fill="#08111d", outline="")
+        canvas.create_rectangle(0, 0, 420, self.closed_height, fill="#07111e", outline="")
         canvas.create_rectangle(0, self.closed_height - 3, self.width, self.closed_height, fill="#4f8cff", outline="")
-        canvas.create_rectangle(40, 42, 112, 46, fill="#4f8cff", outline="")
-        tk.Label(canvas, text="LJR", bg="#08111d", fg="#78a8ff", font=("Consolas", 10, "bold")).place(x=40, y=60)
-        canvas.create_text(38, 86, text="LONG JUMP", anchor="nw", fill="#f4f7fb", font=("Segoe UI Semibold", 27))
-        canvas.create_text(38, 130, text="REPLAY", anchor="nw", fill="#4f8cff", font=("Segoe UI Semibold", 27))
+        canvas.create_rectangle(40, 38, 104, 42, fill="#4f8cff", outline="")
+        tk.Label(canvas, text="LJR / STARTUP", bg="#07111e", fg="#78a8ff", font=("Consolas", 9, "bold")).place(x=40, y=54)
+        canvas.create_text(38, 86, text="LONG JUMP", anchor="nw", fill="#f4f7fb", font=("Segoe UI Semibold", 25))
+        canvas.create_text(38, 126, text="REPLAY", anchor="nw", fill="#4f8cff", font=("Segoe UI Semibold", 25))
         subtitle = "STANOVIŠTĚ KONTROLY PŘEŠLAPŮ" if self.is_cs else "FOUL REVIEW STATION"
-        tk.Label(canvas, text=subtitle, bg="#08111d", fg="#8fa6c4", font=("Segoe UI", 9)).place(x=42, y=186)
-        tk.Label(canvas, text="PRECISION REVIEW  ·  LIVE CAPTURE  ·  EVIDENCE", bg="#08111d", fg="#607b9f", font=("Consolas", 8)).place(x=42, y=213)
-        tk.Label(canvas, text="STARTUP", bg="#162944", fg="#a9c8ff", font=("Consolas", 8, "bold"), padx=8, pady=3).place(x=42, y=248)
-        style = ttk.Style(root)
-        style.configure("Startup.Horizontal.TProgressbar", troughcolor="#1e2b3d", background="#4f8cff", lightcolor="#78a8ff", darkcolor="#245fc7", borderwidth=0)
-        self.overall_label = tk.Label(canvas, text=self._txt("Overall startup progress", "Celkový průběh spuštění"), bg="#08111d", fg="#d4e0ef", font=("Segoe UI", 9), anchor="w")
-        self.overall_label.place(x=42, y=282)
-        self.overall_bar = ttk.Progressbar(canvas, mode="determinate", maximum=100, value=0, length=330, style="Startup.Horizontal.TProgressbar")
-        self.overall_bar.place(x=42, y=305)
-        self.task_label = tk.Label(canvas, text=self._txt("Preparing settings…", "Připravuji nastavení…"), bg="#08111d", fg="#d4e0ef", font=("Segoe UI", 9), anchor="w")
-        self.task_label.place(x=42, y=329)
-        self.task_bar = ttk.Progressbar(canvas, mode="determinate", maximum=100, value=0, length=330, style="Startup.Horizontal.TProgressbar")
-        self.task_bar.place(x=42, y=352)
-        self.detail_label = tk.Label(canvas, text="", bg="#08111d", fg="#8faed1", font=("Segoe UI", 8), anchor="w", width=48)
-        self.detail_label.place(x=42, y=376)
-        self.details_button = ttk.Button(canvas, text="", command=self._toggle_details, takefocus=True)
-        self.details_button.place(x=42, y=405)
-        self.details_frame = ttk.Frame(splash, padding=(38, 12))
-        self.history = tk.Text(self.details_frame, height=6, wrap="word", state="disabled", takefocus=False)
+        tk.Label(canvas, text=subtitle, bg="#07111e", fg="#9eb1ca", font=("Segoe UI", 9)).place(x=41, y=174)
+        tk.Label(canvas, text="REVIEW  ·  BUFFER  ·  DECIDE", bg="#07111e", fg="#6685ad", font=("Consolas", 8)).place(x=41, y=199)
+        _rounded_rectangle(canvas, 32, 231, 388, 414, 16, fill="#0d1928", outline="#22344d", width=1)
+        tk.Label(canvas, text=self._txt("STARTING LONGJUMPREPLAY", "SPOUŠTÍM LONGJUMPREPLAY"), bg="#0d1928", fg="#78a8ff", font=("Consolas", 8, "bold")).place(x=48, y=244)
+        self.overall_label = tk.Label(canvas, text=self._txt("Overall startup progress", "Celkový průběh spuštění"), bg="#0d1928", fg="#dce6f3", font=("Segoe UI", 9), anchor="w")
+        self.overall_label.place(x=48, y=270)
+        self.overall_bar = RoundedProgressBar(canvas, length=324)
+        self.overall_bar.place(x=48, y=293)
+        self.task_label = tk.Label(canvas, text=self._txt("Preparing settings…", "Připravuji nastavení…"), bg="#0d1928", fg="#dce6f3", font=("Segoe UI", 9), anchor="w")
+        self.task_label.place(x=48, y=319)
+        self.task_bar = RoundedProgressBar(canvas, length=324)
+        self.task_bar.place(x=48, y=342)
+        self.detail_label = tk.Label(canvas, text="", bg="#0d1928", fg="#8faed1", font=("Segoe UI", 8), anchor="w", width=48)
+        self.detail_label.place(x=48, y=365)
+        self.details_button = RoundedActionButton(canvas, "", self._toggle_details, width=96, height=30)
+        self.details_button.place(x=40, y=420)
+        self.details_frame = tk.Frame(splash, bg="#091522", padx=38, pady=12)
+        self.history = tk.Text(
+            self.details_frame, height=6, wrap="word", state="disabled", takefocus=False,
+            bg="#0d1928", fg="#aebed2", insertbackground="#f4f7fb", relief="flat",
+            borderwidth=0, padx=12, pady=10, font=("Segoe UI", 9),
+        )
         self.history.pack(fill="both", expand=True)
         self._sync_details()
         splash.update_idletasks()
-        _animate_splash_window(root, splash, self.width, self.closed_height, opening=True)
+        _animate_splash_window(
+            root, splash, self.width,
+            self.expanded_height if self._details_expanded else self.closed_height,
+            opening=True,
+        )
         root.update()
         self._painted_at = time.monotonic()
 
@@ -230,7 +445,7 @@ class StartupWindow:
         self.details_button.configure(text=self._txt("Hide details", "Skrýt podrobnosti") if self._details_expanded else self._txt("Details", "Podrobnosti"))
         if self._details_expanded:
             self.details_frame.pack(fill="both", expand=True)
-            self._center(590)
+            self._center(self.expanded_height)
         else:
             self.details_frame.pack_forget()
             self._center(self.closed_height)
@@ -257,19 +472,25 @@ class StartupWindow:
             self.history.insert("end", history_line.rstrip("…") + "\n")
             self.history.see("end")
             self.history.configure(state="disabled")
-        self.window.update_idletasks(); self.root.update()
+        # Redraw idle work without entering a nested event loop. Once camera
+        # polling starts, root.update() can keep consuming recurring callbacks
+        # forever and prevent the splash from reaching destroy().
+        self.window.update_idletasks()
 
     def show_failure(self, log_path: Path) -> None:
         self.task_bar.stop()
         self.task_label.configure(text=self._txt("LongJumpReplay could not start", "LongJumpReplay se nepodařilo spustit"), fg="#ff9b9b")
         self.detail_label.configure(text=self._txt("Open the log for details, then exit and try again.", "Otevřete protokol s podrobnostmi, ukončete aplikaci a zkuste to znovu."))
         self.details_button.place_forget()
-        ttk.Button(self.canvas, text=self._txt("Open log", "Otevřít protokol"), command=lambda: os.startfile(log_path)).place(x=42, y=405)
-        ttk.Button(self.canvas, text=self._txt("Exit", "Ukončit"), command=self.root.destroy).place(x=140, y=405)
+        RoundedActionButton(self.canvas, self._txt("Open log", "Otevřít protokol"), command=lambda: os.startfile(log_path), width=110).place(x=40, y=420)
+        RoundedActionButton(self.canvas, self._txt("Exit", "Ukončit"), command=self.root.destroy, width=86).place(x=158, y=420)
         self.window.update_idletasks()
 
     def destroy(self) -> None:
-        try: self.window.destroy()
+        try:
+            self.window.attributes("-topmost", False)
+            self.window.withdraw()
+            self.window.destroy()
         except tk.TclError: pass
 
     def update_idletasks(self) -> None:
@@ -428,10 +649,16 @@ def main() -> int:
             startup_update_task=update_task,
             startup_progress=startup.emit,
         )
-        root.deiconify()
-        root.update_idletasks(); root.update()
         startup.emit(StartupProgressEvent("services", "Připraveno" if is_cs else "Ready", 4, 4, .1, "Stanoviště rozhodčího je připraveno" if is_cs else "Judge station is ready", ProgressState.COMPLETED))
-        startup.destroy(); startup = None
+        root.deiconify()
+        root.update_idletasks()
+        startup.destroy()
+        startup = None
+        try:
+            root.lift()
+            root.focus_force()
+        except tk.TclError:
+            pass
         root.mainloop()
         log_event(logger, "application_exit", exit_code=0)
         return 0

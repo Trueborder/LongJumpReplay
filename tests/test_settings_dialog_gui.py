@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import math
 
+from src import __version__
 from src.config import AppConfig
 from src.camera_devices import CameraDevice
 from src.settings_dialog import SettingsDialog
@@ -195,7 +196,7 @@ def test_licence_page_shows_diagnostics_and_copies_safe_summary(monkeypatch):
     dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
     dialog._copy_support_summary()
     summary = dialog.clipboard_get()
-    assert "6.2.8" in summary
+    assert __version__ in summary
     assert "lifetime" in summary
     assert "must-not-be-copied" not in summary
     assert "machine_id" not in summary

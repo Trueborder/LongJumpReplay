@@ -1341,3 +1341,22 @@ A change is done only when:
 - RelayLab uses one combined swimmer search field for names, exact swimmer numbers, and profile URLs. Clicking an added swimmer opens an accessible times dialog with the official Czech Swimming profile link.
 - A small `Add unregistered swimmer` action opens a compact manual form for name plus four relay times. These swimmers are included in optimization and shown in the times dialog without an official-profile link.
 - The distance control includes 4×25, 4×50, and 4×100. For 4×25, the 25 m pool is selected automatically and the 50 m pool option is disabled because a 25 m leg cannot be swum in a 50 m pool.
+## 2026-09-13 startup splash lifecycle and visual refresh
+
+- The Tk startup window in `app.py` must never call `root.update()` from a
+  progress event after `MainWindow` has started recurring camera/UI callbacks.
+  A nested update loop can continuously consume those callbacks and prevent
+  `StartupWindow.destroy()` from running, leaving the topmost splash over the
+  fully loaded application. Startup progress events now flush idle drawing
+  only; the main window is painted, the splash is destroyed, and then the
+  normal `mainloop()` begins.
+- The splash uses compact custom dark rounded progress tracks and a rounded,
+  keyboard-focusable Details action. Both bars remain bound to the existing
+  real overall/current-stage values; no artificial timing or progress was
+  added.
+- Its rare startup entrance uses a 200 ms opacity-only strong ease-out fade.
+  Windows' client-area animation preference disables that fade when reduced
+  motion is requested; progress and layout never animate with it.
+- The splash and PyInstaller bootloader continue using the existing athlete
+  artwork in `assets/long_jump_splash.png`; the website's separate take-off-board
+  hero remains website-only.

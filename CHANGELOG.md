@@ -1,5 +1,14 @@
 # LongJumpReplay changelog
 
+## 6.2.9 - 2026-09-13
+
+- Prevents the topmost startup window from remaining over the application
+  after camera and UI polling begin.
+- Refreshes startup presentation with compact dark rounded progress bars and
+  controls while preserving truthful overall and current-stage progress.
+- Keeps the original athlete artwork and adds a brief Windows-aware fade-in
+  that follows the system animation preference.
+
 ## 6.2.8 - 2026-09-13
 
 - Adds live App CPU and App RAM performance graphs with separate readable axes.

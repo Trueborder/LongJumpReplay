@@ -45,3 +45,15 @@ def test_startup_window_remains_responsive_during_minimum_activation_delay():
     assert callback_ran == [True]
     assert ACTIVATION_STARTUP_MINIMUM_SECONDS == 2.0
     root.destroy()
+
+
+def test_startup_window_destroy_removes_the_top_level():
+    root = tk.Tk(); root.withdraw()
+    window = StartupWindow(root)
+    path = str(window.window)
+
+    window.destroy()
+    root.update_idletasks()
+
+    assert int(root.tk.call("winfo", "exists", path)) == 0
+    root.destroy()
