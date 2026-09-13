@@ -93,6 +93,59 @@
   .login-actions-secondary { align-items: flex-start; }
 }
 
+/* Reference-inspired portal login composition: keep the current product page
+   visible underneath, but make the OTP card the clear, focused action. */
+.portal-login-page { height: 100dvh; overflow: hidden; }
+.portal-login-page .account-login { z-index: 31; min-height: calc(100dvh - 7rem); padding-block: clamp(2rem, 6vw, 5rem); }
+.portal-login-page .account-login-grid { width: 100%; min-height: calc(100dvh - 7rem); }
+.portal-login-page .login-context { opacity: .14; filter: saturate(.72); transition: opacity 220ms ease, filter 220ms ease; }
+.portal-login-page .login-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 31;
+  width: min(500px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: 0;
+  overflow: auto;
+  border-color: color-mix(in srgb, var(--cyan) 28%, var(--account-border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  box-shadow: 0 28px 90px color-mix(in srgb, var(--shadow) 90%, transparent), 0 0 0 1px color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(120%);
+  transform: translate(-50%, -50%);
+  animation: portal-login-card-in 480ms cubic-bezier(.2, .8, .2, 1) 40ms both;
+}
+.login-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  backdrop-filter: blur(2px) saturate(.82);
+  animation: portal-login-backdrop-in 420ms ease-out both;
+}
+.portal-login-page .login-card .panel-heading { margin-bottom: 1.35rem; }
+.portal-login-page .login-card .panel-icon { flex-basis: 42px; width: 42px; height: 42px; border-radius: 12px; }
+@keyframes portal-login-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes portal-login-card-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) scale(.985); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (max-width: 650px) {
+  .portal-login-page .login-card { width: min(100% - 1.5rem, 500px); max-height: calc(100dvh - 1.5rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-login-page .login-card,
+  .login-backdrop { animation: none; }
+  .portal-login-page .login-context { transition: none; }
+}
+
 /* Portal routes: /login and /dashboard */
 .portal-login-page .account-login { min-height: calc(100dvh - 7rem); }
 .panel-heading { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }

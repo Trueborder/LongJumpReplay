@@ -5,6 +5,7 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..', 'tomaspisar.cz', 'account');
 const login = fs.readFileSync(path.join(root, 'login', 'index.html'), 'utf8');
+const styles = fs.readFileSync(path.join(root, 'account.css'), 'utf8');
 const account = fs.readFileSync(path.join(root, 'account.js'), 'utf8');
 
 test('OTP login keeps the two-step email flow and recovery actions', () => {
@@ -16,4 +17,12 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(account, /\/api\/portal\/verify-code/);
   assert.match(account, /error\.status === 410/);
   assert.match(account, /replace\('\/dashboard\/overview'\)/);
+});
+
+test('login composition keeps a centered backdrop and reduced-motion fallback', () => {
+  assert.match(login, /class="login-backdrop"/);
+  assert.match(styles, /portal-login-card-in/);
+  assert.match(styles, /portal-login-backdrop-in/);
+  assert.match(styles, /\.portal-login-page \.account-login \{ z-index: 31;/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
 });
