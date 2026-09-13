@@ -168,6 +168,17 @@
   transform: translate(-50%, 4px);
   transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
 }
+.login-actions-secondary { flex-wrap: wrap; align-items: center; }
+.login-actions-secondary .text-button { min-height: 2rem; }
+.portal-login-page #password-step input,
+.portal-login-page #reset-step input { margin-bottom: .9rem; }
+.portal-login-page #reset-step { padding-top: .35rem; }
+.password-security-tools { margin: .9rem 0 1rem; padding: .9rem 0 0; border-top: 1px solid var(--account-border); }
+.password-security-tools p { max-width: 620px; margin: 0 0 .8rem; color: var(--muted); line-height: 1.55; }
+.password-security-form { display: grid; gap: .45rem; max-width: 460px; }
+.password-security-form label { color: var(--muted); font: 500 .68rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.password-security-form input { min-height: 42px; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 75%, transparent); color: var(--text); font: inherit; }
+.password-security-form button { justify-self: start; margin-top: .35rem; }
 .login-info-button:hover + .login-info-tooltip,
 .login-info-button:focus + .login-info-tooltip,
 .login-info-button:focus-visible + .login-info-tooltip {

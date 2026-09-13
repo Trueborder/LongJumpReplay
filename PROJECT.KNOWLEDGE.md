@@ -261,7 +261,8 @@
 
 ## Account portal readability redesign (2026-09-01)
 
-- The account portal keeps its existing passwordless login, dashboard routes,
+- The account portal keeps its existing email-OTP recovery flow and now also
+  supports optional password login, alongside the same dashboard routes,
   API behavior, themes, and bilingual content while presenting a quieter,
   more readable Evidence Desk layout.
 - Repeated informational card groups were removed from Overview, Licence,
@@ -393,7 +394,8 @@
   Transactional verification emails ship as branded HTML
   plus plain text, with cyan `APP ACTIVATION` and amber
   `CUSTOMER PORTAL LOGIN` purpose labels so the requested action is obvious.
-- The portal has separate canonical routes: `/login` for passwordless email
+- The portal has separate canonical routes: `/login` for password or
+  passwordless email
   sign-in and `/dashboard/overview`, `/dashboard/licence`,
   `/dashboard/activation-key`, `/dashboard/devices`, `/dashboard/billing`, and
   `/dashboard/help` for authenticated account categories. `/dashboard`

@@ -24,16 +24,21 @@ export interface VerificationEmail {
 export function verificationEmail(
   code: string,
   ttlMinutes: number,
-  purpose: "activation" | "portal",
+  purpose: "activation" | "portal" | "password_reset",
 ): VerificationEmail {
   const portal = purpose === "portal";
-  const purposeLabel = portal ? "CUSTOMER PORTAL LOGIN" : "APP ACTIVATION";
-  const heading = portal ? "Sign in to your account" : "Activate LongJumpReplay";
-  const subject = portal
+  const reset = purpose === "password_reset";
+  const purposeLabel = reset ? "PASSWORD RESET" : portal ? "CUSTOMER PORTAL LOGIN" : "APP ACTIVATION";
+  const heading = reset ? "Reset your portal password" : portal ? "Sign in to your account" : "Activate LongJumpReplay";
+  const subject = reset
+    ? "[LongJumpReplay] Customer portal password reset code"
+    : portal
     ? "[LongJumpReplay] Customer portal login code"
     : "[LongJumpReplay] App activation code";
-  const accent = portal ? "#F3B84B" : "#62D7C9";
-  const destination = purpose === "portal"
+  const accent = reset ? "#F3B84B" : portal ? "#F3B84B" : "#62D7C9";
+  const destination = reset
+    ? "the LongJumpReplay customer portal password reset"
+    : purpose === "portal"
     ? "the LongJumpReplay customer portal"
     : "the LongJumpReplay activation window";
   const text = [
@@ -137,7 +142,7 @@ export async function sendVerificationCode(
   to: string,
   code: string,
   ttlMinutes: number,
-  purpose: "activation" | "portal" = "activation",
+  purpose: "activation" | "portal" | "password_reset" = "activation",
 ): Promise<void> {
   await mailer(env).send(to, verificationEmail(code, ttlMinutes, purpose));
 }

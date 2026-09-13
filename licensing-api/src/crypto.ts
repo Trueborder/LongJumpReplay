@@ -12,6 +12,11 @@ import { AUTHORIZATION_PREFIX, AUTHORIZATION_VERSION, PRODUCT_ID } from "./confi
 import type { LicenseType } from "./config";
 
 const encoder = new TextEncoder();
+const PASSWORD_SCHEME = "pbkdf2-sha256";
+const PASSWORD_VERSION = "v1";
+const PASSWORD_ITERATIONS = 600_000;
+const PASSWORD_SALT_BYTES = 16;
+const PASSWORD_KEY_BITS = 256;
 
 export function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -172,6 +177,49 @@ export function generateToken(): string {
 
 export async function sha256(value: string): Promise<string> {
   return base64UrlEncode(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+}
+
+async function derivePasswordBits(password: string, salt: Uint8Array, iterations: number): Promise<ArrayBuffer> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  return crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+    key,
+    PASSWORD_KEY_BITS,
+  );
+}
+
+/**
+ * Versioned password storage format. The password itself never leaves the
+ * request handler and only the salted derived key is stored in D1.
+ */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
+  const derived = await derivePasswordBits(password, salt, PASSWORD_ITERATIONS);
+  return `${PASSWORD_SCHEME}$${PASSWORD_VERSION}$${PASSWORD_ITERATIONS}$${base64UrlEncode(salt)}$${base64UrlEncode(derived)}`;
+}
+
+export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
+  const parts = encoded.split("$");
+  if (parts.length !== 5 || parts[0] !== PASSWORD_SCHEME || parts[1] !== PASSWORD_VERSION) return false;
+  const iterations = Number(parts[2]);
+  if (!Number.isInteger(iterations) || iterations < 100_000 || iterations > 2_000_000) return false;
+  try {
+    const derived = await derivePasswordBits(password, base64ToBytes(parts[3]), iterations);
+    return timingSafeEqual(base64UrlEncode(derived), parts[4]);
+  } catch {
+    return false;
+  }
+}
+
+/** Run the same expensive operation for an unknown account. */
+export async function verifyPasswordAgainstDummy(password: string): Promise<void> {
+  await derivePasswordBits(password, new Uint8Array(PASSWORD_SALT_BYTES), PASSWORD_ITERATIONS);
 }
 
 export function randomId(prefix: string): string {

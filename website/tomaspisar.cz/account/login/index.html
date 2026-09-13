@@ -41,7 +41,7 @@
         <div class="account-intro login-context">
           <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="LONGJUMPREPLAY / CUSTOMER ACCOUNT" data-cs="LONGJUMPREPLAY / ZÁKAZNICKÝ ÚČET">LONGJUMPREPLAY / CUSTOMER ACCOUNT</span></p>
           <h1 id="login-title" data-en="Your licence, ready when you are." data-cs="Vaše licence, kdykoli ji potřebujete.">Your licence, ready when you are.</h1>
-          <p class="hero-lede" data-en="Use your email address and a one-time code. There is no password to remember, and you can sign in even before buying a licence." data-cs="Použijte svou e-mailovou adresu a jednorázový kód. Nemusíte si pamatovat heslo a přihlásit se můžete i před zakoupením licence.">Use your email address and a one-time code. There is no password to remember, and you can sign in even before buying a licence.</p>
+          <p class="hero-lede" data-en="Sign in with a password, or use a one-time email code whenever you need a recovery option." data-cs="Přihlaste se heslem nebo kdykoli použijte jednorázový kód z e-mailu jako obnovu přístupu.">Sign in with a password, or use a one-time email code whenever you need a recovery option.</p>
           <details class="guidance-disclosure login-guidance">
             <summary data-en="How sign-in works" data-cs="Jak funguje přihlášení">How sign-in works</summary>
             <ol class="guidance-steps">
@@ -60,8 +60,12 @@
             <div id="email-step">
             <label for="email" data-en="Account email" data-cs="E-mail účtu">Account email</label>
             <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
-            </div>
-            <div id="code-field" hidden>
+             </div>
+             <div id="password-step">
+               <label for="password" data-en="Password" data-cs="Heslo">Password</label>
+               <input id="password" name="password" type="password" autocomplete="current-password" minlength="12">
+             </div>
+             <div id="code-field" hidden>
               <label for="code" data-en="Six-digit code" data-cs="Šestimístný kód">Six-digit code</label>
               <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
             </div>
@@ -70,9 +74,20 @@
               <button class="text-button" id="change-email" type="button" hidden data-en="Change email" data-cs="Změnit e-mail">Change email</button>
               <button class="text-button" id="resend-code" type="button" hidden data-en="Resend code" data-cs="Poslat kód znovu">Resend code</button>
             </div>
+            <div id="reset-step" hidden>
+              <label for="reset-code" data-en="Email code" data-cs="Kod z e-mailu">Email code</label>
+              <input id="reset-code" name="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
+              <label for="new-password" data-en="New password" data-cs="Nove heslo">New password</label>
+              <input id="new-password" name="new-password" type="password" autocomplete="new-password" minlength="12">
+            </div>
+            <div id="login-mode-actions" class="login-actions-secondary">
+              <button class="text-button" id="otp-mode-link" type="button" data-en="Use email code instead" data-cs="Pouzit kod z e-mailu">Use email code instead</button>
+              <button class="text-button" id="forgot-password" type="button" data-en="Forgot password?" data-cs="Zapomenute heslo?">Forgot password?</button>
+            </div>
+            <div id="reset-actions" class="login-actions-secondary" hidden><button class="text-button" id="reset-back" type="button" data-en="Back to sign in" data-cs="Zpet na prihlaseni">Back to sign in</button></div>
           </form>
           <p id="login-status" class="status" role="status" aria-live="polite"></p>
-          <p class="support-note"><span data-en="Having trouble?" data-cs="Máte potíže?">Having trouble?</span> <span class="login-info-wrap"><button class="login-info-button" type="button" aria-label="Login information" aria-describedby="login-info-tooltip">i</button><span class="login-info-tooltip" id="login-info-tooltip" role="tooltip"><span data-en="We send a one-time verification code to your email. It is valid for 10 minutes, and no password is needed." data-cs="Na váš e-mail pošleme jednorázový ověřovací kód. Platí 10 minut a heslo není potřeba.">We send a one-time verification code to your email. It is valid for 10 minutes, and no password is needed.</span></span></span> <a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
+          <p class="support-note"><span data-en="Having trouble?" data-cs="Máte potíže?">Having trouble?</span> <span class="login-info-wrap"><button class="login-info-button" type="button" aria-label="Login information" aria-describedby="login-info-tooltip">i</button><span class="login-info-tooltip" id="login-info-tooltip" role="tooltip"><span data-en="Passwords are optional. Email verification codes expire after 10 minutes and remain available for account recovery." data-cs="Heslo je volitelné. Ověřovací kódy z e-mailu vyprší po 10 minutách a zůstávají k dispozici pro obnovu účtu.">Passwords are optional. Email verification codes expire after 10 minutes and remain available for account recovery.</span></span></span> <a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
         </div>
       </div>
     </section>

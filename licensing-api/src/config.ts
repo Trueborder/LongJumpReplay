@@ -31,6 +31,9 @@ export interface Env {
   RATE_LIMIT_ACTIVATION_KEY?: string;
   RATE_LIMIT_VERIFY?: string;
   RATE_LIMIT_CONTACT?: string;
+  RATE_LIMIT_PASSWORD_LOGIN?: string;
+  RATE_LIMIT_PASSWORD_RESET_REQUEST?: string;
+  RATE_LIMIT_PASSWORD_RESET_VERIFY?: string;
 
   // Secrets - set with `wrangler secret put`, never in wrangler.jsonc.
   STRIPE_WEBHOOK_SECRET: string;
@@ -107,5 +110,8 @@ export function rateLimits(env: Env) {
     activationKey: [int(env.RATE_LIMIT_ACTIVATION_KEY, 30), window] as [number, number],
     verify: [int(env.RATE_LIMIT_VERIFY, 120), window] as [number, number],
     contact: [int(env.RATE_LIMIT_CONTACT, 3), window] as [number, number],
+    passwordLogin: [int(env.RATE_LIMIT_PASSWORD_LOGIN, 10), window] as [number, number],
+    passwordResetRequest: [int(env.RATE_LIMIT_PASSWORD_RESET_REQUEST, 5), window] as [number, number],
+    passwordResetVerify: [int(env.RATE_LIMIT_PASSWORD_RESET_VERIFY, 10), window] as [number, number],
   };
 }

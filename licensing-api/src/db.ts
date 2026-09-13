@@ -68,6 +68,26 @@ export interface PortalSessionRow {
   expires_at: number;
   last_seen_at: number;
   revoked_at: number | null;
+  csrf_token_hash: string | null;
+}
+
+export interface PasswordCredentialRow {
+  customer_id: string;
+  password_hash: string;
+  created_at: number;
+  updated_at: number;
+  password_changed_at: number;
+}
+
+export interface PasswordResetCodeRow {
+  id: string;
+  customer_id: string;
+  email: string;
+  code_hash: string;
+  created_at: number;
+  expires_at: number;
+  attempt_count: number;
+  used_at: number | null;
 }
 
 export function now(): number {
@@ -355,18 +375,19 @@ export async function createPortalSession(
   customerId: string,
   tokenHash: string,
   expiresAt: number,
+  csrfTokenHash: string | null = null,
 ): Promise<PortalSessionRow> {
   const timestamp = now();
   const id = randomId("portal");
   await db
     .prepare(
       `INSERT INTO portal_sessions
-         (id, customer_id, token_hash, created_at, expires_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (id, customer_id, token_hash, created_at, expires_at, last_seen_at, csrf_token_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(id, customerId, tokenHash, timestamp, expiresAt, timestamp)
+    .bind(id, customerId, tokenHash, timestamp, expiresAt, timestamp, csrfTokenHash)
     .run();
-  return { id, customer_id: customerId, token_hash: tokenHash, created_at: timestamp, expires_at: expiresAt, last_seen_at: timestamp, revoked_at: null };
+  return { id, customer_id: customerId, token_hash: tokenHash, created_at: timestamp, expires_at: expiresAt, last_seen_at: timestamp, revoked_at: null, csrf_token_hash: csrfTokenHash };
 }
 
 export async function findPortalSession(db: D1Database, tokenHash: string): Promise<PortalSessionRow | null> {
@@ -382,6 +403,67 @@ export async function touchPortalSession(db: D1Database, sessionId: string): Pro
 
 export async function revokePortalSession(db: D1Database, tokenHash: string): Promise<void> {
   await db.prepare("UPDATE portal_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL").bind(now(), tokenHash).run();
+}
+
+export async function revokePortalSessionsForCustomer(db: D1Database, customerId: string): Promise<void> {
+  await db.prepare("UPDATE portal_sessions SET revoked_at = ? WHERE customer_id = ? AND revoked_at IS NULL").bind(now(), customerId).run();
+}
+
+export async function findPasswordCredential(db: D1Database, customerId: string): Promise<PasswordCredentialRow | null> {
+  return db.prepare("SELECT * FROM customer_password_credentials WHERE customer_id = ?")
+    .bind(customerId).first<PasswordCredentialRow>();
+}
+
+export async function createPasswordCredential(db: D1Database, customerId: string, passwordHash: string): Promise<void> {
+  const timestamp = now();
+  await db.prepare(`INSERT INTO customer_password_credentials
+    (customer_id, password_hash, created_at, updated_at, password_changed_at)
+    VALUES (?, ?, ?, ?, ?)`)
+    .bind(customerId, passwordHash, timestamp, timestamp, timestamp).run();
+}
+
+export async function updatePasswordCredential(db: D1Database, customerId: string, passwordHash: string): Promise<void> {
+  const timestamp = now();
+  await db.prepare(`UPDATE customer_password_credentials
+    SET password_hash = ?, updated_at = ?, password_changed_at = ? WHERE customer_id = ?`)
+    .bind(passwordHash, timestamp, timestamp, customerId).run();
+}
+
+export async function createPasswordResetCode(
+  db: D1Database,
+  customerId: string,
+  email: string,
+  codeHash: string,
+  expiresAt: number,
+): Promise<PasswordResetCodeRow> {
+  const timestamp = now();
+  const row = { id: randomId("prc"), customer_id: customerId, email, code_hash: codeHash,
+    created_at: timestamp, expires_at: expiresAt, attempt_count: 0, used_at: null };
+  await db.prepare(`INSERT INTO password_reset_codes
+    (id, customer_id, email, code_hash, created_at, expires_at, attempt_count)
+    VALUES (?, ?, ?, ?, ?, ?, 0)`)
+    .bind(row.id, row.customer_id, row.email, row.code_hash, row.created_at, row.expires_at).run();
+  return row;
+}
+
+export async function invalidatePasswordResetCodes(db: D1Database, customerId: string): Promise<void> {
+  await db.prepare("UPDATE password_reset_codes SET used_at = ? WHERE customer_id = ? AND used_at IS NULL")
+    .bind(now(), customerId).run();
+}
+
+export async function findLatestPasswordResetCode(db: D1Database, email: string): Promise<PasswordResetCodeRow | null> {
+  return db.prepare(`SELECT * FROM password_reset_codes
+    WHERE email = ? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1`)
+    .bind(email).first<PasswordResetCodeRow>();
+}
+
+export async function incrementPasswordResetAttempts(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE password_reset_codes SET attempt_count = attempt_count + 1 WHERE id = ?").bind(id).run();
+}
+
+export async function consumePasswordResetCode(db: D1Database, id: string): Promise<boolean> {
+  const result = await db.prepare("UPDATE password_reset_codes SET used_at = ? WHERE id = ? AND used_at IS NULL").bind(now(), id).run();
+  return (result.meta.changes ?? 0) === 1;
 }
 
 export async function touchDevice(db: D1Database, deviceId: string, metadata?: DeviceMetadata): Promise<void> {

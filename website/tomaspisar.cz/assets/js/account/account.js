@@ -43,6 +43,7 @@
   };
   const copy = {
     en: {
+      passwordLength: 'Use a password with at least 12 characters.', signingIn: 'Signing inâ€¦', resetSent: 'If the account can reset a password, a code is on the way. It is valid for 10 minutes.',
       expiredCode: 'This code has expired. Request a new one.', verified: 'Verified. Opening your account…',
       sending: 'Sending code…', checking: 'Checking code…', sent: 'A code is on the way. It is valid for 10 minutes.',
       invalidEmail: 'Enter a valid email address.', invalidCode: 'Enter the six-digit code from your email.',
@@ -63,6 +64,7 @@
       pairingRequired: 'Enter the six-digit code shown by LongJumpReplay or open the QR link.', pairingFound: 'Computer found. Choose an active licence with an available slot.', pairingApproved: 'Approved. The app can finish activation now.', pairingNoCapacity: 'No active licence has an available computer slot.', pairingExpired: 'This pairing request is missing or expired.', pairingSameMachine: 'Already used by this computer', pairingAvailable: 'available slot', pairingApprove: 'Approve and activate'
     },
     cs: {
+      passwordLength: 'PouÅ¾ijte heslo dlouhÃ© alespoÅˆ 12 znakÅ¯.', signingIn: 'PÅ™ihlaÅ¡ujiâ€¦', resetSent: 'Pokud lze heslo obnovit, kÃ³d je na cestÄ›. PlatÃ­ 10 minut.',
       expiredCode: 'Kód vypršel. Požádejte o nový.', verified: 'Ověřeno. Otevírám účet…',
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
       invalidEmail: 'Zadejte platnou e-mailovou adresu.', invalidCode: 'Zadejte šestimístný kód z e-mailu.',
@@ -133,11 +135,13 @@
   const formatDateTime = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(seconds * 1000)) : '—';
   const formatMoney = (amount, currency) => typeof amount === 'number' ? new Intl.NumberFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: (currency || 'czk').toUpperCase() }).format(amount / 100) : '—';
   const setStatus = (message, selector = '#account-status') => { const element = $(selector); if (element) element.textContent = message || ''; };
+  const cookieValue = (name) => document.cookie.split(';').map((part) => part.trim().split('=')).find(([key]) => key === name)?.slice(1).join('=') || '';
   const api = async (path, options = {}) => {
+    const csrf = cookieValue('ljr-portal-csrf');
     const response = await fetch(`${API}${path}`, {
       ...options,
       credentials: 'include',
-      headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
+      headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}), ...(options.headers || {}) }
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new ApiError(data.message || t('genericError'), response.status, data.error || 'error');
@@ -151,9 +155,88 @@
     button.setAttribute('aria-busy', String(busy));
   };
 
+  const initSecureLogin = (form) => {
+    const loginState = { mode: 'password', codeSent: false, resetSent: false };
+    const redirectAfterAuth = () => {
+      const pendingPairing = readPendingPairing();
+      window.setTimeout(() => window.location.replace(pendingPairing ? `/approve/pairing#pair=${encodeURIComponent(pendingPairing)}` : '/dashboard/overview'), 180);
+    };
+    const setText = (selector, en, cs) => { const element = $(selector); if (element) element.textContent = state.lang === 'cs' ? cs : en; };
+    const setMode = (mode) => {
+      loginState.mode = mode;
+      loginState.codeSent = false;
+      loginState.resetSent = false;
+      $('#email-step').hidden = false;
+      $('#password-step').hidden = mode !== 'password';
+      $('#code-field').hidden = mode !== 'otp';
+      $('#reset-step').hidden = true;
+      $('#login-mode-actions').hidden = mode === 'reset';
+      $('#reset-actions').hidden = mode !== 'reset';
+      $('#change-email').hidden = true;
+      $('#resend-code').hidden = true;
+      $('#password').required = mode === 'password';
+      $('#code').required = false;
+      setText('#login-submit', mode === 'otp' ? 'Continue' : mode === 'reset' ? 'Send reset code' : 'Sign in', mode === 'otp' ? 'PokraÄovat' : mode === 'reset' ? 'Poslat kÃ³d pro obnovu' : 'PÅ™ihlÃ¡sit se');
+      setStatus('', '#login-status');
+      (mode === 'password' ? $('#password') : $('#email')).focus();
+    };
+    const requestOtp = async () => {
+      const email = $('#email').value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
+      state.email = email; setStatus(t('sending'), '#login-status'); setLoginBusy(true);
+      try {
+        await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
+        loginState.codeSent = true; $('#password-step').hidden = true; $('#code-field').hidden = false; $('#change-email').hidden = false; $('#resend-code').hidden = false; $('#login-mode-actions').hidden = true;
+        setText('#login-submit', 'Verify code', 'OvÄ›Å™it kÃ³d'); setStatus(t('sent'), '#login-status'); $('#code').focus();
+      } catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
+    };
+    const verifyOtp = async () => {
+      const code = $('#code').value.trim();
+      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
+      setStatus(t('checking'), '#login-status'); setLoginBusy(true);
+      try { await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
+      catch (error) { const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired'); setStatus(expired ? t('expiredCode') : error.message, '#login-status'); $('#code').setAttribute('aria-invalid', 'true'); }
+      finally { setLoginBusy(false); }
+    };
+    const loginWithPassword = async () => {
+      const email = $('#email').value.trim(); const password = $('#password').value;
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
+      if (password.length < 12) { setStatus(t('passwordLength'), '#login-status'); return; }
+      state.email = email; setStatus(t('signingIn'), '#login-status'); setLoginBusy(true);
+      try { await api('/api/portal/password/login', { method: 'POST', body: JSON.stringify({ email, password }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
+      catch (error) { setStatus(error.message, '#login-status'); }
+      finally { setLoginBusy(false); }
+    };
+    const requestReset = async () => {
+      const email = $('#email').value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
+      state.email = email; setStatus(t('sending'), '#login-status'); setLoginBusy(true);
+      try { await api('/api/portal/password/reset/request', { method: 'POST', body: JSON.stringify({ email }) }); loginState.resetSent = true; $('#reset-step').hidden = false; setText('#login-submit', 'Reset password', 'Obnovit heslo'); setStatus(t('resetSent'), '#login-status'); $('#reset-code').focus(); }
+      catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
+    };
+    const completeReset = async () => {
+      const code = $('#reset-code').value.trim(); const newPassword = $('#new-password').value;
+      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
+      if (newPassword.length < 12) { setStatus(t('passwordLength'), '#login-status'); return; }
+      setStatus(t('checking'), '#login-status'); setLoginBusy(true);
+      try { await api('/api/portal/password/reset', { method: 'POST', body: JSON.stringify({ email: state.email, code, new_password: newPassword }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
+      catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
+    };
+    $('#otp-mode-link').addEventListener('click', () => setMode('otp'));
+    $('#forgot-password').addEventListener('click', () => setMode('reset'));
+    $('#reset-back').addEventListener('click', () => setMode('password'));
+    $('#change-email').addEventListener('click', () => setMode('otp'));
+    $('#resend-code').addEventListener('click', requestOtp);
+    $('#code').addEventListener('input', () => $('#code').removeAttribute('aria-invalid'));
+    form.addEventListener('submit', (event) => { event.preventDefault(); if (loginState.mode === 'otp') return loginState.codeSent ? verifyOtp() : requestOtp(); if (loginState.mode === 'reset') return loginState.resetSent ? completeReset() : requestReset(); return loginWithPassword(); });
+    setMode('password');
+    api('/api/portal/account').then(redirectAfterAuth).catch(() => $('#email').focus());
+  };
+
   const initLogin = () => {
     const form = $('#login-form');
     if (!form) return;
+    return initSecureLogin(form);
 
     const requestCode = async () => {
       const email = $('#email').value.trim();
@@ -381,6 +464,17 @@
     finally { button.removeAttribute('aria-busy'); }
   };
 
+  const renderPasswordSecurity = (configured) => {
+    const tools = $('#password-security-tools');
+    const form = $('#password-enroll-form');
+    if (!tools || !form) return;
+    tools.hidden = false;
+    form.dataset.configured = configured ? 'true' : 'false';
+    form.innerHTML = configured
+      ? `<label for="current-password" data-en="Current password" data-cs="SouÄasnÃ© heslo">${state.lang === 'cs' ? 'SouÄasnÃ© heslo' : 'Current password'}</label><input id="current-password" type="password" autocomplete="current-password" required><label for="enroll-password" data-en="New password" data-cs="NovÃ© heslo">${state.lang === 'cs' ? 'NovÃ© heslo' : 'New password'}</label><input id="enroll-password" type="password" minlength="12" autocomplete="new-password" required><button class="text-button" type="submit">${state.lang === 'cs' ? 'ZmÄ›nit heslo' : 'Change password'}</button>`
+      : `<label for="enroll-password" data-en="New password" data-cs="NovÃ© heslo">${state.lang === 'cs' ? 'NovÃ© heslo' : 'New password'}</label><input id="enroll-password" type="password" minlength="12" autocomplete="new-password" required><button class="text-button" type="submit">${state.lang === 'cs' ? 'VytvoÅ™it heslo' : 'Create password'}</button>`;
+  };
+
   const renderDashboard = (data) => {
     state.account = data;
     const licences = data.licenses || [];
@@ -402,6 +496,7 @@
       : t('notApplicable');
     $('#summary-verification').textContent = nextVerification ? formatDate(nextVerification + (30 * 86400)) : t('verificationReady');
     $('#session-expiry').textContent = formatDate(data.session_expires_at);
+    renderPasswordSecurity(Boolean(data.password_configured));
 
     $('#no-licence-state').hidden = hasActiveLicence;
     $('#no-licence-eyebrow').textContent = t(hasAnyLicence ? 'inactiveLicenceEyebrow' : 'noLicenceEyebrow');
@@ -557,6 +652,20 @@
     document.querySelectorAll('[data-open-billing]').forEach((button) => button.addEventListener('click', openBilling));
     $('#logout-button')?.addEventListener('click', signOut);
     $('#security-logout-button')?.addEventListener('click', signOut);
+    $('#password-enroll-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const newPassword = $('#enroll-password')?.value || '';
+      if (newPassword.length < 12) { setStatus(t('passwordLength')); return; }
+      const configured = form.dataset.configured === 'true';
+      const body = configured
+        ? { current_password: $('#current-password')?.value || '', new_password: newPassword }
+        : { password: newPassword };
+      if (configured && body.current_password.length < 12) { setStatus(state.lang === 'cs' ? 'Zadejte souÄasnÃ© heslo.' : 'Enter your current password.'); return; }
+      setStatus(state.lang === 'cs' ? 'UklÃ¡dÃ¡mâ€¦' : 'Savingâ€¦');
+      try { await api(configured ? '/api/portal/password/change' : '/api/portal/password/enroll', { method: 'POST', body: JSON.stringify(body) }); setStatus(state.lang === 'cs' ? 'Heslo bylo uloÅ¾eno.' : 'Password saved.'); await loadDashboard(); }
+      catch (error) { setStatus(error.message); }
+    });
     $('#device-details-close')?.addEventListener('click', () => $('#device-details-dialog').close());
     $('#activation-key-reveal')?.addEventListener('click', revealActivationKey);
     $('#activation-key-copy')?.addEventListener('click', copyActivationKey);

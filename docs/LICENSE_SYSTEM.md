@@ -163,14 +163,26 @@ Liveness only.
 
 ### Customer portal
 
-The portal uses `https://account.tomaspisar.cz/login` for passwordless email
-sign-in and `https://account.tomaspisar.cz/dashboard` for the authenticated
-account. The Worker redirects the account root according to session state. It
-uses a separate email verification purpose and an HttpOnly session cookie; it
-never receives or stores card data.
+The portal uses `https://account.tomaspisar.cz/login` for password or
+passwordless email-code sign-in and `https://account.tomaspisar.cz/dashboard`
+for the authenticated account. The Worker redirects the account root according
+to session state. Passwords are optional, stored as versioned PBKDF2-HMAC-
+SHA-256 hashes with per-account random salts, and are never emailed or logged.
+The existing OTP flow remains the recovery path. Sessions remain opaque,
+server-side records in an HttpOnly cookie; password mutations also require a
+session-bound CSRF token. The portal never receives or stores card data.
 
 - `POST /api/portal/request-code` - request a portal OTP for any valid email.
 - `POST /api/portal/verify-code` - exchange the OTP for a portal session.
+- `POST /api/portal/password/login` - sign in with an optional account password.
+- `POST /api/portal/password/enroll` - create a first password from an existing
+  authenticated OTP session.
+- `POST /api/portal/password/change` - change a password and revoke other
+  sessions.
+- `POST /api/portal/password/reset/request` - request a password-reset OTP
+  without revealing whether an account exists.
+- `POST /api/portal/password/reset` - consume the reset OTP and establish a new
+  authenticated session.
 - `GET /api/portal/account` - licence, device, invoice and billing status.
 - `POST /api/portal/billing` - create a Stripe Customer Portal session.
 - `POST /api/portal/deactivate-device` - free one device slot.

@@ -23,10 +23,13 @@ import {
   decryptActivationKey,
   generateVerificationCode,
   hashCode,
+  hashPassword,
   randomId,
   sha256,
   signAuthorization,
   timingSafeEqual,
+  verifyPassword,
+  verifyPasswordAgainstDummy,
 } from "./crypto";
 import {
   activateDevice,
@@ -42,11 +45,20 @@ import {
   findActivationKeyByLicense,
   findActivationKeyByVerifier,
   findActivatableLicense,
+  findCustomerByEmail,
   findCustomerById,
   findDevice,
   findLicenseById,
   findLicenseBySubscription,
   findPortalSession,
+  findPasswordCredential,
+  createPasswordCredential,
+  updatePasswordCredential,
+  createPasswordResetCode,
+  invalidatePasswordResetCodes,
+  findLatestPasswordResetCode,
+  incrementPasswordResetAttempts,
+  consumePasswordResetCode,
   listDevicesForCustomer,
   listLicensesForCustomer,
   logEvent,
@@ -61,6 +73,7 @@ import {
   touchPortalSession,
   upsertCustomer,
   revokePortalSession,
+  revokePortalSessionsForCustomer,
   purgeOldDeviceActivity,
 } from "./db";
 import type { DeviceMetadata } from "./db";
@@ -79,6 +92,9 @@ const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const MAX_BODY_BYTES = 16_384;
 const PORTAL_SESSION_COOKIE = "ljr-portal-session";
+const PORTAL_CSRF_COOKIE = "ljr-portal-csrf";
+const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MAX_LENGTH = 128;
 const CONTACT_ORIGIN = "https://tomaspisar.cz";
 const CONTACT_TOPICS = new Set(["support", "licence", "club", "bug", "feedback", "general"]);
 
@@ -156,7 +172,7 @@ function portalCorsHeaders(request: Request, env: Env): Headers {
   if (origin && origin === env.PORTAL_ORIGIN) {
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Access-Control-Allow-Headers", "Content-Type");
+    headers.set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token");
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     headers.set("Vary", "Origin");
   }
@@ -173,7 +189,7 @@ function contactCorsHeaders(request: Request): Headers {
   const headers = new Headers();
   if (request.headers.get("Origin") === CONTACT_ORIGIN) {
     headers.set("Access-Control-Allow-Origin", CONTACT_ORIGIN);
-    headers.set("Access-Control-Allow-Headers", "Content-Type");
+    headers.set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token");
     headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
     headers.set("Vary", "Origin");
   }
@@ -240,6 +256,37 @@ export async function contact(request: Request, env: Env): Promise<Response> {
 
 function portalCookie(token: string, maxAge: number): string {
   return `${PORTAL_SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Domain=.tomaspisar.cz; Path=/; HttpOnly; Secure; SameSite=Lax`;
+}
+
+function portalCsrfCookie(token: string, maxAge: number): string {
+  return `${PORTAL_CSRF_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Domain=.tomaspisar.cz; Path=/; Secure; SameSite=Lax`;
+}
+
+function jsonWithPortalSession(data: unknown, token: string, csrfToken: string, maxAge: number, status = 200): Response {
+  const response = json(data, status);
+  response.headers.append("Set-Cookie", portalCookie(token, maxAge));
+  response.headers.append("Set-Cookie", portalCsrfCookie(csrfToken, maxAge));
+  return response;
+}
+
+function jsonWithClearedPortalSession(data: unknown): Response {
+  const response = json(data);
+  response.headers.append("Set-Cookie", portalCookie("", 0));
+  response.headers.append("Set-Cookie", portalCsrfCookie("", 0));
+  return response;
+}
+
+function csrfToken(request: Request): string | null {
+  return request.headers.get("X-CSRF-Token")?.trim() || null;
+}
+
+async function portalPasswordMutationAllowed(request: Request, env: Env, tokenHash: string, expectedCsrfHash: string | null): Promise<boolean> {
+  if (!portalMutationAllowed(request, env)) return false;
+  // Sessions created before the password feature have no CSRF hash. Origin
+  // validation remains a backwards-compatible fallback for those sessions.
+  if (!expectedCsrfHash) return true;
+  const candidate = csrfToken(request);
+  return Boolean(candidate && timingSafeEqual(await sha256(candidate), expectedCsrfHash) && tokenHash);
 }
 
 function portalToken(request: Request): string | null {
@@ -638,14 +685,11 @@ export async function verifyCode(request: Request, env: Env, purpose: Verificati
     const customer = await findCustomerById(env.DB, row.customer_id);
     if (!customer) return fail("invalid_code", "That code is not valid. Request a new one.");
     const token = generateToken();
+    const csrf = generateToken();
     const expiresAt = now() + cfg.portalSessionTtlSeconds;
-    await createPortalSession(env.DB, customer.id, await sha256(token), expiresAt);
+    await createPortalSession(env.DB, customer.id, await sha256(token), expiresAt, await sha256(csrf));
     await logEvent(env.DB, "portal_login_success", null, {});
-    return json(
-      { authenticated: true, expires_at: expiresAt },
-      200,
-      { "Set-Cookie": portalCookie(token, cfg.portalSessionTtlSeconds) },
-    );
+    return jsonWithPortalSession({ authenticated: true, expires_at: expiresAt }, token, csrf, cfg.portalSessionTtlSeconds);
   }
 
   const row = await env.DB.prepare(
@@ -1216,6 +1260,170 @@ async function authenticatedPortal(request: Request, env: Env) {
   return { token, session, customer };
 }
 
+function passwordFrom(data: Record<string, unknown>, key: string): string {
+  return typeof data[key] === "string" ? data[key] as string : "";
+}
+
+function validPassword(password: string): boolean {
+  return password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH;
+}
+
+function passwordInputError(): Response {
+  return fail("invalid_password", `Use a password between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`);
+}
+
+async function newPortalSession(env: Env, customerId: string): Promise<{ token: string; csrf: string; expiresAt: number }> {
+  const cfg = settings(env);
+  const token = generateToken();
+  const csrf = generateToken();
+  const expiresAt = now() + cfg.portalSessionTtlSeconds;
+  await createPortalSession(env.DB, customerId, await sha256(token), expiresAt, await sha256(csrf));
+  return { token, csrf, expiresAt };
+}
+
+async function portalPasswordLogin(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  const password = passwordFrom(data, "password");
+  if (!EMAIL_PATTERN.test(email)) return fail("invalid_email", "Enter a valid email address.");
+  if (!validPassword(password)) return passwordInputError();
+
+  const limits = rateLimits(env);
+  if (!(await rateLimit(env.DB, `password-login-email:${await sha256(email)}`, ...limits.passwordLogin))
+      || !(await rateLimit(env.DB, `password-login-ip:${clientKey(request)}`, ...limits.passwordLogin))) {
+    return fail("rate_limited", "Too many sign-in attempts. Try again later or use email code sign-in.", 429);
+  }
+
+  const customer = await findCustomerByEmail(env.DB, email);
+  const credential = customer ? await findPasswordCredential(env.DB, customer.id) : null;
+  if (!customer || !credential) {
+    await verifyPasswordAgainstDummy(password);
+    await logEvent(env.DB, "portal_password_login_failed", null, { reason: "invalid_credentials" });
+    return fail("invalid_credentials", "Email or password is incorrect.", 401);
+  }
+  if (!(await verifyPassword(password, credential.password_hash))) {
+    await logEvent(env.DB, "portal_password_login_failed", null, { reason: "invalid_credentials" });
+    return fail("invalid_credentials", "Email or password is incorrect.", 401);
+  }
+  const session = await newPortalSession(env, customer.id);
+  await logEvent(env.DB, "portal_password_login_success", null, {});
+  return jsonWithPortalSession(
+    { authenticated: true, expires_at: session.expiresAt },
+    session.token,
+    session.csrf,
+    settings(env).portalSessionTtlSeconds,
+  );
+}
+
+async function portalPasswordEnroll(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in before creating a password.", 401);
+  if (!(await portalPasswordMutationAllowed(request, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null))) {
+    return fail("forbidden", "This request is not allowed.", 403);
+  }
+  const password = passwordFrom(await readJson(request), "password");
+  if (!validPassword(password)) return passwordInputError();
+  if (await findPasswordCredential(env.DB, auth.customer.id)) {
+    return fail("password_exists", "A password is already set. Change it instead.", 409);
+  }
+  await createPasswordCredential(env.DB, auth.customer.id, await hashPassword(password));
+  await logEvent(env.DB, "portal_password_created", null, {});
+  return json({ password_configured: true });
+}
+
+async function portalPasswordChange(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in before changing your password.", 401);
+  if (!(await portalPasswordMutationAllowed(request, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null))) {
+    return fail("forbidden", "This request is not allowed.", 403);
+  }
+  const data = await readJson(request);
+  const currentPassword = passwordFrom(data, "current_password");
+  const newPassword = passwordFrom(data, "new_password");
+  if (!validPassword(currentPassword) || !validPassword(newPassword)) return passwordInputError();
+  const credential = await findPasswordCredential(env.DB, auth.customer.id);
+  if (!credential || !(await verifyPassword(currentPassword, credential.password_hash))) {
+    return fail("invalid_credentials", "The current password is incorrect.", 401);
+  }
+  await updatePasswordCredential(env.DB, auth.customer.id, await hashPassword(newPassword));
+  await revokePortalSessionsForCustomer(env.DB, auth.customer.id);
+  const session = await newPortalSession(env, auth.customer.id);
+  await logEvent(env.DB, "portal_password_changed", null, {});
+  return jsonWithPortalSession(
+    { password_configured: true, expires_at: session.expiresAt },
+    session.token,
+    session.csrf,
+    settings(env).portalSessionTtlSeconds,
+  );
+}
+
+async function portalPasswordResetRequest(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const cfg = settings(env);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  if (!EMAIL_PATTERN.test(email)) return fail("invalid_email", "Enter a valid email address.");
+  const limits = rateLimits(env);
+  if (!(await rateLimit(env.DB, `password-reset-email:${await sha256(email)}`, ...limits.passwordResetRequest))
+      || !(await rateLimit(env.DB, `password-reset-ip:${clientKey(request)}`, ...limits.passwordResetRequest))) {
+    return fail("rate_limited", "Too many reset requests. Try again later.", 429);
+  }
+  const customer = await findCustomerByEmail(env.DB, email);
+  const credential = customer ? await findPasswordCredential(env.DB, customer.id) : null;
+  if (customer && credential) {
+    await invalidatePasswordResetCodes(env.DB, customer.id);
+    const code = generateVerificationCode();
+    await createPasswordResetCode(env.DB, customer.id, email, await hashCode(env.VERIFICATION_PEPPER, code), now() + cfg.verificationCodeTtlSeconds);
+    try {
+      await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), "password_reset");
+      await logEvent(env.DB, "portal_password_reset_requested", null, { result: "sent" });
+    } catch {
+      await logEvent(env.DB, "portal_password_reset_requested", null, { result: "send_failed" });
+    }
+  } else {
+    await logEvent(env.DB, "portal_password_reset_requested", null, { result: "generic" });
+  }
+  return json({ sent: true, expires_in_minutes: Math.floor(cfg.verificationCodeTtlSeconds / 60) });
+}
+
+async function portalPasswordReset(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const cfg = settings(env);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  const code = str(data.code);
+  const newPassword = passwordFrom(data, "new_password");
+  if (!EMAIL_PATTERN.test(email) || !/^\d{6}$/.test(code)) return fail("invalid_code", "That code is not valid. Request a new one.");
+  if (!validPassword(newPassword)) return passwordInputError();
+  const limits = rateLimits(env);
+  if (!(await rateLimit(env.DB, `password-reset-verify-email:${await sha256(email)}`, ...limits.passwordResetVerify))
+      || !(await rateLimit(env.DB, `password-reset-verify-ip:${clientKey(request)}`, ...limits.passwordResetVerify))) {
+    return fail("rate_limited", "Too many reset attempts. Try again later.", 429);
+  }
+  const row = await findLatestPasswordResetCode(env.DB, email);
+  if (!row || row.expires_at < now() || row.attempt_count >= cfg.maxVerificationAttempts) {
+    return fail("invalid_code", "That code is not valid. Request a new one.");
+  }
+  await incrementPasswordResetAttempts(env.DB, row.id);
+  const candidate = await hashCode(env.VERIFICATION_PEPPER, code);
+  if (!timingSafeEqual(candidate, row.code_hash)) return fail("invalid_code", "That code is not correct.");
+  const customer = await findCustomerById(env.DB, row.customer_id);
+  if (!customer) return fail("invalid_code", "That code is not valid. Request a new one.");
+  if (!(await consumePasswordResetCode(env.DB, row.id))) return fail("invalid_code", "That code is no longer valid. Request a new one.");
+  await updatePasswordCredential(env.DB, customer.id, await hashPassword(newPassword));
+  await invalidatePasswordResetCodes(env.DB, customer.id);
+  await revokePortalSessionsForCustomer(env.DB, customer.id);
+  const session = await newPortalSession(env, customer.id);
+  await logEvent(env.DB, "portal_password_reset_completed", null, {});
+  return jsonWithPortalSession(
+    { authenticated: true, password_configured: true, expires_at: session.expiresAt },
+    session.token,
+    session.csrf,
+    settings(env).portalSessionTtlSeconds,
+  );
+}
+
 function publicLicense(license: Awaited<ReturnType<typeof findLicenseById>>) {
   if (!license) return null;
   return {
@@ -1267,6 +1475,7 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
   const keys = Object.fromEntries(keyStates);
   return json({
     customer: { email: auth.customer.email },
+    password_configured: Boolean(await findPasswordCredential(env.DB, auth.customer.id)),
     licenses: licenses.map((license) => ({ ...publicLicense(license), active_devices: counts.get(license.id) ?? 0 })),
     devices: devices.map((device) => ({
       id: device.id,
@@ -1427,11 +1636,7 @@ async function portalDeleteDevice(request: Request, env: Env): Promise<Response>
 async function portalLogout(request: Request, env: Env): Promise<Response> {
   const token = portalToken(request);
   if (token) await revokePortalSession(env.DB, await sha256(token));
-  return json(
-    { logged_out: true },
-    200,
-    { "Set-Cookie": portalCookie("", 0) },
-  );
+  return jsonWithClearedPortalSession({ logged_out: true });
 }
 
 /* ------------------------------------------------------------------ Router */
@@ -1504,6 +1709,21 @@ export default {
           break;
         case "/api/portal/verify-code":
           response = await verifyCode(request, env, "portal");
+          break;
+        case "/api/portal/password/login":
+          response = await portalPasswordLogin(request, env);
+          break;
+        case "/api/portal/password/enroll":
+          response = await portalPasswordEnroll(request, env);
+          break;
+        case "/api/portal/password/change":
+          response = await portalPasswordChange(request, env);
+          break;
+        case "/api/portal/password/reset/request":
+          response = await portalPasswordResetRequest(request, env);
+          break;
+        case "/api/portal/password/reset":
+          response = await portalPasswordReset(request, env);
           break;
         case "/api/portal/logout":
           response = await portalLogout(request, env);
