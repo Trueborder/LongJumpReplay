@@ -90,6 +90,29 @@ export interface PasswordResetCodeRow {
   used_at: number | null;
 }
 
+export interface PortalProfileRow {
+  customer_id: string;
+  first_name: string;
+  last_name: string;
+  club_name: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PortalRegistrationChallengeRow {
+  id: string;
+  customer_id: string | null;
+  email: string;
+  code_hash: string;
+  setup_token_hash: string | null;
+  purpose: "registration" | "migration";
+  created_at: number;
+  expires_at: number;
+  attempt_count: number;
+  verified_at: number | null;
+  completed_at: number | null;
+}
+
 export function now(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -463,6 +486,108 @@ export async function incrementPasswordResetAttempts(db: D1Database, id: string)
 
 export async function consumePasswordResetCode(db: D1Database, id: string): Promise<boolean> {
   const result = await db.prepare("UPDATE password_reset_codes SET used_at = ? WHERE id = ? AND used_at IS NULL").bind(now(), id).run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
+export async function findPortalProfile(db: D1Database, customerId: string): Promise<PortalProfileRow | null> {
+  return db.prepare("SELECT * FROM portal_profiles WHERE customer_id = ?")
+    .bind(customerId).first<PortalProfileRow>();
+}
+
+export async function savePortalProfile(
+  db: D1Database,
+  customerId: string,
+  firstName: string,
+  lastName: string,
+  clubName: string | null,
+): Promise<void> {
+  const timestamp = now();
+  await db.prepare(`INSERT INTO portal_profiles
+      (customer_id, first_name, last_name, club_name, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(customer_id) DO UPDATE SET
+      first_name = excluded.first_name,
+      last_name = excluded.last_name,
+      club_name = excluded.club_name,
+      updated_at = excluded.updated_at`)
+    .bind(customerId, firstName, lastName, clubName, timestamp, timestamp).run();
+}
+
+export async function invalidatePortalRegistrationChallenges(
+  db: D1Database,
+  email: string,
+  purpose: "registration" | "migration",
+): Promise<void> {
+  await db.prepare(`UPDATE portal_registration_challenges
+      SET completed_at = COALESCE(completed_at, ?)
+    WHERE email = ? AND purpose = ? AND completed_at IS NULL`)
+    .bind(now(), normaliseEmail(email), purpose).run();
+}
+
+export async function createPortalRegistrationChallenge(
+  db: D1Database,
+  customerId: string | null,
+  email: string,
+  codeHash: string,
+  purpose: "registration" | "migration",
+  expiresAt: number,
+): Promise<PortalRegistrationChallengeRow> {
+  const timestamp = now();
+  const row: PortalRegistrationChallengeRow = {
+    id: randomId("reg"), customer_id: customerId, email: normaliseEmail(email),
+    code_hash: codeHash, setup_token_hash: null, purpose, created_at: timestamp,
+    expires_at: expiresAt, attempt_count: 0, verified_at: null, completed_at: null,
+  };
+  await db.prepare(`INSERT INTO portal_registration_challenges
+      (id, customer_id, email, code_hash, purpose, created_at, expires_at, attempt_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0)`)
+    .bind(row.id, row.customer_id, row.email, row.code_hash, row.purpose, row.created_at, row.expires_at).run();
+  return row;
+}
+
+export async function findLatestPortalRegistrationChallenge(
+  db: D1Database,
+  email: string,
+  purpose: "registration" | "migration",
+): Promise<PortalRegistrationChallengeRow | null> {
+  return db.prepare(`SELECT * FROM portal_registration_challenges
+      WHERE email = ? AND purpose = ? AND completed_at IS NULL
+    ORDER BY created_at DESC LIMIT 1`)
+    .bind(normaliseEmail(email), purpose).first<PortalRegistrationChallengeRow>();
+}
+
+export async function findPortalRegistrationChallengeBySetupToken(
+  db: D1Database,
+  setupTokenHash: string,
+): Promise<PortalRegistrationChallengeRow | null> {
+  return db.prepare(`SELECT * FROM portal_registration_challenges
+      WHERE setup_token_hash = ? AND verified_at IS NOT NULL AND completed_at IS NULL
+    ORDER BY created_at DESC LIMIT 1`)
+    .bind(setupTokenHash).first<PortalRegistrationChallengeRow>();
+}
+
+export async function incrementPortalRegistrationAttempts(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE portal_registration_challenges SET attempt_count = attempt_count + 1 WHERE id = ?")
+    .bind(id).run();
+}
+
+export async function markPortalRegistrationVerified(
+  db: D1Database,
+  id: string,
+  setupTokenHash: string,
+): Promise<boolean> {
+  const result = await db.prepare(`UPDATE portal_registration_challenges
+      SET verified_at = ?, setup_token_hash = ?
+    WHERE id = ? AND verified_at IS NULL AND completed_at IS NULL`)
+    .bind(now(), setupTokenHash, id).run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
+export async function completePortalRegistrationChallenge(db: D1Database, id: string): Promise<boolean> {
+  const result = await db.prepare(`UPDATE portal_registration_challenges
+      SET completed_at = ?
+    WHERE id = ? AND verified_at IS NOT NULL AND completed_at IS NULL`)
+    .bind(now(), id).run();
   return (result.meta.changes ?? 0) === 1;
 }
 

@@ -24,20 +24,25 @@ export interface VerificationEmail {
 export function verificationEmail(
   code: string,
   ttlMinutes: number,
-  purpose: "activation" | "portal" | "password_reset",
+  purpose: "activation" | "portal" | "password_reset" | "registration",
 ): VerificationEmail {
   const portal = purpose === "portal";
   const reset = purpose === "password_reset";
-  const purposeLabel = reset ? "PASSWORD RESET" : portal ? "CUSTOMER PORTAL LOGIN" : "APP ACTIVATION";
-  const heading = reset ? "Reset your portal password" : portal ? "Sign in to your account" : "Activate LongJumpReplay";
+  const registration = purpose === "registration";
+  const purposeLabel = reset ? "PASSWORD RESET" : registration ? "ACCOUNT REGISTRATION" : portal ? "CUSTOMER PORTAL LOGIN" : "APP ACTIVATION";
+  const heading = reset ? "Reset your portal password" : registration ? "Verify your email address" : portal ? "Sign in to your account" : "Activate LongJumpReplay";
   const subject = reset
     ? "[LongJumpReplay] Customer portal password reset code"
+    : registration
+    ? "[LongJumpReplay] Account registration code"
     : portal
     ? "[LongJumpReplay] Customer portal login code"
     : "[LongJumpReplay] App activation code";
-  const accent = reset ? "#F3B84B" : portal ? "#F3B84B" : "#62D7C9";
+  const accent = reset || registration ? "#F3B84B" : portal ? "#F3B84B" : "#62D7C9";
   const destination = reset
     ? "the LongJumpReplay customer portal password reset"
+    : registration
+    ? "the LongJumpReplay customer portal registration"
     : purpose === "portal"
     ? "the LongJumpReplay customer portal"
     : "the LongJumpReplay activation window";
@@ -142,7 +147,7 @@ export async function sendVerificationCode(
   to: string,
   code: string,
   ttlMinutes: number,
-  purpose: "activation" | "portal" | "password_reset" = "activation",
+  purpose: "activation" | "portal" | "password_reset" | "registration" = "activation",
 ): Promise<void> {
   await mailer(env).send(to, verificationEmail(code, ttlMinutes, purpose));
 }

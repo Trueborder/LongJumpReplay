@@ -65,9 +65,24 @@
                <label for="password" data-en="Password" data-cs="Heslo">Password</label>
                <input id="password" name="password" type="password" autocomplete="current-password" minlength="12">
              </div>
-             <div id="code-field" hidden>
+            <div id="code-field" hidden>
               <label for="code" data-en="Six-digit code" data-cs="Šestimístný kód">Six-digit code</label>
               <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
+            </div>
+            <div id="migration-step" hidden>
+              <p class="migration-note" data-en="Finish setting up your account before opening the dashboard." data-cs="Před otevřením přehledu dokončete nastavení účtu.">Finish setting up your account before opening the dashboard.</p>
+              <label for="migration-first-name" data-en="First name" data-cs="Jméno">First name</label>
+              <input id="migration-first-name" autocomplete="given-name">
+              <label for="migration-last-name" data-en="Surname" data-cs="Příjmení">Surname</label>
+              <input id="migration-last-name" autocomplete="family-name">
+              <label for="migration-club-name" data-en="Club name (optional)" data-cs="Název klubu (volitelné)">Club name (optional)</label>
+              <input id="migration-club-name" autocomplete="organization">
+              <div id="migration-password-fields">
+                <label for="migration-password" data-en="Password" data-cs="Heslo">Password</label>
+                <input id="migration-password" type="password" autocomplete="new-password" minlength="12">
+                <label for="migration-password-confirmation" data-en="Confirm password" data-cs="Potvrzení hesla">Confirm password</label>
+                <input id="migration-password-confirmation" type="password" autocomplete="new-password" minlength="12">
+              </div>
             </div>
             <button class="button button-primary button-full" id="login-submit" type="submit" data-en="Continue" data-cs="Pokračovat">Continue</button>
             <div class="login-actions-secondary">
@@ -83,6 +98,7 @@
             <div id="login-mode-actions" class="login-actions-secondary">
               <button class="text-button" id="otp-mode-link" type="button" data-en="Use email code instead" data-cs="Pouzit kod z e-mailu">Use email code instead</button>
               <button class="text-button" id="forgot-password" type="button" data-en="Forgot password?" data-cs="Zapomenute heslo?">Forgot password?</button>
+              <a class="text-button" href="/register" data-en="Create account" data-cs="Vytvorit ucet">Create account</a>
             </div>
             <div id="reset-actions" class="login-actions-secondary" hidden><button class="text-button" id="reset-back" type="button" data-en="Back to sign in" data-cs="Zpet na prihlaseni">Back to sign in</button></div>
           </form>

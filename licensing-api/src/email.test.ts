@@ -18,4 +18,11 @@ describe("verification email presentation", () => {
     expect(message.html).toContain("CUSTOMER PORTAL LOGIN");
     expect(message.html).toContain("#F3B84B");
   });
+
+  it("labels registration codes separately from login and activation", () => {
+    const message = verificationEmail("111222", 10, "registration");
+    expect(message.subject).toContain("Account registration");
+    expect(message.text).toContain("ACCOUNT REGISTRATION");
+    expect(message.html).toContain("ACCOUNT REGISTRATION");
+  });
 });

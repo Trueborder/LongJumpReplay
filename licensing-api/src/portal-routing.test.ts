@@ -19,6 +19,13 @@ describe("customer portal page routing", () => {
     expect(portalPageRoute("/dashboard/", true)).toEqual({ kind: "redirect", location: "/dashboard/overview" });
   });
 
+  it("serves registration and sends incomplete accounts to setup", () => {
+    expect(portalPageRoute("/register", false)).toEqual({ kind: "asset", assetPath: "/register/" });
+    expect(portalPageRoute("/register/", false)).toEqual({ kind: "redirect", location: "/register" });
+    expect(portalPageRoute("/dashboard/overview", true, true)).toEqual({ kind: "redirect", location: "/register?mode=migration" });
+    expect(portalPageRoute("/login", true, true)).toEqual({ kind: "asset", assetPath: "/login/" });
+  });
+
   it("serves the standalone QR approval shell without exposing the dashboard", () => {
     expect(portalPageRoute("/approve/pairing", false)).toEqual({ kind: "asset", assetPath: "/approve/pairing/" });
     expect(portalPageRoute("/approve/pairing", true)).toEqual({ kind: "asset", assetPath: "/approve/pairing/" });

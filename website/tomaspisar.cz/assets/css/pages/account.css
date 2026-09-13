@@ -173,6 +173,9 @@
 .portal-login-page #password-step input,
 .portal-login-page #reset-step input { margin-bottom: .9rem; }
 .portal-login-page #reset-step { padding-top: .35rem; }
+.portal-login-page .migration-note,
+.portal-register-page .password-requirements { margin: .15rem 0 1rem; color: var(--muted); font-size: .84rem; line-height: 1.5; }
+.portal-register-page .register-card { max-height: min(760px, calc(100dvh - 2rem)); }
 .password-security-tools { margin: .9rem 0 1rem; padding: .9rem 0 0; border-top: 1px solid var(--account-border); }
 .password-security-tools p { max-width: 620px; margin: 0 0 .8rem; color: var(--muted); line-height: 1.55; }
 .password-security-form { display: grid; gap: .45rem; max-width: 460px; }

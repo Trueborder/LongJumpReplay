@@ -86,10 +86,12 @@ Set with `wrangler secret put <NAME>` from `licensing-api/`. Never in
 
 ## Database
 
-Migrations `0001` through `0006` define the current schema. Tables:
+Migrations `0001` through `0011` define the current schema. Tables:
 `customers`, `licenses`, `devices`, `verification_codes`, `activation_grants`,
-`stripe_events`, `rate_limits`, `events`, `portal_login_codes`, and
-`portal_sessions`, `license_activation_keys`, and `device_activity`.
+`stripe_events`, `rate_limits`, `events`, `portal_login_codes`,
+`portal_sessions`, `customer_password_credentials`, `portal_profiles`,
+`portal_registration_challenges`, `password_reset_codes`,
+`license_activation_keys`, and `device_activity`.
 
 Notable constraints:
 
@@ -163,17 +165,24 @@ Liveness only.
 
 ### Customer portal
 
-The portal uses `https://account.tomaspisar.cz/login` for password or
-passwordless email-code sign-in and `https://account.tomaspisar.cz/dashboard`
-for the authenticated account. The Worker redirects the account root according
-to session state. Passwords are optional, stored as versioned PBKDF2-HMAC-
-SHA-256 hashes with per-account random salts, and are never emailed or logged.
-The existing OTP flow remains the recovery path. Sessions remain opaque,
+The portal uses `https://account.tomaspisar.cz/login` for password sign-in and
+`https://account.tomaspisar.cz/dashboard` for the authenticated account. New
+users register at `/register`: email ownership is verified with a one-time
+code, then first name, surname, optional club name, and a password of 12-128
+characters containing a letter, number, and symbol are required. Existing
+email-only customers complete this same setup gate before dashboard access.
+Passwords are stored as versioned PBKDF2-HMAC-SHA-256 hashes with per-account
+random salts, and are never emailed or logged. OTP remains available for
+recovery. Sessions remain opaque,
 server-side records in an HttpOnly cookie; password mutations also require a
 session-bound CSRF token. The portal never receives or stores card data.
 
-- `POST /api/portal/request-code` - request a portal OTP for any valid email.
+- `POST /api/portal/request-code` - request a portal OTP for a registered customer email; unknown emails receive a generic response but no code is created.
 - `POST /api/portal/verify-code` - exchange the OTP for a portal session.
+- `POST /api/portal/register/request-code` - start email-validated registration.
+- `POST /api/portal/register/verify-code` - verify the registration code and receive a short-lived setup proof.
+- `POST /api/portal/register/complete` - create or migrate the password and profile.
+- `POST /api/portal/profile` - update the authenticated profile.
 - `POST /api/portal/password/login` - sign in with an optional account password.
 - `POST /api/portal/password/enroll` - create a first password from an existing
   authenticated OTP session.
@@ -195,12 +204,13 @@ session-bound CSRF token. The portal never receives or stores card data.
   disconnects key-activated devices only; email-activated devices stay active.
 - `POST /api/portal/logout` - revoke the current portal session.
 
-Portal access proves control of an email address and does not require a
-purchase. An account without a licence receives an empty account view with a
-link to buy LongJumpReplay. A later Stripe purchase made with the same
-normalised email is attached to that existing account automatically. Portal
-codes are stored separately from activation codes and cannot activate the
-desktop application.
+Portal access proves control of a registered email address and does not require
+a purchase. Registration is allowed before purchase, and an account without a
+licence receives an empty account view with a link to buy LongJumpReplay. A
+later Stripe purchase made with the same normalised email is attached to that
+existing account automatically. Registration challenges are separate from
+portal login and activation codes, are HMAC-protected, expire, limit attempts,
+and are single-use. Portal codes cannot activate the desktop application.
 
 An additive portal pairing path is now available alongside email OTP and the
 reusable key: the desktop shows a locally generated QR, a short-lived

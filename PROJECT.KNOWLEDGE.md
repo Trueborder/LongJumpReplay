@@ -11,6 +11,13 @@
 - The global website header no longer exposes a redundant Downloads link; download actions remain in product and account content. LongJumpReplay product pages use a compact rounded context strip with Overview, Licensing, and Privacy links. RelayLab does not show a one-item local menu.
 - `website/design-system/` is source documentation only and stays outside the public output. `website/wrangler.jsonc` owns the public site Worker; `licensing-api/wrangler.jsonc` owns the account Worker boundary.
 
+## Portal registration and migration (2026-09-13)
+
+- Customer registration is served at `account.tomaspisar.cz/register`. It verifies email ownership with a separate, HMAC-protected, expiring and attempt-limited challenge before collecting first name, surname, optional club name, and a 12-character minimum password containing a letter, number, and symbol.
+- Portal OTP login no longer creates customer rows for unknown email addresses. Existing email-only customer rows are still supported, but their first verified portal access is routed through the registration completion gate before dashboard access.
+- Migration `licensing-api/migrations/0011_portal_registration.sql` adds `portal_profiles` and `portal_registration_challenges`. Passwords remain in `customer_password_credentials`; OTP remains the recovery path. The setup token is stored only as a hash and is kept in browser memory, never in a URL or persistent storage.
+- The account Worker serves the registration page from `website/tomaspisar.cz/account/register/`; shared CSS and `assets/js/account/account.js` handle the bilingual responsive flow. Dashboard data returns only setup-state metadata until the required profile/password is complete.
+
 ## Resize-only rendering bindings (2026-09-13)
 
 - `src/theme.py::bind_resize_only()` centralizes the Tk `<Configure>` guard:

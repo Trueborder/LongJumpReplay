@@ -90,7 +90,14 @@
     constructor(message, status, code) { super(message); this.status = status; this.code = code; }
   }
 
+  copy.en.passwordLength = 'Use 12-128 characters, including a letter, number and symbol.';
+  copy.en.passwordMismatch = 'The passwords do not match.';
+  copy.en.profileRequired = 'Enter your first name and surname.';
+  copy.cs.passwordLength = 'Pouzijte 12-128 znaku vcetne pismene, cisla a symbolu.';
+  copy.cs.passwordMismatch = 'Hesla se neshoduji.';
+  copy.cs.profileRequired = 'Zadejte jmeno a prijmeni.';
   const t = (key) => copy[state.lang][key] || copy.en[key] || key;
+  const strongPassword = (value) => value.length >= 12 && value.length <= 128 && /[A-Za-z]/.test(value) && /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value);
   const routeCopy = {
     en: {
       overview: ['ACCOUNT OVERVIEW', 'Account overview.', 'Your licence, computers and access in one place.'],
@@ -169,6 +176,7 @@
       $('#email-step').hidden = false;
       $('#password-step').hidden = mode !== 'password';
       $('#code-field').hidden = mode !== 'otp';
+      $('#migration-step').hidden = true;
       $('#reset-step').hidden = true;
       $('#login-mode-actions').hidden = mode === 'reset';
       $('#reset-actions').hidden = mode !== 'reset';
@@ -194,16 +202,43 @@
       const code = $('#code').value.trim();
       if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
-      try { await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
+      try {
+        const result = await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) });
+        if (result.password_setup_required) return showMigration(result);
+        setStatus(t('verified'), '#login-status'); redirectAfterAuth();
+      }
       catch (error) { const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired'); setStatus(expired ? t('expiredCode') : error.message, '#login-status'); $('#code').setAttribute('aria-invalid', 'true'); }
+      finally { setLoginBusy(false); }
+    };
+    const showMigration = (result) => {
+      loginState.mode = 'migration';
+      state.setupToken = result.setup_token || '';
+      state.email = result.email || state.email;
+      $('#email-step').hidden = true; $('#password-step').hidden = true; $('#code-field').hidden = true; $('#migration-step').hidden = false;
+      $('#migration-password-fields').hidden = !result.password_required;
+      $('#migration-password').required = Boolean(result.password_required);
+      $('#migration-password-confirmation').required = Boolean(result.password_required);
+      $('#login-mode-actions').hidden = true; $('#reset-actions').hidden = true; $('#change-email').hidden = true; $('#resend-code').hidden = true;
+      setText('#login-submit', 'Finish account setup', 'Dokoncit nastaveni uctu');
+      setStatus(state.lang === 'cs' ? 'Dokoncete prosim profil a heslo.' : 'Finish your profile and password.', '#login-status');
+      $('#migration-first-name').focus();
+    };
+    const completeMigration = async () => {
+      const firstName = $('#migration-first-name').value.trim(); const lastName = $('#migration-last-name').value.trim();
+      const clubName = $('#migration-club-name').value.trim(); const password = $('#migration-password').value; const confirmation = $('#migration-password-confirmation').value;
+      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#login-status'); return; }
+      if ($('#migration-password-fields').hidden === false && password !== confirmation) { setStatus(t('passwordMismatch'), '#login-status'); return; }
+      setStatus(t('checking'), '#login-status'); setLoginBusy(true);
+      try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: state.setupToken, first_name: firstName, last_name: lastName, club_name: clubName, password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet je připraven. Přesměrovávám na přihlášení…' : 'Your account is ready. Returning to sign in…', '#login-status'); window.setTimeout(() => window.location.replace('/login?registered=1'), 500); }
+      catch (error) { setStatus(error.message, '#login-status'); }
       finally { setLoginBusy(false); }
     };
     const loginWithPassword = async () => {
       const email = $('#email').value.trim(); const password = $('#password').value;
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
-      if (password.length < 12) { setStatus(t('passwordLength'), '#login-status'); return; }
+       if (!password) { setStatus(t('passwordLength'), '#login-status'); return; }
       state.email = email; setStatus(t('signingIn'), '#login-status'); setLoginBusy(true);
-      try { await api('/api/portal/password/login', { method: 'POST', body: JSON.stringify({ email, password }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
+      try { const result = await api('/api/portal/password/login', { method: 'POST', body: JSON.stringify({ email, password }) }); setStatus(t('verified'), '#login-status'); if (result.password_setup_required) window.setTimeout(() => window.location.replace('/register?mode=migration'), 180); else redirectAfterAuth(); }
       catch (error) { setStatus(error.message, '#login-status'); }
       finally { setLoginBusy(false); }
     };
@@ -217,7 +252,7 @@
     const completeReset = async () => {
       const code = $('#reset-code').value.trim(); const newPassword = $('#new-password').value;
       if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
-      if (newPassword.length < 12) { setStatus(t('passwordLength'), '#login-status'); return; }
+       if (!strongPassword(newPassword)) { setStatus(t('passwordLength'), '#login-status'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
       try { await api('/api/portal/password/reset', { method: 'POST', body: JSON.stringify({ email: state.email, code, new_password: newPassword }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
       catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
@@ -228,7 +263,7 @@
     $('#change-email').addEventListener('click', () => setMode('otp'));
     $('#resend-code').addEventListener('click', requestOtp);
     $('#code').addEventListener('input', () => $('#code').removeAttribute('aria-invalid'));
-    form.addEventListener('submit', (event) => { event.preventDefault(); if (loginState.mode === 'otp') return loginState.codeSent ? verifyOtp() : requestOtp(); if (loginState.mode === 'reset') return loginState.resetSent ? completeReset() : requestReset(); return loginWithPassword(); });
+    form.addEventListener('submit', (event) => { event.preventDefault(); if (loginState.mode === 'migration') return completeMigration(); if (loginState.mode === 'otp') return loginState.codeSent ? verifyOtp() : requestOtp(); if (loginState.mode === 'reset') return loginState.resetSent ? completeReset() : requestReset(); return loginWithPassword(); });
     setMode('password');
     api('/api/portal/account').then(redirectAfterAuth).catch(() => $('#email').focus());
   };
@@ -525,6 +560,68 @@
     }
   };
 
+  const initRegistration = () => {
+    const form = $('#register-form');
+    if (!form) return;
+    const migration = new URLSearchParams(window.location.search).get('mode') === 'migration';
+    const registrationState = { step: 'email', codeSent: false, setupToken: '', passwordRequired: true };
+    const setText = (selector, en, cs) => { const element = $(selector); if (element) element.textContent = state.lang === 'cs' ? cs : en; };
+    const busy = (value) => { const button = $('#register-submit'); if (button) { button.disabled = value; button.setAttribute('aria-busy', String(value)); } };
+    const step = (value) => {
+      registrationState.step = value;
+      $('#register-email-step').hidden = value !== 'email';
+      $('#register-code-step').hidden = value !== 'code';
+      $('#register-details-step').hidden = value !== 'details';
+      $('#register-change-email').hidden = value === 'email' || value === 'details';
+      $('#register-resend-code').hidden = value !== 'code';
+      setText('#register-submit', value === 'email' ? 'Continue' : value === 'code' ? 'Verify email' : 'Create account', value === 'email' ? 'Continue' : value === 'code' ? 'OvÄ›Å™it e-mail' : 'VytvoÅ™it ÃºÄet');
+      if (value === 'email') $('#register-email').focus();
+      if (value === 'code') $('#register-code').focus();
+      if (value === 'details') $('#register-first-name').focus();
+    };
+    const request = async () => {
+      const email = $('#register-email').value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#register-status'); return; }
+      state.email = email; setStatus(t('sending'), '#register-status'); busy(true);
+      try { await api('/api/portal/register/request-code', { method: 'POST', body: JSON.stringify({ email }) }); registrationState.codeSent = true; step('code'); setStatus(t('sent'), '#register-status'); }
+      catch (error) { setStatus(error.message, '#register-status'); } finally { busy(false); }
+    };
+    const verify = async () => {
+      const code = $('#register-code').value.trim();
+      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#register-status'); return; }
+      setStatus(t('checking'), '#register-status'); busy(true);
+      try { const result = await api('/api/portal/register/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) }); registrationState.setupToken = result.setup_token; registrationState.passwordRequired = result.password_required !== false; $('#register-password-fields').hidden = !registrationState.passwordRequired; $('#register-password').required = registrationState.passwordRequired; $('#register-password-confirmation').required = registrationState.passwordRequired; step('details'); setStatus('', '#register-status'); }
+      catch (error) { setStatus(error.status === 410 ? t('expiredCode') : error.message, '#register-status'); } finally { busy(false); }
+    };
+    const complete = async () => {
+      const firstName = $('#register-first-name').value.trim(); const lastName = $('#register-last-name').value.trim();
+      const password = $('#register-password').value; const confirmation = $('#register-password-confirmation').value;
+      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#register-status'); return; }
+      if (registrationState.passwordRequired && password !== confirmation) { setStatus(t('passwordMismatch'), '#register-status'); return; }
+      if (registrationState.passwordRequired && !strongPassword(password)) { setStatus(t('passwordLength'), '#register-status'); return; }
+      setStatus(t('checking'), '#register-status'); busy(true);
+      try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: registrationState.setupToken, first_name: firstName, last_name: lastName, club_name: $('#register-club-name').value.trim(), password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet vytvořen. Přesměrovávám na přihlášení…' : 'Account created. Returning to sign in…', '#register-status'); window.setTimeout(() => window.location.replace('/login?registered=1'), 600); }
+      catch (error) { setStatus(error.message, '#register-status'); } finally { busy(false); }
+    };
+    const loadMigration = async () => {
+      try {
+        const data = await api('/api/portal/account');
+        if (!data.password_setup_required) { window.location.replace('/dashboard/overview'); return; }
+        state.email = data.customer?.email || '';
+        registrationState.passwordRequired = !data.password_configured;
+        $('#register-email').value = state.email;
+        $('#register-email-step').hidden = true; $('#register-code-step').hidden = true;
+        $('#register-password-fields').hidden = !registrationState.passwordRequired;
+        $('#register-password').required = registrationState.passwordRequired; $('#register-password-confirmation').required = registrationState.passwordRequired;
+        step('details'); setStatus(state.lang === 'cs' ? 'Dokončete údaje svého účtu.' : 'Finish your account details.', '#register-status');
+      } catch { step('email'); }
+    };
+    $('#register-change-email').addEventListener('click', () => { registrationState.codeSent = false; step('email'); setStatus('', '#register-status'); });
+    $('#register-resend-code').addEventListener('click', request);
+    form.addEventListener('submit', (event) => { event.preventDefault(); if (registrationState.step === 'email') return request(); if (registrationState.step === 'code') return verify(); return complete(); });
+    if (migration) loadMigration(); else step('email');
+  };
+
   const deactivate = async (deviceId) => {
     if (!window.confirm(state.lang === 'cs' ? 'Opravdu deaktivovat tento počítač?' : 'Deactivate this computer?')) return;
     setStatus(t('deactivating'));
@@ -656,7 +753,7 @@
       event.preventDefault();
       const form = event.currentTarget;
       const newPassword = $('#enroll-password')?.value || '';
-      if (newPassword.length < 12) { setStatus(t('passwordLength')); return; }
+       if (!strongPassword(newPassword)) { setStatus(t('passwordLength')); return; }
       const configured = form.dataset.configured === 'true';
       const body = configured
         ? { current_password: $('#current-password')?.value || '', new_password: newPassword }
@@ -694,5 +791,6 @@
   }, 0));
 
   if (page === 'login') initLogin();
+  if (page === 'register') initRegistration();
   if (page === 'dashboard') initDashboard();
 })();

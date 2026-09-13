@@ -54,6 +54,15 @@ import {
   findPasswordCredential,
   createPasswordCredential,
   updatePasswordCredential,
+  findPortalProfile,
+  savePortalProfile,
+  invalidatePortalRegistrationChallenges,
+  createPortalRegistrationChallenge,
+  findLatestPortalRegistrationChallenge,
+  findPortalRegistrationChallengeBySetupToken,
+  incrementPortalRegistrationAttempts,
+  markPortalRegistrationVerified,
+  completePortalRegistrationChallenge,
   createPasswordResetCode,
   invalidatePasswordResetCodes,
   findLatestPasswordResetCode,
@@ -95,6 +104,7 @@ const PORTAL_SESSION_COOKIE = "ljr-portal-session";
 const PORTAL_CSRF_COOKIE = "ljr-portal-csrf";
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 128;
+const SETUP_TOKEN_TTL_SECONDS = 15 * 60;
 const CONTACT_ORIGIN = "https://tomaspisar.cz";
 const CONTACT_TOPICS = new Set(["support", "licence", "club", "bug", "feedback", "general"]);
 
@@ -310,11 +320,12 @@ function portalRedirect(request: Request, location: string): Response {
 
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
-  const isPortalPage = ["/", "/login", "/login/", "/dashboard", "/dashboard/", "/approve/pairing", "/approve/pairing/"].includes(path)
+  const isPortalPage = ["/", "/login", "/login/", "/register", "/register/", "/dashboard", "/dashboard/", "/approve/pairing", "/approve/pairing/"].includes(path)
     || path.startsWith("/dashboard/");
   if (!isPortalPage) return null;
 
-  const route = portalPageRoute(path, Boolean(await authenticatedPortal(request, env)));
+  const auth = await authenticatedPortal(request, env);
+  const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup));
   if (!route) return null;
   if (route.kind === "redirect") return portalRedirect(request, route.location);
 
@@ -575,9 +586,14 @@ export async function requestCode(request: Request, env: Env, purpose: Verificat
   });
 
   if (purpose === "portal") {
-    // Portal access proves ownership of an email address, not ownership of a
-    // licence. A later Stripe purchase using the same normalized address is
-    // attached to this customer by upsertCustomer.
+    // Portal login is for registered customer rows only. Do not create a
+    // customer or a login code for an unknown address; the generic response
+    // prevents account enumeration while verification still fails closed.
+    const customer = await findCustomerByEmail(env.DB, email);
+    if (!customer) {
+      await logEvent(env.DB, "portal_login_requested", null, { result: "generic" });
+      return generic;
+    }
     try {
       const code = await createEmailOnlyCode(env, email, purpose);
       await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), purpose);
@@ -684,6 +700,14 @@ export async function verifyCode(request: Request, env: Env, purpose: Verificati
     await env.DB.prepare("UPDATE portal_login_codes SET used_at = ? WHERE id = ?").bind(now(), row.id).run();
     const customer = await findCustomerById(env.DB, row.customer_id);
     if (!customer) return fail("invalid_code", "That code is not valid. Request a new one.");
+    const credential = await findPasswordCredential(env.DB, customer.id);
+    const profile = await findPortalProfile(env.DB, customer.id);
+    if (!credential || !profile) {
+      const setupToken = await issuePortalSetupToken(env, customer.id, customer.email, "migration");
+      await logEvent(env.DB, "portal_migration_required", null, { password: Boolean(credential), profile: Boolean(profile) });
+      return json({ authenticated: false, password_setup_required: true, setup_token: setupToken,
+        email: customer.email, password_required: !credential, profile_required: !profile });
+    }
     const token = generateToken();
     const csrf = generateToken();
     const expiresAt = now() + cfg.portalSessionTtlSeconds;
@@ -1067,6 +1091,8 @@ async function pairingStatus(request: Request, env: Env): Promise<Response> {
 async function portalPairingInspect(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to pair a computer.", 401);
+  const setupError = portalSetupGate(auth, "pairing a computer");
+  if (setupError) return setupError;
   const data = await readJson(request);
   const token = str(data.pairing_token);
   const code = str(data.pairing_code).replace(/\D/g, "").slice(0, 6);
@@ -1083,6 +1109,8 @@ async function portalPairingInspect(request: Request, env: Env): Promise<Respons
 async function portalPairingConfirm(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to pair a computer.", 401);
+  const setupError = portalSetupGate(auth, "pairing a computer");
+  if (setupError) return setupError;
   if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const pairingId = str(data.pairing_id);
@@ -1112,6 +1140,8 @@ function pairingTokenInput(data: Record<string, unknown>): string | null {
 async function portalPairingView(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to approve this computer.", 401);
+  const setupError = portalSetupGate(auth, "approving a computer");
+  if (setupError) return setupError;
   const data = await readJson(request);
   const token = pairingTokenInput(data);
   if (!token) return fail("invalid_input", "This pairing link is not valid.");
@@ -1150,6 +1180,8 @@ async function portalPairingView(request: Request, env: Env): Promise<Response> 
 async function portalPairingApprove(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to approve this computer.", 401);
+  const setupError = portalSetupGate(auth, "approving a computer");
+  if (setupError) return setupError;
   if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const token = pairingTokenInput(data);
@@ -1181,6 +1213,8 @@ async function portalPairingApprove(request: Request, env: Env): Promise<Respons
 async function portalPairingDecline(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to manage this pairing request.", 401);
+  const setupError = portalSetupGate(auth, "managing this pairing request");
+  if (setupError) return setupError;
   if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const token = pairingTokenInput(data);
@@ -1204,6 +1238,8 @@ async function portalPairingDecline(request: Request, env: Env): Promise<Respons
 async function portalPairingResult(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to view this pairing request.", 401);
+  const setupError = portalSetupGate(auth, "viewing this pairing request");
+  if (setupError) return setupError;
   const data = await readJson(request);
   const token = pairingTokenInput(data);
   if (!token) return fail("invalid_input", "This pairing link is not valid.");
@@ -1257,7 +1293,13 @@ async function authenticatedPortal(request: Request, env: Env) {
   const customer = await findCustomerById(env.DB, session.customer_id);
   if (!customer) return null;
   await touchPortalSession(env.DB, session.id);
-  return { token, session, customer };
+  const credential = await findPasswordCredential(env.DB, customer.id);
+  const profile = await findPortalProfile(env.DB, customer.id);
+  return { token, session, customer, credential, profile, requiresSetup: !credential || !profile };
+}
+
+function portalSetupGate(auth: Awaited<ReturnType<typeof authenticatedPortal>>, action: string): Response | null {
+  return auth?.requiresSetup ? fail("password_setup_required", `Complete your account setup before ${action}.`, 428) : null;
 }
 
 function passwordFrom(data: Record<string, unknown>, key: string): string {
@@ -1265,11 +1307,32 @@ function passwordFrom(data: Record<string, unknown>, key: string): string {
 }
 
 function validPassword(password: string): boolean {
-  return password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH;
+  const length = Array.from(password).length;
+  return length >= PASSWORD_MIN_LENGTH && length <= PASSWORD_MAX_LENGTH
+    && /\p{L}/u.test(password)
+    && /\p{N}/u.test(password)
+    && /[\p{P}\p{S}]/u.test(password);
+}
+
+function acceptablePasswordInput(password: string): boolean {
+  const length = Array.from(password).length;
+  return length > 0 && length <= PASSWORD_MAX_LENGTH;
 }
 
 function passwordInputError(): Response {
-  return fail("invalid_password", `Use a password between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`);
+  return fail("invalid_password", `Use ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters, including a letter, number, and symbol.`);
+}
+
+function profileValues(data: Record<string, unknown>): { firstName: string; lastName: string; clubName: string | null } | null {
+  const firstName = str(data.first_name);
+  const lastName = str(data.last_name);
+  const clubName = bounded(data.club_name, 160);
+  if (!firstName || !lastName || Array.from(firstName).length > 80 || Array.from(lastName).length > 80) return null;
+  return { firstName, lastName, clubName };
+}
+
+function profileInputError(): Response {
+  return fail("invalid_profile", "Enter your first name and surname. Club name is optional.");
 }
 
 async function newPortalSession(env: Env, customerId: string): Promise<{ token: string; csrf: string; expiresAt: number }> {
@@ -1281,13 +1344,152 @@ async function newPortalSession(env: Env, customerId: string): Promise<{ token: 
   return { token, csrf, expiresAt };
 }
 
+function registrationGeneric(env: Env): Response {
+  return json({ sent: true, expires_in_minutes: Math.floor(settings(env).verificationCodeTtlSeconds / 60) });
+}
+
+async function portalRegistrationRequestCode(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  if (!EMAIL_PATTERN.test(email) || email.length > 254) return fail("invalid_email", "Enter a valid email address.");
+  const limits = rateLimits(env);
+  if (!(await rateLimit(env.DB, `registration-email:${await sha256(email)}`, ...limits.registrationRequest))
+      || !(await rateLimit(env.DB, `registration-ip:${clientKey(request)}`, ...limits.registrationRequest))) {
+    return fail("rate_limited", "Too many registration requests. Try again later.", 429);
+  }
+
+  const customer = await findCustomerByEmail(env.DB, email);
+  const credential = customer ? await findPasswordCredential(env.DB, customer.id) : null;
+  const profile = customer ? await findPortalProfile(env.DB, customer.id) : null;
+  // A complete account is never given a registration code. The generic
+  // response keeps the endpoint from becoming an account-enumeration oracle.
+  if (credential && profile) return registrationGeneric(env);
+
+  await invalidatePortalRegistrationChallenges(env.DB, email, "registration");
+  const code = generateVerificationCode();
+  await createPortalRegistrationChallenge(
+    env.DB, customer?.id ?? null, email,
+    await hashCode(env.VERIFICATION_PEPPER, code), "registration",
+    now() + settings(env).verificationCodeTtlSeconds,
+  );
+  try {
+    await sendVerificationCode(env, email, code, Math.floor(settings(env).verificationCodeTtlSeconds / 60), "registration");
+    await logEvent(env.DB, "portal_registration_requested", null, { result: "sent" });
+  } catch {
+    await logEvent(env.DB, "portal_registration_requested", null, { result: "send_failed" });
+    return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
+  }
+  return registrationGeneric(env);
+}
+
+async function issuePortalSetupToken(env: Env, customerId: string, email: string, purpose: "migration" | "registration"): Promise<string> {
+  await invalidatePortalRegistrationChallenges(env.DB, email, purpose);
+  const challenge = await createPortalRegistrationChallenge(
+    env.DB, customerId, email, await hashCode(env.VERIFICATION_PEPPER, generateToken()), purpose,
+    now() + SETUP_TOKEN_TTL_SECONDS,
+  );
+  const setupToken = generateToken();
+  if (!(await markPortalRegistrationVerified(env.DB, challenge.id, await sha256(setupToken)))) {
+    throw new Error("portal setup challenge could not be verified");
+  }
+  return setupToken;
+}
+
+async function portalRegistrationVerifyCode(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  const code = str(data.code);
+  if (!EMAIL_PATTERN.test(email) || !/^\d{6}$/.test(code)) return fail("invalid_input", "Enter the six-digit code from your email.");
+  const limits = rateLimits(env);
+  if (!(await rateLimit(env.DB, `registration-verify-email:${await sha256(email)}`, ...limits.registrationVerify))
+      || !(await rateLimit(env.DB, `registration-verify-ip:${clientKey(request)}`, ...limits.registrationVerify))) {
+    return fail("rate_limited", "Too many attempts. Try again later.", 429);
+  }
+  const challenge = await findLatestPortalRegistrationChallenge(env.DB, email, "registration");
+  if (!challenge) return fail("invalid_code", "That code is not valid. Request a new one.");
+  if (challenge.expires_at < now()) return fail("code_expired", "That code has expired. Request a new one.", 410);
+  if (challenge.attempt_count >= settings(env).maxVerificationAttempts) return fail("too_many_attempts", "Too many incorrect attempts. Request a new code.", 429);
+  await incrementPortalRegistrationAttempts(env.DB, challenge.id);
+  if (!timingSafeEqual(await hashCode(env.VERIFICATION_PEPPER, code), challenge.code_hash)) {
+    return fail("invalid_code", "That code is not correct.");
+  }
+  const setupToken = generateToken();
+  if (!(await markPortalRegistrationVerified(env.DB, challenge.id, await sha256(setupToken)))) {
+    return fail("invalid_code", "That code is no longer valid. Request a new one.");
+  }
+  const customer = challenge.customer_id ? await findCustomerById(env.DB, challenge.customer_id) : null;
+  const credential = customer ? await findPasswordCredential(env.DB, customer.id) : null;
+  const profile = customer ? await findPortalProfile(env.DB, customer.id) : null;
+  if (credential && profile) return fail("account_exists", "This email is already registered. Sign in instead.", 409);
+  return json({ verified: true, setup_token: setupToken, email, password_required: !credential, profile_required: !profile });
+}
+
+async function portalRegistrationComplete(request: Request, env: Env): Promise<Response> {
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  const setupToken = str(data.setup_token);
+  if (!EMAIL_PATTERN.test(email)) return fail("invalid_input", "Your registration session is incomplete. Start again.");
+  const profile = profileValues(data);
+  if (!profile) return profileInputError();
+  const password = passwordFrom(data, "password");
+  const confirmation = passwordFrom(data, "password_confirmation");
+  const tokenHash = setupToken ? await sha256(setupToken) : null;
+  const challenge = tokenHash ? await findPortalRegistrationChallengeBySetupToken(env.DB, tokenHash) : null;
+  const sessionAuth = !challenge ? await authenticatedPortal(request, env) : null;
+  if (!challenge && (!sessionAuth || !sessionAuth.requiresSetup || !sessionAuth.credential || sessionAuth.profile || sessionAuth.customer.email !== email
+      || !(await portalPasswordMutationAllowed(request, env, sessionAuth.session.token_hash, sessionAuth.session.csrf_token_hash ?? null)))) {
+    return fail("setup_expired", "Your registration session has expired. Start again.", 410);
+  }
+  if (challenge && (challenge.email !== email || challenge.expires_at < now())) return fail("setup_expired", "Your registration session has expired. Start again.", 410);
+  const limits = rateLimits(env);
+  if (!(await rateLimit(env.DB, `registration-complete:${tokenHash || sessionAuth?.customer.id}`, ...limits.registrationComplete))
+      || !(await rateLimit(env.DB, `registration-complete-ip:${clientKey(request)}`, ...limits.registrationComplete))) {
+    return fail("rate_limited", "Too many attempts. Try again later.", 429);
+  }
+
+  const existing = await findCustomerByEmail(env.DB, email);
+  if (challenge?.customer_id && (!existing || existing.id !== challenge.customer_id)) return fail("invalid_input", "Your registration session is no longer valid. Start again.");
+  const customer = sessionAuth?.customer ?? existing ?? await upsertCustomer(env.DB, email, null);
+  const credential = await findPasswordCredential(env.DB, customer.id);
+  if (!credential) {
+    if (!validPassword(password) || password !== confirmation) {
+      return password === confirmation ? passwordInputError() : fail("password_mismatch", "The passwords do not match.");
+    }
+    try {
+      await createPasswordCredential(env.DB, customer.id, await hashPassword(password));
+    } catch {
+      if (!(await findPasswordCredential(env.DB, customer.id))) throw new Error("password creation failed");
+    }
+  }
+  await savePortalProfile(env.DB, customer.id, profile.firstName, profile.lastName, profile.clubName);
+  if (challenge && !(await completePortalRegistrationChallenge(env.DB, challenge.id))) return fail("setup_expired", "Your registration session is no longer valid. Start again.", 410);
+  if (sessionAuth) await revokePortalSession(env.DB, sessionAuth.session.token_hash);
+  await logEvent(env.DB, "portal_registration_completed", null, { result: existing ? "profile_completed" : "registered" });
+  return json({ registered: true });
+}
+
+async function portalProfileUpdate(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in before updating your profile.", 401);
+  if (!(await portalPasswordMutationAllowed(request, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null))) return fail("forbidden", "This request is not allowed.", 403);
+  const profile = profileValues(await readJson(request));
+  if (!profile) return profileInputError();
+  await savePortalProfile(env.DB, auth.customer.id, profile.firstName, profile.lastName, profile.clubName);
+  return json({ profile: { first_name: profile.firstName, last_name: profile.lastName, club_name: profile.clubName } });
+}
+
 async function portalPasswordLogin(request: Request, env: Env): Promise<Response> {
   if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const email = normaliseEmail(str(data.email));
   const password = passwordFrom(data, "password");
   if (!EMAIL_PATTERN.test(email)) return fail("invalid_email", "Enter a valid email address.");
-  if (!validPassword(password)) return passwordInputError();
+  // Existing accounts may have been created before the strong-password policy.
+  // They can still sign in and are encouraged to change the password later.
+  if (!acceptablePasswordInput(password)) return fail("invalid_password", "Enter your password.");
 
   const limits = rateLimits(env);
   if (!(await rateLimit(env.DB, `password-login-email:${await sha256(email)}`, ...limits.passwordLogin))
@@ -1309,7 +1511,7 @@ async function portalPasswordLogin(request: Request, env: Env): Promise<Response
   const session = await newPortalSession(env, customer.id);
   await logEvent(env.DB, "portal_password_login_success", null, {});
   return jsonWithPortalSession(
-    { authenticated: true, expires_at: session.expiresAt },
+    { authenticated: true, expires_at: session.expiresAt, password_setup_required: !credential || !(await findPortalProfile(env.DB, customer.id)) },
     session.token,
     session.csrf,
     settings(env).portalSessionTtlSeconds,
@@ -1341,7 +1543,7 @@ async function portalPasswordChange(request: Request, env: Env): Promise<Respons
   const data = await readJson(request);
   const currentPassword = passwordFrom(data, "current_password");
   const newPassword = passwordFrom(data, "new_password");
-  if (!validPassword(currentPassword) || !validPassword(newPassword)) return passwordInputError();
+  if (!acceptablePasswordInput(currentPassword) || !validPassword(newPassword)) return passwordInputError();
   const credential = await findPasswordCredential(env.DB, auth.customer.id);
   if (!credential || !(await verifyPassword(currentPassword, credential.password_hash))) {
     return fail("invalid_credentials", "The current password is incorrect.", 401);
@@ -1442,6 +1644,14 @@ function publicLicense(license: Awaited<ReturnType<typeof findLicenseById>>) {
 async function portalAccount(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to view your customer account.", 401);
+  if (auth.requiresSetup) {
+    return json({
+      customer: { email: auth.customer.email },
+      profile: auth.profile ? { first_name: auth.profile.first_name, last_name: auth.profile.last_name, club_name: auth.profile.club_name } : null,
+      password_configured: Boolean(auth.credential), profile_complete: Boolean(auth.profile), password_setup_required: true,
+      session_expires_at: auth.session.expires_at,
+    });
+  }
 
   const licenses = await listLicensesForCustomer(env.DB, auth.customer.id);
   const devices = await listDevicesForCustomer(env.DB, auth.customer.id);
@@ -1475,7 +1685,10 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
   const keys = Object.fromEntries(keyStates);
   return json({
     customer: { email: auth.customer.email },
-    password_configured: Boolean(await findPasswordCredential(env.DB, auth.customer.id)),
+    profile: auth.profile ? { first_name: auth.profile.first_name, last_name: auth.profile.last_name, club_name: auth.profile.club_name } : null,
+    password_configured: Boolean(auth.credential),
+    profile_complete: Boolean(auth.profile),
+    password_setup_required: auth.requiresSetup,
     licenses: licenses.map((license) => ({ ...publicLicense(license), active_devices: counts.get(license.id) ?? 0 })),
     devices: devices.map((device) => ({
       id: device.id,
@@ -1505,6 +1718,8 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
 async function portalAdditionalComputers(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to purchase additional computers.", 401);
+  const setupError = portalSetupGate(auth, "purchasing additional computers");
+  if (setupError) return setupError;
   const origin = request.headers.get("Origin");
   if (origin && origin !== env.PORTAL_ORIGIN) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
@@ -1530,6 +1745,8 @@ async function portalAdditionalComputers(request: Request, env: Env): Promise<Re
 async function portalBilling(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to manage billing.", 401);
+  const setupError = portalSetupGate(auth, "managing billing");
+  if (setupError) return setupError;
   if (!env.STRIPE_SECRET_KEY || !auth.customer.stripe_customer_id) {
     return fail("billing_unavailable", "Billing management is not available for this account yet.", 503);
   }
@@ -1544,6 +1761,8 @@ async function portalBilling(request: Request, env: Env): Promise<Response> {
 async function portalDeactivateDevice(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to manage devices.", 401);
+  const setupError = portalSetupGate(auth, "managing devices");
+  if (setupError) return setupError;
   if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const deviceId = str(data.device_id);
@@ -1558,6 +1777,8 @@ async function portalDeactivateDevice(request: Request, env: Env): Promise<Respo
 async function ownedActiveLicense(request: Request, env: Env) {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return { error: fail("not_authenticated", "Sign in to manage activation keys.", 401) } as const;
+  const setupError = portalSetupGate(auth, "managing activation keys");
+  if (setupError) return { error: setupError } as const;
   const data = await readJson(request);
   const licenseId = str(data.license_id);
   const license = await findLicenseById(env.DB, licenseId);
@@ -1614,6 +1835,8 @@ async function portalActivationKeyRegenerate(request: Request, env: Env): Promis
 async function portalDeviceDetails(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to view device details.", 401);
+  const setupError = portalSetupGate(auth, "viewing device details");
+  if (setupError) return setupError;
   const deviceId = new URL(request.url).searchParams.get("device_id") ?? "";
   if (!/^dev_[A-Za-z0-9]{16,80}$/.test(deviceId)) return fail("invalid_input", "Missing or malformed device.");
   const details = await deviceDetailsForCustomer(env.DB, auth.customer.id, deviceId);
@@ -1623,6 +1846,8 @@ async function portalDeviceDetails(request: Request, env: Env): Promise<Response
 async function portalDeleteDevice(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to manage devices.", 401);
+  const setupError = portalSetupGate(auth, "managing devices");
+  if (setupError) return setupError;
   if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
   const data = await readJson(request);
   const deviceId = str(data.device_id);
@@ -1709,6 +1934,18 @@ export default {
           break;
         case "/api/portal/verify-code":
           response = await verifyCode(request, env, "portal");
+          break;
+        case "/api/portal/register/request-code":
+          response = await portalRegistrationRequestCode(request, env);
+          break;
+        case "/api/portal/register/verify-code":
+          response = await portalRegistrationVerifyCode(request, env);
+          break;
+        case "/api/portal/register/complete":
+          response = await portalRegistrationComplete(request, env);
+          break;
+        case "/api/portal/profile":
+          response = await portalProfileUpdate(request, env);
           break;
         case "/api/portal/password/login":
           response = await portalPasswordLogin(request, env);
