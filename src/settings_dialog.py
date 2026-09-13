@@ -83,6 +83,7 @@ class SettingsDialog(tk.Toplevel):
         ("event", "EVENT WORKFLOW", "PRŮBĚH SOUTĚŽE", ("competition", "judging", "board_assist")),
         ("system", "WORKSPACE & SYSTEM", "PRACOVNÍ PLOCHA A SYSTÉM", ("workspace_controls", "licence", "advanced")),
     ]
+    SIMPLE_PAGES = {"general", "camera_recording", "competition", "judging", "board_assist", "licence"}
 
     def __init__(
         self,
@@ -175,10 +176,21 @@ class SettingsDialog(tk.Toplevel):
         brand.pack(side="left")
         ttk.Label(brand, text=self.tr("settings.header"), style="Brand.TLabel").pack(anchor="w")
         ttk.Label(brand, text=self.tr("settings.subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(1, 0))
-        mode_label = "CAPTURE MODE" if self.working.capture.mode == "capture" else "BUFFER MODE"
-        ttk.Label(header, text=mode_label, style="SettingsDirty.TLabel").pack(side="right", padx=(14, 0))
         self.dirty_label = ttk.Label(header, text="", style="SettingsDirty.TLabel")
         self.dirty_label.pack(side="right", padx=(14, 0))
+        self.settings_view_var = tk.StringVar(value=self.working.general.settings_view)
+        view_switch = ttk.Frame(header, style="Panel.TFrame")
+        view_switch.pack(side="right")
+        self.simple_view_button = ttk.Button(
+            view_switch, text=self._txt("Simple", "Jednoduché"), style="Secondary.TButton",
+            command=lambda: self._set_settings_view("simple"),
+        )
+        self.simple_view_button.pack(side="left")
+        self.advanced_view_button = ttk.Button(
+            view_switch, text=self._txt("Advanced", "Pokročilé"), style="Secondary.TButton",
+            command=lambda: self._set_settings_view("advanced"),
+        )
+        self.advanced_view_button.pack(side="left", padx=(6, 0))
 
         body = ttk.Frame(shell, style="App.TFrame")
         body.grid(row=1, column=0, sticky="nsew")
@@ -234,6 +246,7 @@ class SettingsDialog(tk.Toplevel):
             self._pages[key] = wrapper
             self._page_inners[key] = inner
             self._page_canvases[key] = self._pending_page_canvas
+        self._apply_settings_view_navigation()
 
         self.search_results = ttk.Frame(self.page_host, style="Panel.TFrame", padding=18)
         ttk.Label(
@@ -261,7 +274,7 @@ class SettingsDialog(tk.Toplevel):
         self.search_var.trace_add("write", lambda *_: self._filter_navigation())
         builders = (
             ("general", self._build_general), ("general", self._build_appearance),
-            ("camera_recording", self._build_recording_mode), ("camera_recording", self._build_camera),
+            ("camera_recording", self._build_camera),
             ("camera_recording", self._build_replay), ("competition", self._build_competition),
             ("competition", self._build_rounds), ("competition", self._build_timer),
             ("competition", self._build_final), ("judging", self._build_decisions),
@@ -288,13 +301,13 @@ class SettingsDialog(tk.Toplevel):
         footer = ttk.Frame(shell, style="SettingsHeader.TFrame", padding=(12, 9))
         self.footer = footer
         footer.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        self.restore_button = ttk.Button(footer, text=self.tr("settings.restore"), style="Control.TButton", command=self._restore_defaults)
+        self.restore_button = ttk.Button(footer, text=self.tr("settings.restore"), style="Secondary.TButton", command=self._restore_defaults)
         self.restore_button.pack(side="left")
-        self.cancel_button = ttk.Button(footer, text=self.tr("settings.cancel"), style="Control.TButton", command=self._cancel)
+        self.cancel_button = ttk.Button(footer, text=self.tr("settings.cancel"), style="Secondary.TButton", command=self._cancel)
         self.cancel_button.pack(side="right")
-        self.apply_close_button = ttk.Button(footer, text=self.tr("settings.apply_close"), style="Accent.TButton", command=lambda: self._apply(True))
+        self.apply_close_button = ttk.Button(footer, text=self.tr("settings.apply_close"), style="Primary.TButton", command=lambda: self._apply(True))
         self.apply_close_button.pack(side="right", padx=(0, 7))
-        self.apply_button = ttk.Button(footer, text=self.tr("settings.apply"), style="Control.TButton", command=lambda: self._apply(False))
+        self.apply_button = ttk.Button(footer, text=self.tr("settings.apply"), style="Secondary.TButton", command=lambda: self._apply(False))
         self.apply_button.pack(side="right", padx=(0, 7))
         self.bind("<Control-f>", self._focus_search)
         self.bind("<Control-F>", self._focus_search)
@@ -363,6 +376,36 @@ class SettingsDialog(tk.Toplevel):
         for name, button in self._nav_buttons.items():
             button.state(["selected"] if name == key else ["!selected"])
 
+    def _set_settings_view(self, mode: str) -> None:
+        self.settings_view_var.set("advanced" if mode == "advanced" else "simple")
+        self.working.general.settings_view = self.settings_view_var.get()
+        self._apply_settings_view_navigation()
+        if self._current_page not in self._visible_pages():
+            self._show_page("general")
+        self._mark_dirty()
+
+    def _visible_pages(self) -> set[str]:
+        if self.settings_view_var.get() == "advanced":
+            return {key for key, _en, _cs in self.CATEGORY_DEFS}
+        return set(self.SIMPLE_PAGES)
+
+    def _apply_settings_view_navigation(self) -> None:
+        visible = self._visible_pages()
+        definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
+        for label in self._nav_group_labels.values(): label.pack_forget()
+        for button in self._nav_buttons.values(): button.pack_forget()
+        for group_key, _group_en, _group_cs, keys in self.CATEGORY_GROUPS:
+            shown = [key for key in keys if key in visible]
+            if not shown: continue
+            self._nav_group_labels[group_key].pack(fill="x", padx=5, pady=(10 if group_key != "essentials" else 2, 4))
+            for key in shown:
+                self._nav_buttons[key].configure(text=self._txt(*definitions[key]))
+                self._nav_buttons[key].pack(fill="x", pady=1)
+        simple = self.settings_view_var.get() == "simple"
+        self.simple_view_button.state(["selected"] if simple else ["!selected"])
+        self.advanced_view_button.state(["!selected"] if simple else ["selected"])
+        self._update_navigation_scrollregion()
+
     def _filter_navigation(self) -> None:
         query = self.search_var.get().strip().casefold()
         definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
@@ -379,6 +422,9 @@ class SettingsDialog(tk.Toplevel):
         self._search_result_rows = []
         for entry in self._search_entries:
             page = str(entry["page"])
+            # Search is global even in Simple view.  Advanced settings remain
+            # hidden from navigation, but a direct search must still find and
+            # open them so users are never forced to guess the view switch.
             page_en, page_cs = definitions[page]
             haystack = " ".join((
                 str(entry["label_en"]), str(entry["label_cs"]),
@@ -661,14 +707,14 @@ class SettingsDialog(tk.Toplevel):
         portal_button = ttk.Button(
             actions,
             text=self._txt("Open customer portal", "Otevřít zákaznický portál"),
-            style="Accent.TButton",
+            style="Primary.TButton",
             command=lambda: webbrowser.open(activation_api.PORTAL_LOGIN_URL),
         )
         portal_button.pack(side="left")
         self.check_updates_button = ttk.Button(
             actions,
             text=self.tr("menu.check_updates"),
-            style="Control.TButton",
+            style="Secondary.TButton",
             command=lambda: self.on_check_updates(self) if self.on_check_updates else None,
             state="normal" if self.on_check_updates else "disabled",
         )
@@ -676,7 +722,7 @@ class SettingsDialog(tk.Toplevel):
         self.copy_support_button = ttk.Button(
             actions,
             text=self._txt("Copy support summary", "Kopírovat souhrn pro podporu"),
-            style="Control.TButton",
+            style="Secondary.TButton",
             command=self._copy_support_summary,
         )
         self.copy_support_button.pack(side="left", padx=(10, 0))
@@ -748,27 +794,6 @@ class SettingsDialog(tk.Toplevel):
         self.clipboard_append("\n".join(lines))
         self.update()
         show_themed_info(self, self._txt("Support summary", "Souhrn pro podporu"), self._txt("A safe support summary was copied to the clipboard.", "Bezpečný souhrn pro podporu byl zkopírován do schránky."))
-
-    def _build_recording_mode(self, f: ttk.Frame) -> None:
-        r = self._title(
-            f, "Recording", "Záznam",
-            "Choose between continuous replay and explicit Record/Stop sessions.",
-            "Vyberte průběžný replay nebo samostatné záznamy spuštěné tlačítky Záznam/Stop.",
-        )
-        self._vars["capture_mode"] = tk.StringVar(value=self.working.capture.mode)
-        self._vars["capture_max_duration"] = tk.DoubleVar(value=self.working.capture.max_duration_seconds)
-        self._row(
-            f, r, "Recording mode", "Režim záznamu", self._vars["capture_mode"], "combo", ("buffer", "capture"),
-            desc_en="Buffer keeps the rolling live replay. Capture disables that buffer and saves only explicit Record/Stop sessions. Changes apply after restart.",
-            desc_cs="Buffer uchovává průběžný živý replay. Capture buffer vypne a ukládá pouze záznamy po stisku Záznam/Stop. Změna se použije po restartu.",
-            impact="very_high",
-        ); r += 1
-        self._row(
-            f, r, "Maximum capture duration (seconds)", "Maximální délka záznamu (sekundy)", self._vars["capture_max_duration"],
-            desc_en="Capture mode stops safely at this limit. Default: 600 seconds (10 minutes).",
-            desc_cs="Režim Capture se při tomto limitu bezpečně zastaví. Výchozí hodnota: 600 sekund (10 minut).",
-            impact="high",
-        )
 
     def _build_general(self, f: ttk.Frame) -> None:
         r = self._title(f, "General", "Obecné", "Basic application behaviour.", "Základní chování aplikace.")
@@ -900,7 +925,7 @@ class SettingsDialog(tk.Toplevel):
         for column, value in enumerate(preset_names):
             preset_box.columnconfigure(column, weight=1)
             ttk.Button(
-                preset_box, text=preset_names[value], style="MutedAction.TButton",
+                preset_box, text=preset_names[value], style="Neutral.TButton",
                 command=lambda value=value: self._choose_performance_preset(value),
             ).grid(row=1, column=column, sticky="ew", padx=(0 if column == 0 else 5, 0))
         self.preset_description = ttk.Label(preset_box, style="Muted.TLabel", wraplength=650, justify="left")
@@ -1044,7 +1069,7 @@ class SettingsDialog(tk.Toplevel):
             "Low-level capture controls for troubleshooting a specific camera.",
             "Nízkoúrovňové volby snímání pro řešení problémů s konkrétní kamerou.",
         )
-        self._row(f, r, "Windows backend", "Windows backend", self._vars["backend"], "combo", ("DSHOW", "MSMF", "ANY"), impact="medium", keywords="DirectShow Media Foundation"); r += 1
+        self._row(f, r, "Windows backend", "Windows backend", self._vars["backend"], "combo", ("MF_NATIVE", "DSHOW", "MSMF", "ANY"), impact="medium", keywords="DirectShow Media Foundation native high speed"); r += 1
         self._row(f, r, "Camera FOURCC", "Formát FOURCC", self._vars["fourcc"], desc_en="MJPG often enables high FPS over USB.", desc_cs="MJPG často umožní vyšší FPS přes USB.", impact="high", keywords="codec MJPG"); r += 1
         self._row(f, r, "Reconnect delay (seconds)", "Prodleva opětovného připojení", self._vars["reconnect"], impact="low")
 
@@ -1321,7 +1346,7 @@ class SettingsDialog(tk.Toplevel):
         self._vars["hotkeys_enabled"] = tk.BooleanVar(value=self.working.hotkeys.enabled)
         self._row(f, r, "Enable application hotkeys", "Zapnout klávesové zkratky", self._vars["hotkeys_enabled"], "check", impact="low"); r += 1
         bar = ttk.Frame(f, style="Panel.TFrame"); bar.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(2, 7))
-        ttk.Button(bar, text=self._txt("Defaults", "Výchozí"), style="MutedAction.TButton", command=self._reset_hotkeys).pack(side="left")
+        ttk.Button(bar, text=self._txt("Defaults", "Výchozí"), style="Neutral.TButton", command=self._reset_hotkeys).pack(side="left")
         ttk.Label(bar, text=self._txt("Double-click a row to change its shortcut. Right-click restores one row.", "Dvojklikem na řádek zkratku změníš. Pravé tlačítko obnoví jednu zkratku."), style="SettingsRowDesc.TLabel").pack(side="left", padx=(12, 0))
         r += 1
         tree = ttk.Treeview(f, columns=("action", "key"), show="headings", height=14, selectmode="browse")
@@ -1433,11 +1458,10 @@ class SettingsDialog(tk.Toplevel):
     def _apply_vars(self) -> AppConfig:
         self._ensure_all_pages_built()
         w = self.working
+        w.general.settings_view = self.settings_view_var.get()
         w.general.language = language_from_option(str(self._vars["language"].get()))
         w.general.confirm_destructive_actions = bool(self._vars["confirm_destructive"].get())
         w.general.show_tooltips = bool(self._vars["show_tooltips"].get())
-        w.capture.mode = str(self._vars["capture_mode"].get())
-        w.capture.max_duration_seconds = float(self._vars["capture_max_duration"].get())
         d = w.display
         d.theme = str(self._vars["theme"].get()); d.fullscreen = bool(self._vars["fullscreen"].get()); d.remember_geometry = bool(self._vars["remember_geometry"].get())
         p = w.performance

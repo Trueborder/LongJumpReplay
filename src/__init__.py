@@ -1,4 +1,4 @@
 """Long Jump Replay package metadata."""
 
-__version__ = "6.2.7"
+__version__ = "6.2.8"
 VERSION_SHORT = ".".join(__version__.split(".")[:2])

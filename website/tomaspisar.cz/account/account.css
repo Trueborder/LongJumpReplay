@@ -179,6 +179,20 @@
 .activation-key-value { display: block; min-height: 72px; padding: 1.15rem; border: 1px solid var(--account-border); border-radius: 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--text); font: 600 clamp(1.4rem, 4vw, 2.3rem) var(--mono); letter-spacing: .08em; text-align: center; }
 .activation-key-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .activation-key-actions .button { min-height: 44px; }
+.pairing-card { display: grid; grid-template-columns: minmax(0, .9fr) minmax(320px, 1.1fr); gap: clamp(1.25rem, 4vw, 3rem); padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--account-border)); border-radius: 22px; background: linear-gradient(145deg, color-mix(in srgb, var(--cyan) 5%, var(--account-panel)), var(--account-panel)); }
+.pairing-card h3 { margin: 1rem 0 .7rem; font-size: clamp(1.55rem, 3vw, 2.35rem); }
+.pairing-card p { color: var(--muted); line-height: 1.6; }
+.pairing-controls, .pairing-review { display: grid; gap: .75rem; align-content: start; padding: 1rem; border: 1px solid var(--account-border); border-radius: 16px; background: color-mix(in srgb, var(--bg) 72%, transparent); }
+.pairing-controls label, .pairing-review label { color: var(--muted); font: 500 .64rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.pairing-controls input, .pairing-review select { min-height: 48px; width: 100%; box-sizing: border-box; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--text); font: 600 1.1rem var(--mono); letter-spacing: .14em; }
+.pairing-review select { font: inherit; letter-spacing: normal; }
+.pairing-machine { display: flex; align-items: center; gap: .75rem; padding-bottom: .75rem; border-bottom: 1px solid var(--account-border); }
+.pairing-machine > span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--cyan) 12%, transparent); color: var(--cyan); }
+.pairing-machine strong, .pairing-machine small { display: block; }
+.pairing-machine small { margin-top: .2rem; color: var(--muted); }
+.pairing-review .form-note { margin: 0; color: var(--muted); line-height: 1.45; }
+.pairing-review .form-note[data-state='warning'] { color: var(--coral); }
+.pairing-review [aria-busy='true'] { cursor: wait; }
 .device-details-dialog { width: min(760px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); padding: clamp(1.25rem, 4vw, 2rem); overflow: auto; border: 1px solid var(--account-border); border-radius: 24px; background: var(--surface); color: var(--text); box-shadow: var(--account-shadow); }
 .device-details-dialog::backdrop { background: rgba(3, 7, 9, .72); backdrop-filter: blur(6px); }
 .dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
@@ -230,6 +244,7 @@
   .device-card > .small-button { grid-column: 1 / -1; width: 100%; }
   .activation-key-card { grid-template-columns: 1fr; }
   .activation-key-actions { display: grid; }
+  .pairing-card { grid-template-columns: 1fr; }
   .device-facts { grid-template-columns: 1fr; }
   .activity-list article { grid-template-columns: 1fr; }
   .table-card { margin-right: -.75rem; }

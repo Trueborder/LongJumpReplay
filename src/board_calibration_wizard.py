@@ -116,12 +116,12 @@ class BoardCalibrationWizard:
             self.current_frame_button.state(["disabled"])
         self.reset_button = ttk.Button(actions, text=self.t("calibration.reset_previous"), command=self.reset_previous)
         self.reset_button.pack(side="left", padx=(0, 6))
-        self.preview_button = ttk.Button(actions, text=self.t("calibration.preview"), style="Accent.TButton", command=self.preview)
+        self.preview_button = ttk.Button(actions, text=self.t("calibration.preview"), style="Primary.TButton", command=self.preview)
         self.preview_button.pack(side="left", padx=(0, 6))
         self.skip_button = ttk.Button(actions, text=self.t("calibration.skip"), command=self.skip)
         self.skip_button.pack(side="left")
         self.back_button = ttk.Button(actions, text=self.t("calibration.back_edit"), command=self.edit)
-        self.confirm_button = ttk.Button(actions, text=self.t("calibration.confirm"), style="Accent.TButton", command=self.confirm)
+        self.confirm_button = ttk.Button(actions, text=self.t("calibration.confirm"), style="Primary.TButton", command=self.confirm)
 
         if previous is not None:
             scale = np.asarray(self.frame_size, np.float32)

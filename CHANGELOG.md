@@ -1,5 +1,13 @@
 # LongJumpReplay changelog
 
+## 6.2.8 - 2026-09-13
+
+- Adds live App CPU and App RAM performance graphs with separate readable axes.
+- Keeps Performance monitoring active while the system is paused and records
+  zero camera/buffer FPS while capture is stopped.
+- Keeps settings search global so Advanced settings remain discoverable from
+  the Simple view.
+
 ## 6.2.7 - 2026-09-12
 
 - Publishes the current recording library, persistent Capture Mode recordings,

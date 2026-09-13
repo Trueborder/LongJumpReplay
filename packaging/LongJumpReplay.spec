@@ -6,7 +6,9 @@ version_file = os.path.join(SPECPATH, 'windows_version_info.txt')
 a = Analysis(
     [os.path.join(project_root, 'app.py')],
     pathex=[project_root],
-    binaries=[],
+    binaries=[
+        (os.path.join(project_root, 'packaging/generated/native/LongJumpReplay.CaptureHost.exe'), 'native'),
+    ],
     datas=[
         (os.path.join(project_root, 'packaging/generated/config.json'), '.'),
         (os.path.join(project_root, 'assets/long_jump_replay.ico'), 'assets'),

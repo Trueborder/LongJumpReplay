@@ -53,6 +53,27 @@
     }
   }
 
+  // The readiness page is deliberately informational: it helps an operator
+  // size a station before an event without pretending to probe the computer
+  // from the public website. The desktop app remains authoritative at runtime.
+  if (location.pathname === '/software/longjumpreplay/' && !document.querySelector('[data-ljr-readiness]')) {
+    const requirements = document.querySelector('.requirements-list')?.closest('.content-section');
+    if (requirements) {
+      const section = document.createElement('section');
+      section.className = 'section-shell content-section';
+      section.dataset.ljrReadiness = '';
+      section.innerHTML = `
+        <div class="section-heading-row"><div><p class="eyebrow" data-en="PRE-EVENT READINESS" data-cs="PŘÍPRAVA PŘED ZÁVODEM">PRE-EVENT READINESS</p><h2 data-en="Choose the station for the job." data-cs="Zvolte stanici podle úkolu.">Choose the station for the job.</h2></div><p class="heading-note" data-en="The camera, USB path, storage, and analysis workload all matter. These tiers are planning guidance; verify the complete setup in LongJumpReplay before competition." data-cs="Záleží na kameře, USB připojení, úložišti i zátěži analýzy. Tato úrovně slouží pro plánování; před závodem ověřte celou sestavu v LongJumpReplay.">The camera, USB path, storage, and analysis workload all matter. These tiers are planning guidance; verify the complete setup in LongJumpReplay before competition.</p></div>
+        <div class="hardware-matrix" role="table" aria-label="LongJumpReplay station tiers">
+          <article class="hardware-tier" role="row"><div><span class="tag" data-en="MINIMUM" data-cs="MINIMUM">MINIMUM</span><h3 data-en="Review station" data-cs="Kontrolní stanice">Review station</h3><p data-en="For replay and frame-by-frame judging." data-cs="Pro replay a posuzování po snímcích.">For replay and frame-by-frame judging.</p></div><dl><div><dt>CPU</dt><dd>Core i5 / Ryzen 5</dd></div><div><dt>RAM</dt><dd>16 GB</dd></div><div><dt>CAMERA</dt><dd>720p / 60 FPS</dd></div><div><dt>DISK</dt><dd data-en="SSD · 10 GB free" data-cs="SSD · 10 GB volných">SSD · 10 GB free</dd></div></dl></article>
+          <article class="hardware-tier hardware-tier-featured" role="row"><div><span class="tag" data-en="BALANCED" data-cs="VYVÁŽENÁ">BALANCED</span><h3 data-en="Competition station" data-cs="Závodní stanice">Competition station</h3><p data-en="The recommended setup for live capture and assist review." data-cs="Doporučená sestava pro živý záznam a asistovanou kontrolu.">The recommended setup for live capture and assist review.</p></div><dl><div><dt>CPU</dt><dd>Core i7 / Ryzen 7</dd></div><div><dt>RAM</dt><dd>32 GB</dd></div><div><dt>CAMERA</dt><dd>720p / 120 FPS</dd></div><div><dt>USB</dt><dd data-en="USB 3 · direct port" data-cs="USB 3 · přímý port">USB 3 · direct port</dd></div></dl></article>
+          <article class="hardware-tier" role="row"><div><span class="tag" data-en="HIGH-SPEED" data-cs="VYSOKÁ RYCHLOST">HIGH-SPEED</span><h3 data-en="Analysis station" data-cs="Analytická stanice">Analysis station</h3><p data-en="For longer sessions, high-FPS capture, and heavier analysis." data-cs="Pro delší seance, vysoké FPS a náročnější analýzu.">For longer sessions, high-FPS capture, and heavier analysis.</p></div><dl><div><dt>CPU</dt><dd>Core i7 / Ryzen 7+</dd></div><div><dt>RAM</dt><dd>32 GB+</dd></div><div><dt>CAMERA</dt><dd>1080p / 120 FPS</dd></div><div><dt>DISK</dt><dd data-en="NVMe · 100 GB free" data-cs="NVMe · 100 GB volných">NVMe · 100 GB free</dd></div></dl></article>
+        </div>
+        <div class="readiness-notes"><article><span class="eyebrow" data-en="STORAGE FORECAST" data-cs="ODHAD ÚLOŽIŠTĚ">STORAGE FORECAST</span><p data-en="Plan for more space when saving long sessions or higher-quality exports. The app reports the live free-disk and recording forecast in its Performance tab." data-cs="Při ukládání delších seancí nebo kvalitnějších exportů počítejte s větší rezervou. Aplikace zobrazuje volné místo a odhad záznamu v záložce Výkon.">Plan for more space when saving long sessions or higher-quality exports. The app reports the live free-disk and recording forecast in its Performance tab.</p></article><article><span class="eyebrow" data-en="CAPTURE-HEALTH GUARD" data-cs="KONTROLA STAVU ZÁZNAMU">CAPTURE-HEALTH GUARD</span><p data-en="Before the event, confirm stable FPS, no dropped frames, a healthy buffer, enough disk space, and a direct USB 3 camera connection." data-cs="Před závodem ověřte stabilní FPS, nulové výpadky snímků, zdravý buffer, dostatek místa a přímé připojení kamery přes USB 3.">Before the event, confirm stable FPS, no dropped frames, a healthy buffer, enough disk space, and a direct USB 3 camera connection.</p></article></div>`;
+      requirements.insertAdjacentElement('afterend', section);
+    }
+  }
+
   /* ---------------------------------------------------------------- cookies
      Language is stored in a first-party cookie so the choice follows the
      visitor across pages and survives a return visit.

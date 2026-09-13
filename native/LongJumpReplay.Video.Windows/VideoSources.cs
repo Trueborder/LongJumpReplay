@@ -116,7 +116,7 @@ public sealed class SyntheticVideoSource(int width = 480, int height = 270, doub
 public sealed record CameraDeviceInfo(string Id, string Name);
 
 /// <summary>Windows Media Foundation/MediaCapture source kept outside WPF behind IVideoSource.</summary>
-public sealed class MediaFoundationCameraSource(string deviceId) : IVideoSource
+public sealed class MediaFoundationCameraSource(string deviceId, int requestedWidth = 0, int requestedHeight = 0, double requestedFps = 0) : IVideoSource
 {
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private MediaCapture? _capture;
@@ -155,6 +155,22 @@ public sealed class MediaFoundationCameraSource(string deviceId) : IVideoSource
                 cancellationToken.ThrowIfCancellationRequested();
                 var source = capture.FrameSources.Values.FirstOrDefault(value => value.Info.SourceKind == MediaFrameSourceKind.Color)
                     ?? throw new InvalidOperationException("The selected camera does not expose a color frame source.");
+                var requested = source.SupportedFormats
+                    .Where(format => format.VideoFormat.Width > 0 && format.VideoFormat.Height > 0)
+                    .OrderBy(format =>
+                    {
+                        var fps = format.FrameRate.Denominator == 0 ? 0 : (double)format.FrameRate.Numerator / format.FrameRate.Denominator;
+                        var sizePenalty = Math.Abs((long)format.VideoFormat.Width - requestedWidth) + Math.Abs((long)format.VideoFormat.Height - requestedHeight);
+                        var fpsPenalty = Math.Abs(fps - requestedFps) * 1000.0;
+                        return sizePenalty + fpsPenalty;
+                    })
+                    .FirstOrDefault();
+                if (requested is not null && requestedWidth > 0 && requestedHeight > 0 && requestedFps > 0)
+                {
+                    await source.SetFormatAsync(requested);
+                    var actualFps = requested.FrameRate.Denominator == 0 ? 0 : (double)requested.FrameRate.Numerator / requested.FrameRate.Denominator;
+                    Description = $"Media Foundation camera · {requested.VideoFormat.Width}×{requested.VideoFormat.Height} · {actualFps:F1} fps";
+                }
                 var reader = await capture.CreateFrameReaderAsync(source, MediaEncodingSubtypes.Bgra8);
                 reader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
                 reader.FrameArrived += Reader_FrameArrived;
@@ -169,7 +185,8 @@ public sealed class MediaFoundationCameraSource(string deviceId) : IVideoSource
                 _reader = reader;
                 _running = true;
                 var devices = await ListDevicesAsync().ConfigureAwait(false);
-                Description = devices.FirstOrDefault(device => device.Id == deviceId)?.Name ?? Description;
+                var name = devices.FirstOrDefault(device => device.Id == deviceId)?.Name;
+                if (!string.IsNullOrWhiteSpace(name)) Description = $"{name} · {Description}";
             }
             catch
             {

@@ -271,7 +271,6 @@ def test_applying_unchanged_settings_preserves_timeline_size(monkeypatch, tmp_pa
     config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
     config.display.window_geometry = '1100x700'
     config.general.onboarding_completed = True
-    config.general.recording_mode_prompted = True
     config.shuttle.enabled = False
     monkeypatch.setattr(
         'src.settings_dialog.enumerate_camera_devices',

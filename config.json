@@ -1,11 +1,12 @@
 {
   "general": {
     "language": "en",
+    "settings_view": "advanced",
+    "language_migration_pending": false,
     "confirm_destructive_actions": false,
     "show_tooltips": true,
     "onboarding_completed": true,
-    "progress_details_expanded": true,
-    "recording_mode_prompted": true
+    "progress_details_expanded": true
   },
   "camera": {
     "source_type": "file",
@@ -25,11 +26,7 @@
     "jpeg_quality": 72,
     "encoder_queue_size": 64,
     "max_memory_mb": 1024,
-    "store_every_nth_frame": 2
-  },
-  "capture": {
-    "mode": "buffer",
-    "max_duration_seconds": 600.0
+    "store_every_nth_frame": 1
   },
   "attempts": {
     "pre_seconds": 30.0,
@@ -107,8 +104,8 @@
     "show_decision_controls": true,
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
-    "attempts_panel_width": 502,
-    "timeline_height": 164,
+    "attempts_panel_width": 822,
+    "timeline_height": 157,
     "guide_enabled": false,
     "guide_x_ratio": 0.8225806355476379,
     "guide_y_ratio": 0.29569894075393677,
@@ -127,7 +124,7 @@
     "window_geometry": "1920x1009+-14+0"
   },
   "performance": {
-    "preset": "quiet",
+    "preset": "custom",
     "preview_refresh_hz": 20,
     "timeline_refresh_hz": 30,
     "status_refresh_hz": 2,
@@ -210,7 +207,7 @@
     "pad_length_cm": 120.1,
     "pad_width_cm": 34.0,
     "shoe_width_cm": 0.0,
-    "legal_side_flipped": false,
+    "legal_side_flipped": true,
     "camera_profile": {}
   },
   "export": {

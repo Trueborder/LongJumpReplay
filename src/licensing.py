@@ -191,7 +191,8 @@ def _activation_copy(language: str) -> dict[str, str]:
             "activate": "Aktivovat tento počítač", "code_sent": "Kód byl odeslán na {email}. Platí {minutes} minut. Zkontrolujte také spam.",
             "activated": "Hotovo. Tento počítač je aktivován.", "working": "Pracuji…", "start": "Spustit 72hodinové hodnocení",
             "continue": "Pokračovat v hodnocení", "cancel": "Ukončit", "active": "Hodnocení je aktivní do {expiry}. Zbývají {remaining} exporty.",
-            "alternate": "Aktivovat pomocí klíče", "key_title": "Aktivační klíč z portálu", "key": "Aktivační klíč",
+            "alternate": "Aktivovat pomocí klíče", "pair": "Spárovat přes zákaznický portál", "pair_title": "Spárovat tento počítač", "pair_hint": "Otevřete odkaz v zákaznickém portálu nebo zadejte šestimístný kód. Po schválení se počítač aktivuje automaticky.", "pair_open": "Otevřít portál", "pair_copy": "Kopírovat kód", "pair_waiting": "Čekám na schválení…", "pair_done": "Hotovo. Tento počítač je aktivován.",
+            "key_title": "Aktivační klíč z portálu", "key": "Aktivační klíč",
             "key_hint": "Klíč ve formátu 0000-ABCD-2EFG najdete ve svém zákaznickém účtu.", "key_activate": "Aktivovat tento počítač",
             "back": "Zpět", "need_email": "Zadejte platnou e-mailovou adresu.", "need_code": "Zadejte šestimístný kód z e-mailu.",
             "need_key": "Zadejte platný aktivační klíč.", "buy": "Koupit licenci na tomaspisar.cz",
@@ -205,7 +206,8 @@ def _activation_copy(language: str) -> dict[str, str]:
         "activate": "Activate this computer", "code_sent": "Code sent to {email}. It is valid for {minutes} minutes. Check spam too.",
         "activated": "Done. This computer is activated.", "working": "Working…", "start": "Start 72-hour evaluation",
         "continue": "Continue evaluation", "cancel": "Exit", "active": "Evaluation active until {expiry}. Exports remaining: {remaining}.",
-        "alternate": "Activate with a key", "key_title": "Portal activation key", "key": "Activation key",
+         "alternate": "Activate with a key", "pair": "Pair from customer portal", "pair_title": "Pair this computer", "pair_hint": "Open the link in your customer portal or enter the six-digit code. After approval, this computer activates automatically.", "pair_open": "Open portal", "pair_copy": "Copy code", "pair_waiting": "Waiting for approval…", "pair_done": "Done. This computer is activated.",
+         "key_title": "Portal activation key", "key": "Activation key",
         "key_hint": "Find the 0000-ABCD-2EFG key in your customer account.", "key_activate": "Activate this computer",
         "back": "Back", "need_email": "Enter a valid email address.", "need_code": "Enter the six-digit code from the email.",
         "need_key": "Enter a valid activation key.", "buy": "Buy a licence at tomaspisar.cz",
@@ -391,6 +393,77 @@ def ensure_license_or_trial(
 
         _run_background(dialog, activate, succeeded, failed)
 
+    def show_pairing() -> None:
+        """Pair through the signed-in portal without changing the OTP flow."""
+        pair_dialog = tk.Toplevel(dialog)
+        center_popup(pair_dialog)
+        pair_dialog.title(copy["pair_title"])
+        pair_dialog.resizable(False, False)
+        pair_dialog.grab_set()
+        pane = ttk.Frame(pair_dialog, padding=24)
+        pane.pack(fill="both", expand=True)
+        ttk.Label(pane, text=copy["pair_title"], style="Title.TLabel").pack(anchor="w")
+        ttk.Label(pane, text=copy["pair_hint"], wraplength=520, justify="left").pack(anchor="w", pady=(6, 18))
+        ttk.Label(pane, text="Pairing code", style="Heading.TLabel").pack(anchor="w")
+        pair_code = tk.StringVar(value="Starting…")
+        ttk.Label(pane, textvariable=pair_code, font=("Consolas", 22, "bold")).pack(anchor="w", pady=(4, 10))
+        ttk.Label(pane, text="Portal link", style="Heading.TLabel").pack(anchor="w")
+        pair_url = tk.StringVar(value="")
+        url_entry = ttk.Entry(pane, textvariable=pair_url, width=62, state="readonly")
+        url_entry.pack(fill="x", pady=(4, 10))
+        pair_status = ttk.Label(pane, text=copy["working"], wraplength=520, justify="left")
+        pair_status.pack(anchor="w", pady=(4, 12))
+        actions = ttk.Frame(pane)
+        actions.pack(fill="x")
+        open_button = ttk.Button(actions, text=copy["pair_open"], state="disabled")
+        open_button.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        copy_button = ttk.Button(actions, text=copy["pair_copy"], state="disabled")
+        copy_button.pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(actions, text=copy["cancel"], command=pair_dialog.destroy).pack(side="left", fill="x", expand=True, padx=(6, 0))
+        pairing_token: str | None = None
+
+        def copy_pair_code() -> None:
+            pair_dialog.clipboard_clear()
+            pair_dialog.clipboard_append(pair_code.get())
+            pair_status.configure(text=copy["pair_copy"])
+
+        def poll() -> None:
+            if not pairing_token:
+                return
+
+            def failed(error: object) -> None:
+                if getattr(error, "code", None) == "pairing_pending":
+                    pair_status.configure(text=copy["pair_waiting"])
+                    pair_dialog.after(1800, poll)
+                else:
+                    pair_status.configure(text=str(error))
+
+            def succeeded(_result: object) -> None:
+                nonlocal accepted
+                pair_status.configure(text=copy["pair_done"])
+                accepted = True
+                pair_dialog.after(350, pair_dialog.destroy)
+                dialog.after(400, dialog.destroy)
+
+            _run_background(pair_dialog, lambda: activation_api.activate_pairing(pairing_token or ""), succeeded, failed)
+
+        def pairing_started(value: object) -> None:
+            nonlocal pairing_token
+            start = value
+            pairing_token = start.token
+            pair_code.set(start.code)
+            pair_url.set(start.portal_url)
+            open_button.configure(state="normal", command=lambda: webbrowser.open(start.portal_url))
+            copy_button.configure(state="normal", command=copy_pair_code)
+            pair_status.configure(text=copy["pair_waiting"])
+            pair_dialog.after(600, poll)
+
+        def pairing_failed(error: object) -> None:
+            pair_status.configure(text=str(error))
+
+        _run_background(pair_dialog, activation_api.start_pairing, pairing_started, pairing_failed)
+        fit_dialog_to_content()
+
     def show_key_activation() -> None:
         """Alternative activation using the reusable key from the portal."""
         key_dialog = tk.Toplevel(dialog)
@@ -477,7 +550,7 @@ def ensure_license_or_trial(
 
         key_back_button = ttk.Button(row, text=copy["back"], command=key_dialog.destroy)
         key_back_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        key_activate_button = ttk.Button(row, text=copy["key_activate"], command=use_key, style="Accent.TButton")
+        key_activate_button = ttk.Button(row, text=copy["key_activate"], command=use_key, style="Primary.TButton")
         key_activate_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
         key_dialog.bind("<Return>", lambda _event: use_key())
         key_entry.focus_set()
@@ -509,21 +582,22 @@ def ensure_license_or_trial(
     code_actions.columnconfigure((0, 1), weight=1, uniform="code-action")
     code_back_button = ttk.Button(code_actions, text=copy["back"], command=back_to_email)
     code_back_button.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-    code_activate_button = ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Accent.TButton")
+    code_activate_button = ttk.Button(code_actions, text=copy["activate"], command=do_activate, style="Primary.TButton")
     code_activate_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
     ttk.Button(footer_actions, text=copy["cancel"], command=cancel).pack(side="right")
     if status.active:
-        ttk.Button(evaluation_actions, text=copy["continue"], command=continue_trial).grid(row=0, column=0, sticky="ew")
+        ttk.Button(evaluation_actions, text=copy["continue"], command=continue_trial, style="Primary.TButton").grid(row=0, column=0, sticky="ew")
     else:
-        ttk.Button(evaluation_actions, text=copy["start"], command=begin_trial).grid(row=0, column=0, sticky="ew")
+        ttk.Button(evaluation_actions, text=copy["start"], command=begin_trial, style="Primary.TButton").grid(row=0, column=0, sticky="ew")
     # The email step owns the Send action. Once the code arrives, the code
     # section exposes explicit Back and Activate controls instead of silently
     # repurposing the button at the bottom of the dialog.
-    send_button = ttk.Button(licence_buttons, text=copy["send"], command=send_code, style="Accent.TButton")
+    send_button = ttk.Button(licence_buttons, text=copy["send"], command=send_code, style="Primary.TButton")
     send_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
     ttk.Button(licence_buttons, text=copy["alternate"], command=show_key_activation).grid(row=1, column=0, sticky="ew", padx=(0, 6))
-    ttk.Button(licence_buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/software/longjumpreplay/#buy")).grid(row=1, column=1, sticky="ew", padx=(6, 0))
+    ttk.Button(licence_buttons, text=copy["pair"], command=show_pairing).grid(row=1, column=1, sticky="ew", padx=(6, 0))
+    ttk.Button(licence_buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/software/longjumpreplay/#buy")).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
     ttk.Separator(body).pack(fill="x", pady=(18, 10))
     ttk.Label(body, text=copy["trial_limits"], wraplength=620, justify="left").pack(anchor="w")
     dialog.protocol("WM_DELETE_WINDOW", cancel)

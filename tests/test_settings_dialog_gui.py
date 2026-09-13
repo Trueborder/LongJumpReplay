@@ -20,17 +20,17 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     dialog.update_idletasks()
     style = ttk.Style(dialog)
     assert "Modern" in str(style.layout("TCheckbutton"))
-    assert "ModernDark.neutral.Button.background" not in str(style.layout("TButton"))
+    assert "ModernDark.secondary.Button.background" in str(style.layout("TButton"))
     assert "ModernDark.Combo.field" not in str(style.layout("TCombobox"))
     assert "Combobox.downarrow" in str(style.layout("TCombobox"))
-    assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 22
+    assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 28
     assert math.isclose(theme_manager.tk_scaling, max(1.0, native_scaling * COMPACT_UI_RATIO), rel_tol=.01)
     assert math.isclose(float(root.tk.call("tk", "scaling")), theme_manager.tk_scaling, rel_tol=.01)
     assert int(style.lookup("TCombobox", "arrowsize")) == 12
-    assert tuple(style.lookup("TCombobox", "padding")) == (7, 0)
+    assert tuple(style.lookup("TCombobox", "padding")) == (10, 5)
     assert int(style.lookup("Treeview", "rowheight")) == 19
-    assert tuple(style.lookup("Control.TButton", "padding")) == (7, 0)
-    assert str(style.lookup("Control.TButton", "font")) == "{Segoe UI} 9"
+    assert tuple(map(int, root.tk.splitlist(style.lookup("Control.TButton", "padding")))) == (12, 4)
+    assert str(style.lookup("Control.TButton", "font")) == "{Segoe UI} 10"
     checked_image = theme_manager._image_assets["ModernDark.checked"]
     unchecked_image = theme_manager._image_assets["ModernDark.unchecked"]
     assert checked_image.height() == unchecked_image.height() == 16
@@ -42,7 +42,7 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     theme_manager.apply("light")
     assert math.isclose(float(root.tk.call("tk", "scaling")), theme_manager.tk_scaling, rel_tol=.01)
     assert "ModernLight" in str(style.layout("TCheckbutton"))
-    assert "ModernLight.neutral.Button.background" not in str(style.layout("TButton"))
+    assert "ModernLight.secondary.Button.background" in str(style.layout("TButton"))
     assert set(dialog._pages) == {
         "general", "camera_recording", "competition", "judging",
         "board_assist", "workspace_controls", "licence", "advanced",
@@ -195,7 +195,7 @@ def test_licence_page_shows_diagnostics_and_copies_safe_summary(monkeypatch):
     dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
     dialog._copy_support_summary()
     summary = dialog.clipboard_get()
-    assert "6.2.7" in summary
+    assert "6.2.8" in summary
     assert "lifetime" in summary
     assert "must-not-be-copied" not in summary
     assert "machine_id" not in summary

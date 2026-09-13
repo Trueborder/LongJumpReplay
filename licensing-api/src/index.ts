@@ -875,6 +875,100 @@ async function activateWithKey(request: Request, env: Env): Promise<Response> {
     authorization: authorization.token, expires_at: authorization.expiresAt });
 }
 
+async function startDevicePairing(request: Request, env: Env): Promise<Response> {
+  const data = await readJson(request);
+  const machineId = str(data.machine_id);
+  if (!MACHINE_PATTERN.test(machineId)) return fail("invalid_input", "Missing or malformed computer identifier.");
+  if (!(await rateLimit(env.DB, `pair:${clientKey(request)}`, ...rateLimits(env).activate))) {
+    return fail("rate_limited", "Too many pairing attempts. Try again later.", 429);
+  }
+  const token = generateToken();
+  const code = generateVerificationCode();
+  const timestamp = now();
+  const metadata = deviceMetadata(data);
+  await env.DB.prepare(`INSERT INTO device_pairing_sessions
+      (id, token_hash, code_hash, machine_id, device_name, app_version, os_version, architecture, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(randomId("pair"), await sha256(token), await hashCode(env.VERIFICATION_PEPPER, code), machineId,
+      bounded(data.device_name, 120), metadata.appVersion, metadata.osVersion, metadata.architecture,
+      timestamp, timestamp + 600).run();
+  const portalUrl = new URL("/dashboard/activation", env.PORTAL_ORIGIN);
+  portalUrl.searchParams.set("pair", token);
+  return json({ pairing_token: token, pairing_code: code, portal_url: portalUrl.toString(), expires_in_seconds: 600 });
+}
+
+async function pairingStatus(request: Request, env: Env): Promise<Response> {
+  const data = await readJson(request);
+  const token = str(data.pairing_token);
+  if (!token) return fail("invalid_input", "Pairing token is required.");
+  if (!(await rateLimit(env.DB, `pairstatus:${clientKey(request)}`, ...rateLimits(env).pairingStatus))) {
+    return fail("rate_limited", "Too many pairing checks. Try again shortly.", 429);
+  }
+  const row = await env.DB.prepare(`SELECT * FROM device_pairing_sessions WHERE token_hash = ?`)
+    .bind(await sha256(token)).first<Record<string, string | number | null>>();
+  if (!row || Number(row.expires_at) < now()) return fail("pairing_expired", "This pairing request has expired.", 410);
+  if (row.status === "pending") return json({ status: "pending" }, 202);
+  if (row.status === "used") return fail("pairing_used", "This pairing request has already been used.", 409);
+  if (row.status !== "approved" || !row.license_id) return fail("pairing_invalid", "This pairing request is not available.", 409);
+  const license = await findLicenseById(env.DB, String(row.license_id));
+  if (!license || license.status !== "active") return fail("license_inactive", "The selected licence is no longer active.", 403);
+  const machineId = String(row.machine_id);
+  const existing = await findDevice(env.DB, license.id, machineId);
+  if ((!existing || existing.status !== "active") && await activeDeviceCount(env.DB, license.id) >= license.max_devices) {
+    return fail("device_limit", "The selected licence has no available computer slots.", 409);
+  }
+  const metadata = { appVersion: row.app_version ? String(row.app_version) : null,
+    osVersion: row.os_version ? String(row.os_version) : null, architecture: row.architecture ? String(row.architecture) : null };
+  const device = await activateDevice(env.DB, license.id, machineId, row.device_name ? String(row.device_name) : null, "email", null, metadata);
+  await recordDeviceActivity(env.DB, device, "activation", clientNetwork(request), metadata);
+  await env.DB.prepare("UPDATE device_pairing_sessions SET status = 'used', used_at = ? WHERE id = ? AND status = 'approved'")
+    .bind(now(), row.id).run();
+  const authorization = await issueAuthorization(env, license, machineId);
+  await logEvent(env.DB, "device_activated", license.id, { device: device.id, method: "portal_pairing" });
+  return json({ status: "activated", activated: true, license_type: license.type, max_devices: license.max_devices,
+    authorization: authorization.token, expires_at: authorization.expiresAt });
+}
+
+async function portalPairingInspect(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in to pair a computer.", 401);
+  const data = await readJson(request);
+  const token = str(data.pairing_token);
+  const code = str(data.pairing_code).replace(/\D/g, "").slice(0, 6);
+  if (!token && code.length !== 6) return fail("invalid_input", "Enter the six-digit code or scan the QR code.");
+  const field = token ? "token_hash" : "code_hash";
+  const value = token ? await sha256(token) : await hashCode(env.VERIFICATION_PEPPER, code);
+  const row = await env.DB.prepare(`SELECT id, machine_id, device_name, app_version, os_version, architecture, status, expires_at
+      FROM device_pairing_sessions WHERE ${field} = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1`)
+    .bind(value).first<Record<string, string | number | null>>();
+  if (!row || Number(row.expires_at) < now()) return fail("pairing_expired", "This pairing request is invalid or expired.", 410);
+  return json({ pairing: row });
+}
+
+async function portalPairingConfirm(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in to pair a computer.", 401);
+  if (!portalMutationAllowed(request, env)) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  const pairingId = str(data.pairing_id);
+  const licenseId = str(data.license_id);
+  if (!/^pair_[A-Za-z0-9]{16,80}$/.test(pairingId) || !licenseId) return fail("invalid_input", "Choose a licence for this computer.");
+  const license = await findLicenseById(env.DB, licenseId);
+  if (!license || license.customer_id !== auth.customer.id || license.status !== "active") return fail("not_found", "Active licence not found.", 404);
+  const pair = await env.DB.prepare("SELECT machine_id, status, expires_at FROM device_pairing_sessions WHERE id = ?")
+    .bind(pairingId).first<{ machine_id: string; status: string; expires_at: number }>();
+  if (!pair || pair.status !== "pending" || pair.expires_at < now()) return fail("pairing_expired", "This pairing request is no longer available.", 410);
+  const existing = await findDevice(env.DB, license.id, pair.machine_id);
+  if ((!existing || existing.status !== "active") && await activeDeviceCount(env.DB, license.id) >= license.max_devices) {
+    return fail("device_limit", "This licence has no available computer slots.", 409);
+  }
+  const approved = await env.DB.prepare(`UPDATE device_pairing_sessions SET status = 'approved', customer_id = ?, license_id = ?, approved_at = ?
+      WHERE id = ? AND status = 'pending'`).bind(auth.customer.id, license.id, now(), pairingId).run();
+  if (!approved.meta.changes) return fail("pairing_busy", "This pairing request was already approved. Refresh the page.", 409);
+  await logEvent(env.DB, "device_pairing_approved", license.id, { pairing: pairingId });
+  return json({ approved: true });
+}
+
 async function deactivate(request: Request, env: Env): Promise<Response> {
   const data = await readJson(request);
   const grant = str(data.activation_grant);
@@ -972,6 +1066,7 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
     devices: devices.map((device) => ({
       id: device.id,
       license_id: device.license_id,
+      machine_id: device.machine_id,
       device_name: device.device_name,
       activated_at: device.activated_at,
       last_verified_at: device.last_verified_at,
@@ -1187,6 +1282,12 @@ export default {
         case "/api/license/activate-key":
           response = await activateWithKey(request, env);
           break;
+        case "/api/license/pairing/start":
+          response = await startDevicePairing(request, env);
+          break;
+        case "/api/license/pairing/status":
+          response = await pairingStatus(request, env);
+          break;
         case "/api/license/verify":
           response = await verify(request, env);
           break;
@@ -1222,6 +1323,12 @@ export default {
           break;
         case "/api/portal/activation-key/regenerate":
           response = await portalActivationKeyRegenerate(request, env);
+          break;
+        case "/api/portal/pairing/inspect":
+          response = await portalPairingInspect(request, env);
+          break;
+        case "/api/portal/pairing/confirm":
+          response = await portalPairingConfirm(request, env);
           break;
         default:
           response = fail("not_found", "Not found", 404);

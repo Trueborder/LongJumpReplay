@@ -16,7 +16,6 @@ def main() -> None:
     destination = REPOSITORY_ROOT / "packaging" / "generated" / "config.json"
     config = AppConfig()
     config.general.onboarding_completed = False
-    config.general.recording_mode_prompted = False
     save_config(config, destination)
 
 

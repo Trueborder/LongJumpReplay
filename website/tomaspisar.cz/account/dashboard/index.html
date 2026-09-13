@@ -56,6 +56,7 @@
         <a href="/dashboard/overview" data-dashboard-link="overview" data-en="Overview" data-cs="Přehled">Overview</a>
         <a href="/dashboard/licence" data-dashboard-link="licence" data-en="Licence" data-cs="Licence">Licence</a>
         <a href="/dashboard/activation-key" data-dashboard-link="activation-key" data-en="Activation key" data-cs="Aktivační klíč">Activation key</a>
+        <a href="/dashboard/activation" data-dashboard-link="activation" data-en="Pair computer" data-cs="Spárovat počítač">Pair computer</a>
         <a href="/dashboard/devices" data-dashboard-link="devices" data-en="Computers" data-cs="Počítače">Computers</a>
         <a href="/dashboard/billing" data-dashboard-link="billing" data-en="Billing" data-cs="Platby">Billing</a>
         <a href="/dashboard/help" data-dashboard-link="help" data-en="Help & security" data-cs="Pomoc a zabezpečení">Help & security</a>
@@ -109,6 +110,15 @@
               <li><span>03</span><div><h3 data-en="Protect" data-cs="Chránit">Protect</h3><p data-en="Regenerate a shared key if it may have been exposed. Key-activated computers will be disconnected." data-cs="Pokud mohl být sdílený klíč odhalen, vygenerujte nový. Počítače aktivované klíčem budou odpojeny.">Regenerate a shared key if it may have been exposed. Key-activated computers will be disconnected.</p></div></li>
             </ol>
           </details>
+        </section>
+
+        <section id="activation" class="dashboard-section" data-dashboard-route="activation" aria-labelledby="activation-title">
+          <div class="category-heading"><p class="eyebrow" data-en="PAIR A COMPUTER" data-cs="SPÁROVAT POČÍTAČ">PAIR A COMPUTER</p><h2 id="activation-title" data-en="Connect the app." data-cs="Propojte aplikaci.">Connect the app.</h2></div>
+          <div class="pairing-card">
+            <div><span class="badge" data-en="QR OR SIX DIGITS" data-cs="QR NEBO ŠEST ČÍSLIC">QR OR SIX DIGITS</span><h3 data-en="Approve a waiting Windows station" data-cs="Schvalte čekající stanici Windows">Approve a waiting Windows station</h3><p data-en="Scan the QR code shown by LongJumpReplay, or enter its six-digit pairing code. No password or reusable key is shared with the computer." data-cs="Naskenujte QR kód zobrazený v LongJumpReplay nebo zadejte šestimístný párovací kód. S počítačem se nesdílí heslo ani opakovaně použitelný klíč.">Scan the QR code shown by LongJumpReplay, or enter its six-digit pairing code. No password or reusable key is shared with the computer.</p></div>
+            <form id="pairing-form" class="pairing-controls"><label for="pairing-code" data-en="Pairing code" data-cs="Párovací kód">Pairing code</label><input id="pairing-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000"><button id="pairing-find" class="button button-outline" type="submit" data-en="Find computer" data-cs="Najít počítač">Find computer</button></form>
+            <div id="pairing-review" class="pairing-review" hidden><div class="pairing-machine"><span aria-hidden="true">▣</span><div><strong id="pairing-device-name">LongJumpReplay computer</strong><small id="pairing-device-details">—</small></div></div><label for="pairing-licence" data-en="Use licence" data-cs="Použít licenci">Use licence</label><select id="pairing-licence"></select><p id="pairing-capacity" class="form-note"></p><button id="pairing-confirm" class="button button-primary" type="button" data-en="Approve and activate" data-cs="Schválit a aktivovat">Approve and activate</button></div>
+          </div>
         </section>
 
         <section id="devices" class="dashboard-section" data-dashboard-route="devices" aria-labelledby="devices-title">

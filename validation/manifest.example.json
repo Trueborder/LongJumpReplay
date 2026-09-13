@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "dataset_version": "private-lj-takeoff-v1",
+  "algorithm_version": "working-tree",
+  "cases": [
+    {
+      "id": "camera-a-valid-001",
+      "clip": "D:/LongJumpReplay-validation/clips/camera-a-valid-001.mp4",
+      "roi": [0.35, 0.35, 0.3, 0.45],
+      "freeze_frame": 180,
+      "expected_takeoff_frame": 174,
+      "tolerance_frames": 1,
+      "before_seconds": 2.5,
+      "after_seconds": 0.25,
+      "target_width": 240
+    }
+  ]
+}

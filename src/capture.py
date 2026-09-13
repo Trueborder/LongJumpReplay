@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from collections import deque
+import json
+import mmap
+import os
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
 import logging
+import struct
+import subprocess
+import sys
 import time
 from typing import Callable, Protocol
 
@@ -142,6 +148,135 @@ class OpenCVCameraSource:
             cap.release()
 
 
+class NativeMediaFoundationSource:
+    """High-speed Windows capture helper using a three-slot shared-memory ring."""
+
+    CONTROL_BYTES = 32
+    SLOT_HEADER_BYTES = 32
+
+    def __init__(self, config: CameraConfig) -> None:
+        self.config = config
+        self.description = f"Native Media Foundation camera {config.device_index}"
+        self._process: subprocess.Popen[str] | None = None
+        self._mapping: mmap.mmap | None = None
+        self._slot_bytes = 0
+        self._slots = 0
+        self._last_sequence = -1
+
+    @staticmethod
+    def _host_candidates() -> list[Path]:
+        configured = os.environ.get("LJR_CAPTURE_HOST", "").strip()
+        root = Path(__file__).resolve().parents[1]
+        executable_root = Path(sys.executable).resolve().parent
+        values = [
+            Path(configured) if configured else Path("__missing__"),
+            executable_root / "native" / "LongJumpReplay.CaptureHost.exe",
+            root / "native" / "LongJumpReplay.CaptureHost" / "bin" / "Release" / "net10.0-windows10.0.26100.0" / "LongJumpReplay.CaptureHost.exe",
+        ]
+        return [path for path in values if path.is_file()]
+
+    def open(self) -> None:
+        candidates = self._host_candidates()
+        if not candidates:
+            raise RuntimeError("Native Media Foundation capture helper is not installed")
+        command = [
+            str(candidates[0]), "--device", str(self.config.device_index),
+            "--width", str(self.config.width), "--height", str(self.config.height),
+            "--fps", format(self.config.fps, ".3f"),
+        ]
+        process = subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, encoding="utf-8", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        self._process = process
+        if process.stdout is None:
+            raise RuntimeError("Native capture helper has no control channel")
+        # The helper performs camera negotiation before publishing this line.
+        # readline is bounded by terminating the process from close() during
+        # application shutdown; camera startup already runs off the UI thread.
+        line = process.stdout.readline()
+        if not line:
+            raise RuntimeError(f"Native capture helper exited with code {process.poll()}")
+        message = json.loads(line)
+        if message.get("type") != "ready":
+            raise RuntimeError("Native capture helper returned an invalid handshake")
+        self._slot_bytes = int(message["slotBytes"])
+        self._slots = int(message["slots"])
+        total = self.CONTROL_BYTES + self._slots * self._slot_bytes
+        self._mapping = mmap.mmap(-1, total, tagname=str(message["map"]), access=mmap.ACCESS_READ)
+        self.description = str(message.get("source") or self.description)
+
+    def read(self) -> tuple[bool, np.ndarray | None]:
+        mapping = self._mapping
+        process = self._process
+        if mapping is None or process is None:
+            return False, None
+        deadline = time.perf_counter() + .25
+        while time.perf_counter() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError(f"Native capture helper stopped with code {process.returncode}")
+            latest = struct.unpack_from("<q", mapping, 16)[0]
+            if latest <= self._last_sequence:
+                time.sleep(.001)
+                continue
+            offset = self.CONTROL_BYTES + int(latest % self._slots) * self._slot_bytes
+            sequence = struct.unpack_from("<q", mapping, offset)[0]
+            _ticks, width, height, length = struct.unpack_from("<qiii", mapping, offset + 8)
+            if sequence != latest or length != width * height * 4 or length > self._slot_bytes - self.SLOT_HEADER_BYTES:
+                continue
+            pixels = np.frombuffer(mapping, dtype=np.uint8, count=length, offset=offset + self.SLOT_HEADER_BYTES)
+            frame = pixels.reshape((height, width, 4))[:, :, :3].copy()
+            if struct.unpack_from("<q", mapping, offset)[0] != sequence:
+                continue
+            self._last_sequence = sequence
+            return True, frame
+        return False, None
+
+    def close(self) -> None:
+        mapping, process = self._mapping, self._process
+        self._mapping = None; self._process = None
+        if mapping is not None:
+            mapping.close()
+        if process is not None:
+            try:
+                if process.stdin is not None: process.stdin.write("stop\n"); process.stdin.flush()
+                process.wait(timeout=1.5)
+            except (OSError, subprocess.TimeoutExpired):
+                process.terminate()
+                try: process.wait(timeout=.5)
+                except subprocess.TimeoutExpired: process.kill()
+
+
+class NativeThenOpenCVSource:
+    """Prefer the direct backend but warn and fall back for this launch."""
+
+    def __init__(self, config: CameraConfig) -> None:
+        self.config = config
+        self._source: VideoSource = NativeMediaFoundationSource(config)
+        self.description = self._source.description
+
+    def open(self) -> None:
+        try:
+            self._source.open()
+            self.description = self._source.description
+        except Exception as exc:
+            try: self._source.close()
+            except Exception: pass
+            fallback_config = CameraConfig(**{**self.config.__dict__, "backend": "MSMF"}) if hasattr(self.config, "__dict__") else CameraConfig(
+                source_type=self.config.source_type, device_index=self.config.device_index,
+                file_path=self.config.file_path, width=self.config.width, height=self.config.height,
+                fps=self.config.fps, fourcc=self.config.fourcc, backend="MSMF",
+                buffer_size=self.config.buffer_size, loop_file=self.config.loop_file,
+                reconnect_seconds=self.config.reconnect_seconds,
+            )
+            self._source = OpenCVCameraSource(fallback_config)
+            self._source.open()
+            self.description = f"⚠ Native backend unavailable ({exc}); fallback · {self._source.description}"
+
+    def read(self) -> tuple[bool, np.ndarray | None]: return self._source.read()
+    def close(self) -> None: self._source.close()
+
+
 class VideoFileSource:
     def __init__(self, path: str, loop: bool) -> None:
         self.path, self.loop = Path(path), loop
@@ -224,6 +359,8 @@ class CaptureEngine:
             return SyntheticSource(self.camera_config.width, self.camera_config.height, self.camera_config.fps)
         if self.camera_config.source_type == "file":
             return VideoFileSource(self.camera_config.file_path, self.camera_config.loop_file)
+        if self.camera_config.backend == "MF_NATIVE":
+            return NativeThenOpenCVSource(self.camera_config)
         return OpenCVCameraSource(self.camera_config)
 
     @property

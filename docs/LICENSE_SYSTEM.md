@@ -190,9 +190,11 @@ normalised email is attached to that existing account automatically. Portal
 codes are stored separately from activation codes and cannot activate the
 desktop application.
 
-The best future activation upgrade is a one-time portal/QR pairing code: the
-desktop would show a short-lived code or QR, the already signed-in owner would
-approve that exact computer, and the code would become useless immediately.
+An additive portal pairing path is now available alongside email OTP and the
+reusable key: the desktop shows a short-lived six-digit code and a portal link,
+the signed-in owner approves that exact computer and licence, and the code is
+consumed when the desktop receives its existing signed authorization. The
+portal still uses email OTP; pairing is not a replacement authentication flow.
 Passkeys are a useful future portal-login upgrade. Floating network licences,
 shared permanent club passwords and hardware dongles are intentionally not
 planned because they add support burden or weaken ownership controls.

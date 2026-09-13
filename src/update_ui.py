@@ -116,13 +116,13 @@ class UpdateDialog:
         self.progress_detail = ttk.Label(body, text="", style="Muted.TLabel")
         self.footer = ttk.Frame(body, style="Dialog.TFrame")
         self.footer.pack(fill="x", pady=(14, 0))
-        self.ask_button = ttk.Button(self.footer, text=self._txt("Ask later", "Připomenout příště"), style="Control.TButton", command=self.ask_later)
+        self.ask_button = ttk.Button(self.footer, text=self._txt("Ask later", "Připomenout příště"), style="Secondary.TButton", command=self.ask_later)
         self.ask_button.pack(side="left")
-        self.skip_button = ttk.Button(self.footer, text=self._txt("Skip this version", "Přeskočit tuto verzi"), style="Control.TButton", command=self.skip)
+        self.skip_button = ttk.Button(self.footer, text=self._txt("Skip this version", "Přeskočit tuto verzi"), style="Secondary.TButton", command=self.skip)
         self.skip_button.pack(side="right", padx=(8, 0))
-        self.install_button = ttk.Button(self.footer, text=self._txt("Install", "Nainstalovat"), style="Accent.TButton", command=self.install)
+        self.install_button = ttk.Button(self.footer, text=self._txt("Install", "Nainstalovat"), style="Primary.TButton", command=self.install)
         self.install_button.pack(side="right", padx=(8, 0))
-        self.cancel_button = ttk.Button(self.footer, text=self._txt("Cancel", "Zrušit"), style="Control.TButton", command=self.cancel_download)
+        self.cancel_button = ttk.Button(self.footer, text=self._txt("Cancel", "Zrušit"), style="Secondary.TButton", command=self.cancel_download)
         self.window.grab_set()
 
     def _txt(self, english: str, czech: str) -> str:

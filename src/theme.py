@@ -5,6 +5,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 import ctypes
+from ctypes import wintypes
 
 
 # The original interface was laid out at approximately 130% of the density the
@@ -12,6 +13,7 @@ import ctypes
 # typography and character-sized controls at roughly 100 / 130 of that size.
 COMPACT_UI_RATIO = 100.0 / 130.0
 MIN_COMPACT_TK_SCALING = 1.0
+BUTTON_CORNER_RADIUS = 6
 
 
 def apply_compact_ui_scaling(root: tk.Misc) -> float:
@@ -39,6 +41,12 @@ DARK = {
     "timeline": "#0d1420", "tick": "#71839c", "selection": "#254c80",
     "recorded": "#326fc4", "assist": "#8b6de3", "prediction": "#f5bd4f", "playhead": "#f4f7fb",
     "valid_soft": "#12392d", "foul_soft": "#47212a", "review_soft": "#493918", "pending_soft": "#1c293b",
+    "button_bg": "#182131", "button_hover": "#203149", "button_pressed": "#142033",
+    "button_border": "#344761", "button_border_hover": "#5c7fa8",
+    "button_disabled_bg": "#111722", "button_disabled_border": "#263143", "button_disabled_text": "#66758a",
+    "primary_pressed": "#386fc9", "success_hover": "#50dda9", "success_pressed": "#259970",
+    "danger_hover": "#ff8290", "danger_pressed": "#c94a59", "warning_hover": "#ffd16f", "warning_pressed": "#c7922f",
+    "neutral_bg": "#303b4c", "neutral_hover": "#3b4960", "neutral_pressed": "#252f3e",
 }
 LIGHT = {
     "bg": "#e9eef5", "surface": "#ffffff", "surface2": "#f3f6fa", "border": "#c8d2df",
@@ -47,8 +55,39 @@ LIGHT = {
     "timeline": "#e7edf5", "tick": "#66758a", "selection": "#c5d9fb",
     "recorded": "#8bb5ed", "assist": "#8264cc", "prediction": "#a96400", "playhead": "#132033",
     "valid_soft": "#dcefe7", "foul_soft": "#f7dfe3", "review_soft": "#fff0c9", "pending_soft": "#edf2f8",
+    "button_bg": "#f7f9fc", "button_hover": "#e7effb", "button_pressed": "#d8e4f5",
+    "button_border": "#9faec2", "button_border_hover": "#5b7fac",
+    "button_disabled_bg": "#edf1f6", "button_disabled_border": "#d2dae5", "button_disabled_text": "#8b97a8",
+    "primary_pressed": "#174998", "success_hover": "#0a9668", "success_pressed": "#076344",
+    "danger_hover": "#d94356", "danger_pressed": "#922334", "warning_hover": "#c77a08", "warning_pressed": "#895100",
+    "neutral_bg": "#e1e7ef", "neutral_hover": "#d3dce8", "neutral_pressed": "#c2cedd",
 }
 
+
+BUTTON_STYLES = {
+    "secondary": "Secondary.TButton",
+    "primary": "Primary.TButton",
+    "success": "Success.TButton",
+    "danger": "Danger.TButton",
+    "warning": "Warning.TButton",
+    "neutral": "Neutral.TButton",
+    "toolbar": "Toolbar.TButton",
+    "icon": "Icon.TButton",
+    "destructive": "Destructive.TButton",
+    "pending": "JudgePending.TButton",
+    "valid": "JudgeValid.TButton",
+    "foul": "JudgeFoul.TButton",
+    "review": "JudgeReview.TButton",
+}
+
+
+def button_style(variant: str = "secondary") -> str:
+    """Return the shared ttk style name for a semantic button variant."""
+    try:
+        return BUTTON_STYLES[variant.strip().lower()]
+    except (AttributeError, KeyError) as exc:
+        choices = ", ".join(sorted(BUTTON_STYLES))
+        raise ValueError(f"Unknown button variant {variant!r}; choose one of: {choices}") from exc
 
 def _theme_palette_for(widget: tk.Misc) -> dict[str, str]:
     """Return the active palette for a widget and its themed parent chain."""
@@ -64,29 +103,124 @@ def _theme_palette_for(widget: tk.Misc) -> dict[str, str]:
     return DARK
 
 
-def center_popup(window: tk.Toplevel) -> None:
-    """Center an application-owned popup after its final size is configured."""
+def _popup_is_fullscreen(window: tk.Toplevel) -> bool:
+    """Return Tk's fullscreen state without treating the string ``"0"`` as true."""
+    try:
+        value = window.attributes("-fullscreen")
+    except tk.TclError:
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return value is True or value == 1
+
+
+def _win32_window_and_monitor_rects(
+    window: tk.Toplevel,
+    reference: tk.Misc,
+) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]] | None:
+    """Measure the decorated popup and the full monitor containing its parent."""
+    if sys.platform != "win32":
+        return None
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+    try:
+        user32 = ctypes.windll.user32
+        user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        user32.GetAncestor.restype = wintypes.HWND
+        user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        user32.GetWindowRect.restype = wintypes.BOOL
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+        user32.GetMonitorInfoW.restype = wintypes.BOOL
+        popup_handle = user32.GetAncestor(int(window.winfo_id()), 2)  # GA_ROOT
+        reference_handle = user32.GetAncestor(int(reference.winfo_id()), 2)
+        if not popup_handle:
+            popup_handle = int(window.winfo_id())
+        if not reference_handle:
+            reference_handle = popup_handle
+
+        popup_rect = wintypes.RECT()
+        if not user32.GetWindowRect(popup_handle, ctypes.byref(popup_rect)):
+            return None
+        monitor = user32.MonitorFromWindow(reference_handle, 2)  # nearest monitor
+        monitor_info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+        if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(monitor_info)):
+            return None
+        return (
+            (popup_rect.left, popup_rect.top, popup_rect.right, popup_rect.bottom),
+            (
+                monitor_info.rcMonitor.left,
+                monitor_info.rcMonitor.top,
+                monitor_info.rcMonitor.right,
+                monitor_info.rcMonitor.bottom,
+            ),
+        )
+    except (AttributeError, OSError, tk.TclError, TypeError, ValueError):
+        return None
+
+
+def center_popup(window: tk.Toplevel, parent: tk.Misc | None = None) -> None:
+    """Center an application popup's decorated frame on its parent's screen."""
+    reference = parent or getattr(window, "master", None) or window
+
     def apply_position() -> None:
         window._ljr_center_popup_job = None
         try:
-            if not window.winfo_exists() or bool(window.attributes("-fullscreen")):
+            if not window.winfo_exists() or _popup_is_fullscreen(window):
                 return
             window.update_idletasks()
-            width = max(1, window.winfo_width(), window.winfo_reqwidth())
-            height = max(1, window.winfo_height(), window.winfo_reqheight())
-            screen_width = window.winfo_screenwidth()
-            screen_height = window.winfo_screenheight()
-            x = max(0, (screen_width - width) // 2)
-            y = max(0, (screen_height - height) // 2)
-            window.geometry(f"{width}x{height}+{x}+{y}")
+            width = window.winfo_width()
+            height = window.winfo_height()
+            if width <= 1:
+                width = max(1, window.winfo_reqwidth())
+            if height <= 1:
+                height = max(1, window.winfo_reqheight())
+            window.geometry(f"{width}x{height}")
+            window.update_idletasks()
+            measured = _win32_window_and_monitor_rects(window, reference)
+            if measured is not None:
+                popup_rect, screen_rect = measured
+                outer_width = max(1, popup_rect[2] - popup_rect[0])
+                outer_height = max(1, popup_rect[3] - popup_rect[1])
+                x = screen_rect[0] + (screen_rect[2] - screen_rect[0] - outer_width) // 2
+                y = screen_rect[1] + (screen_rect[3] - screen_rect[1] - outer_height) // 2
+                popup_handle = ctypes.windll.user32.GetAncestor(int(window.winfo_id()), 2)
+                ctypes.windll.user32.SetWindowPos(popup_handle, 0, x, y, 0, 0, 0x0015)
+            else:
+                x = (window.winfo_screenwidth() - width) // 2
+                y = (window.winfo_screenheight() - height) // 2
+                window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+        except tk.TclError:
+            pass
+
+    def schedule_position() -> None:
+        try:
+            previous = getattr(window, "_ljr_center_popup_job", None)
+            if previous is not None:
+                window.after_cancel(previous)
+            window._ljr_center_popup_job = window.after_idle(apply_position)
         except tk.TclError:
             pass
 
     try:
-        previous = getattr(window, "_ljr_center_popup_job", None)
-        if previous is not None:
-            window.after_cancel(previous)
-        window._ljr_center_popup_job = window.after_idle(apply_position)
+        if window.winfo_ismapped():
+            schedule_position()
+            return
+        binding_id: str | None = None
+
+        def refine_after_map(_event: tk.Event) -> None:
+            if binding_id is not None:
+                try:
+                    window.unbind("<Map>", binding_id)
+                except tk.TclError:
+                    pass
+            schedule_position()
+
+        binding_id = window.bind("<Map>", refine_after_map, add="+")
     except tk.TclError:
         pass
 
@@ -99,7 +233,7 @@ def configure_popup(window: tk.Toplevel, parent: tk.Misc) -> dict[str, str]:
         window.option_add("*Dialog*background", palette["bg"])
     except tk.TclError:
         pass
-    center_popup(window)
+    center_popup(window, parent)
     return palette
 
 
@@ -121,7 +255,7 @@ def themed_message(
     title: str,
     message: str,
     *,
-    buttons: tuple[tuple[str, str, str], ...] = (("OK", "ok", "Accent.TButton"),),
+    buttons: tuple[tuple[str, str, str], ...] = (("OK", "ok", "Primary.TButton"),),
     width: int = 440,
 ) -> str:
     """Show a blocking, ttk-themed message/confirmation dialog."""
@@ -174,7 +308,7 @@ def show_themed_info(parent: tk.Misc, title: str, message: str) -> None:
 def ask_themed_yes_no(parent: tk.Misc, title: str, message: str, *, yes: str = "Yes", no: str = "No") -> bool:
     return themed_message(
         parent, title, message,
-        buttons=((no, "no", "Control.TButton"), (yes, "yes", "Accent.TButton")),
+        buttons=((no, "no", "Secondary.TButton"), (yes, "yes", "Primary.TButton")),
     ) == "yes"
 
 
@@ -183,7 +317,7 @@ def ask_themed_yes_no_cancel(
 ) -> bool | None:
     value = themed_message(
         parent, title, message,
-        buttons=((cancel, "cancel", "Control.TButton"), (no, "no", "Control.TButton"), (yes, "yes", "Accent.TButton")),
+        buttons=((cancel, "cancel", "Secondary.TButton"), (no, "no", "Secondary.TButton"), (yes, "yes", "Primary.TButton")),
     )
     return True if value == "yes" else False if value == "no" else None
 
@@ -245,10 +379,10 @@ class ThemeManager:
             ]}),
         ])
 
-    def _rounded_image(self, key: str, fill: str, border: str, radius: int = 10) -> tk.PhotoImage:
+    def _rounded_image(self, key: str, fill: str, border: str, radius: int = BUTTON_CORNER_RADIUS) -> tk.PhotoImage:
         # This is a scalable nine-slice background, not the final control size.
         # Keep its centre compact so rounding does not inflate every button.
-        width, height = 40, 22
+        width, height = 40, 28
         image = tk.PhotoImage(master=self.root, width=width, height=height)
         for y in range(height):
             colors: list[str] = []
@@ -256,7 +390,7 @@ class ThemeManager:
                 dx = max(radius - x, x - (width - radius - 1), 0)
                 dy = max(radius - y, y - (height - radius - 1), 0)
                 inside = dx * dx + dy * dy <= radius * radius
-                inner = dx * dx + dy * dy <= max(1, radius - 2) ** 2
+                inner = dx * dx + dy * dy <= max(1, radius - 1) ** 2
                 colors.append(fill if inside and inner else border if inside else "")
             start = 0
             while start < width:
@@ -270,34 +404,193 @@ class ThemeManager:
         self._image_assets[key] = image
         return image
 
-    def _install_rounded_button_style(self, style: ttk.Style, style_name: str, role: str, normal: str, active: str, border: str) -> None:
+    def _install_rounded_button_style(
+        self,
+        style: ttk.Style,
+        style_name: str,
+        role: str,
+        *,
+        normal: str,
+        hover: str,
+        pressed: str,
+        border: str,
+        hover_border: str,
+        foreground: str,
+        disabled_foreground: str,
+        padding: tuple[int, int],
+        font: tuple,
+        selected: str | None = None,
+        selected_border: str | None = None,
+        anchor: str = "center",
+    ) -> None:
         prefix = f"Modern{self.name.title()}.{role}"
         element = f"{prefix}.Button.background"
         if element not in style.element_names():
             normal_image = self._rounded_image(f"{prefix}.normal", normal, border)
-            active_image = self._rounded_image(f"{prefix}.active", active, active)
-            pressed_image = self._rounded_image(f"{prefix}.pressed", active, border)
-            disabled_image = self._rounded_image(f"{prefix}.disabled", self.palette["surface"], self.palette["border"])
+            hover_image = self._rounded_image(f"{prefix}.hover", hover, hover_border)
+            pressed_image = self._rounded_image(f"{prefix}.pressed", pressed, hover_border)
+            focus_image = self._rounded_image(f"{prefix}.focus", normal, self.palette["accent"])
+            selected_image = self._rounded_image(
+                f"{prefix}.selected", selected or pressed, selected_border or self.palette["text"]
+            )
+            disabled_image = self._rounded_image(
+                f"{prefix}.disabled", self.palette["button_disabled_bg"], self.palette["button_disabled_border"]
+            )
             style.element_create(
                 element, "image", normal_image,
-                ("disabled", disabled_image), ("pressed", pressed_image), ("active", active_image),
-                border=(10, 5, 10, 5), sticky="nswe",
+                ("disabled", disabled_image), ("pressed", pressed_image), ("selected", selected_image),
+                ("focus", focus_image), ("active", hover_image),
+                border=(BUTTON_CORNER_RADIUS,) * 4, sticky="nswe",
             )
         style.layout(style_name, [(element, {"sticky": "nswe", "children": [
             ("Button.padding", {"sticky": "nswe", "children": [("Button.label", {"sticky": "nswe"})]}),
         ]})])
+        style.configure(
+            style_name,
+            padding=padding,
+            font=font,
+            anchor=anchor,
+            justify="center" if anchor == "center" else "left",
+            # The semantic colour lives in the rounded image. Keeping the
+            # widget backing neutral prevents transparent corners from being
+            # refilled into a bright rectangular block by ttk.
+            background=self.palette["bg"],
+            foreground=foreground,
+            borderwidth=0,
+            relief="flat",
+        )
+        style.map(
+            style_name,
+            background=[
+                ("disabled", self.palette["bg"]),
+                ("pressed", self.palette["bg"]),
+                ("selected", self.palette["bg"]),
+                ("active", self.palette["bg"]),
+            ],
+            foreground=[
+                ("disabled", disabled_foreground),
+                ("pressed", foreground),
+                ("selected", foreground),
+                ("focus", foreground),
+                ("active", foreground),
+            ],
+        )
 
     def _install_rounded_controls(self, style: ttk.Style, p: dict[str, str]) -> None:
-        # Buttons intentionally use the native square ttk layout.  The old
-        # custom image element made every button pill-shaped and also made
-        # disabled judge controls difficult to distinguish.  Comboboxes use
-        # the platform's normal rectangular field and pop-down list as well.
+        """Install the shared semantic button family, including legacy aliases."""
+        regular_font = ("Segoe UI", 10)
+        strong_font = ("Segoe UI Semibold", 10)
+        important_font = ("Segoe UI Semibold", 10)
+        standard_padding = (12, 4)
+        compact_padding = (9, 3)
+        judge_padding = (12, 5)
+        disabled = p["button_disabled_text"]
 
-        # Keep a compact neutral asset available for GUI smoke tests and for
-        # platforms that opt into the image-backed button element later.
-        neutral_prefix = f"Modern{self.name.title()}.neutral"
-        if f"{neutral_prefix}.normal" not in self._image_assets:
-            self._rounded_image(f"{neutral_prefix}.normal", p["surface2"], p["border"])
+        roles = {
+            "secondary": dict(normal=p["button_bg"], hover=p["button_hover"], pressed=p["button_pressed"], border=p["button_border"], hover_border=p["button_border_hover"], foreground=p["text"], padding=standard_padding, font=regular_font, selected=p["selection"]),
+            "primary": dict(normal=p["accent"], hover=p["accent_hover"], pressed=p["primary_pressed"], border=p["accent"], hover_border=p["accent_hover"], foreground="#ffffff", padding=standard_padding, font=strong_font, selected=p["primary_pressed"]),
+            "success": dict(normal=p["live"], hover=p["success_hover"], pressed=p["success_pressed"], border=p["live"], hover_border=p["success_hover"], foreground="#ffffff", padding=standard_padding, font=strong_font, selected=p["success_pressed"]),
+            "danger": dict(normal=p["foul_soft"], hover=p["danger"], pressed=p["danger_pressed"], border=p["danger"], hover_border=p["danger_hover"], foreground=p["text"], padding=standard_padding, font=strong_font, selected=p["danger_pressed"]),
+            "warning": dict(normal=p["warning"], hover=p["warning_hover"], pressed=p["warning_pressed"], border=p["warning"], hover_border=p["warning_hover"], foreground="#111820", padding=standard_padding, font=strong_font, selected=p["warning_pressed"]),
+            "neutral": dict(normal=p["neutral_bg"], hover=p["neutral_hover"], pressed=p["neutral_pressed"], border=p["button_border"], hover_border=p["button_border_hover"], foreground=p["text"], padding=standard_padding, font=regular_font, selected=p["selection"]),
+            "toolbar": dict(normal=p["button_bg"], hover=p["button_hover"], pressed=p["button_pressed"], border=p["button_border"], hover_border=p["button_border_hover"], foreground=p["text"], padding=compact_padding, font=regular_font, selected=p["selection"]),
+            "icon": dict(normal=p["button_bg"], hover=p["button_hover"], pressed=p["button_pressed"], border=p["button_border"], hover_border=p["button_border_hover"], foreground=p["text"], padding=(7, 4), font=regular_font, selected=p["selection"]),
+            "destructive": dict(normal=p["danger"], hover=p["danger_hover"], pressed=p["danger_pressed"], border=p["danger"], hover_border=p["danger_hover"], foreground="#ffffff", padding=standard_padding, font=strong_font, selected=p["danger_pressed"]),
+            "judge_pending": dict(normal=p["neutral_bg"], hover=p["neutral_hover"], pressed=p["neutral_pressed"], border=p["button_border"], hover_border=p["button_border_hover"], foreground="#ffffff", padding=judge_padding, font=important_font, selected=p["neutral_pressed"], selected_border="#ffffff"),
+            "judge_valid": dict(normal=p["live"], hover=p["success_hover"], pressed=p["success_pressed"], border=p["live"], hover_border=p["success_hover"], foreground="#ffffff", padding=judge_padding, font=important_font, selected=p["success_pressed"], selected_border="#ffffff"),
+            "judge_foul": dict(normal=p["danger"], hover=p["danger_hover"], pressed=p["danger_pressed"], border=p["danger"], hover_border=p["danger_hover"], foreground="#ffffff", padding=judge_padding, font=important_font, selected=p["danger_pressed"], selected_border="#ffffff"),
+            "judge_review": dict(normal=p["warning"], hover=p["warning_hover"], pressed=p["warning_pressed"], border=p["warning"], hover_border=p["warning_hover"], foreground="#111820", padding=judge_padding, font=important_font, selected=p["warning_pressed"], selected_border="#111820"),
+        }
+        assignments = {
+            "TButton": "secondary",
+            "Secondary.TButton": "secondary",
+            "Primary.TButton": "primary",
+            "Success.TButton": "success",
+            "Danger.TButton": "danger",
+            "Warning.TButton": "warning",
+            "Neutral.TButton": "neutral",
+            "Toolbar.TButton": "toolbar",
+            "Icon.TButton": "icon",
+            "Destructive.TButton": "destructive",
+            "JudgePending.TButton": "judge_pending",
+            "JudgeValid.TButton": "judge_valid",
+            "JudgeFoul.TButton": "judge_foul",
+            "JudgeReview.TButton": "judge_review",
+            # Compatibility aliases keep plug-ins and late-created dialogs on
+            # the same system while the application uses semantic names.
+            "Control.TButton": "secondary",
+            "Accent.TButton": "primary",
+            "Live.TButton": "success",
+            "PrimaryJudge.TButton": "primary",
+            "LiveJudge.TButton": "success",
+            "MutedAction.TButton": "neutral",
+            "SystemPause.TButton": "warning",
+            "SystemResume.TButton": "success",
+            "Valid.TButton": "success",
+            "Foul.TButton": "danger",
+            "Review.TButton": "warning",
+            "Projection.TButton": "toolbar",
+            "Projection.Accent.TButton": "primary",
+        }
+        for style_name, role in assignments.items():
+            values = roles[role]
+            self._install_rounded_button_style(
+                style,
+                style_name,
+                role,
+                disabled_foreground=disabled,
+                **values,
+            )
+
+        # Sidebar navigation is button-like but uses persistent selection and
+        # left-aligned labels rather than the centered action-button layout.
+        for style_name in ("Sidebar.TButton", "SettingsNav.TButton"):
+            self._install_rounded_button_style(
+                style,
+                style_name,
+                "navigation",
+                disabled_foreground=disabled,
+                anchor="w",
+                **roles["toolbar"],
+            )
+        self._install_rounded_menubutton(style, "TMenubutton", "menu")
+        self._install_rounded_menubutton(style, "Header.TMenubutton", "header_menu")
+
+    def _install_rounded_menubutton(self, style: ttk.Style, style_name: str, role: str) -> None:
+        """Give File/View/Camera/Help selectors the same rounded surface."""
+        prefix = f"Modern{self.name.title()}.{role}"
+        element = f"{prefix}.Menubutton.background"
+        p = self.palette
+        if element not in style.element_names():
+            normal = self._rounded_image(f"{prefix}.normal", p["button_bg"], p["button_border"])
+            hover = self._rounded_image(f"{prefix}.hover", p["button_hover"], p["button_border_hover"])
+            pressed = self._rounded_image(f"{prefix}.pressed", p["button_pressed"], p["button_border_hover"])
+            focus = self._rounded_image(f"{prefix}.focus", p["button_bg"], p["accent"])
+            disabled = self._rounded_image(f"{prefix}.disabled", p["button_disabled_bg"], p["button_disabled_border"])
+            style.element_create(
+                element, "image", normal,
+                ("disabled", disabled), ("pressed", pressed), ("focus", focus), ("active", hover),
+                border=(BUTTON_CORNER_RADIUS,) * 4, sticky="nswe",
+            )
+        style.layout(style_name, [(element, {"sticky": "nswe", "children": [
+            ("Menubutton.focus", {"sticky": "nswe", "children": [
+                ("Menubutton.indicator", {"side": "right", "sticky": ""}),
+                ("Menubutton.padding", {"sticky": "we", "children": [
+                    ("Menubutton.label", {"side": "left", "sticky": ""}),
+                ]}),
+            ]}),
+        ]})])
+        style.configure(
+            style_name,
+            background=p["bg"], foreground=p["text"], padding=(10, 4),
+            borderwidth=0, relief="flat", arrowcolor=p["muted"], font=("Segoe UI", 10),
+        )
+        style.map(
+            style_name,
+            background=[("disabled", p["bg"]), ("pressed", p["bg"]), ("focus", p["bg"]), ("active", p["bg"])],
+            foreground=[("disabled", p["button_disabled_text"]), ("active", p["text"]), ("pressed", p["text"])],
+            arrowcolor=[("disabled", p["button_disabled_text"]), ("active", p["text"]), ("pressed", p["text"])],
+        )
 
     @staticmethod
     def _round_native_window(window_id: int) -> None:
@@ -357,11 +650,11 @@ class ThemeManager:
         style.configure("ControlDock.TFrame", background=p["surface"], borderwidth=1, relief="solid")
         style.configure("Brand.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 15))
         style.configure("BrandSub.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
-        style.configure("TButton", padding=(6, 0))
-        style.configure("TMenubutton", background=p["surface2"], foreground=p["text"], padding=(8, 0), borderwidth=1, relief="flat", arrowcolor=p["muted"], font=("Segoe UI", 10))
-        style.map("TMenubutton", background=[("active", p["selection"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])], arrowcolor=[("active", p["text"])])
-        style.configure("Header.TMenubutton", background=p["surface2"], foreground=p["text"], padding=(8, 0), borderwidth=1, relief="flat", arrowcolor=p["muted"], font=("Segoe UI", 10))
-        style.map("Header.TMenubutton", background=[("active", p["selection"]), ("pressed", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"])], arrowcolor=[("active", p["text"])])
+        self._install_rounded_controls(style, p)
+        style.configure("TMenubutton", background=p["button_bg"], foreground=p["text"], padding=(12, 5), borderwidth=1, relief="flat", arrowcolor=p["muted"], font=("Segoe UI", 10))
+        style.map("TMenubutton", background=[("disabled", p["button_disabled_bg"]), ("pressed", p["button_pressed"]), ("focus", p["button_hover"]), ("active", p["button_hover"])], foreground=[("disabled", p["button_disabled_text"]), ("active", p["text"]), ("pressed", p["text"])], bordercolor=[("focus", p["accent"]), ("active", p["button_border_hover"])], arrowcolor=[("disabled", p["button_disabled_text"]), ("active", p["text"])])
+        style.configure("Header.TMenubutton", background=p["button_bg"], foreground=p["text"], padding=(10, 4), borderwidth=1, relief="flat", arrowcolor=p["muted"], font=("Segoe UI", 10))
+        style.map("Header.TMenubutton", background=[("disabled", p["button_disabled_bg"]), ("pressed", p["button_pressed"]), ("focus", p["button_hover"]), ("active", p["button_hover"])], foreground=[("disabled", p["button_disabled_text"]), ("active", p["text"]), ("pressed", p["text"])], bordercolor=[("focus", p["accent"]), ("active", p["button_border_hover"])], arrowcolor=[("disabled", p["button_disabled_text"]), ("active", p["text"])])
         style.configure("ContextTitle.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
         style.configure("ContextValue.TLabel", background=p["surface2"], foreground=p["text"], font=("Segoe UI Semibold", 10))
         style.configure("Title.TLabel", background=p["bg"], foreground=p["text"], font=("Segoe UI Semibold", 14))
@@ -373,10 +666,6 @@ class ThemeManager:
         style.configure("Status.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 9))
         style.configure("StatusWarning.TLabel", background=p["surface2"], foreground=p["warning"], font=("Segoe UI Semibold", 9))
         style.configure("TimelineHint.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 9), padding=(4, 1))
-        style.configure("Control.TButton", padding=(7, 0), font=("Segoe UI", 9))
-        style.map("Control.TButton", background=[("disabled", p["surface2"]), ("active", p["surface2"]), ("pressed", p["selection"])], foreground=[("disabled", p["muted"])])
-        style.configure("Accent.TButton", padding=(8, 0), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")
-        style.map("Accent.TButton", background=[("active", p["accent_hover"]), ("pressed", p["accent_hover"])])
         style.configure(
             "Modal.Horizontal.TProgressbar",
             troughcolor=p["surface2"],
@@ -388,31 +677,6 @@ class ThemeManager:
             relief="flat",
             thickness=10,
         )
-        style.configure("Live.TButton", padding=(8, 0), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
-        style.configure("PrimaryJudge.TButton", padding=(9, 1), font=("Segoe UI Semibold", 9), background=p["accent"], foreground="#ffffff")
-        style.map("PrimaryJudge.TButton", background=[("disabled", p["surface2"]), ("active", p["accent_hover"]), ("pressed", p["accent_hover"])], foreground=[("disabled", p["muted"])])
-        style.configure("LiveJudge.TButton", padding=(8, 1), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
-        style.configure("Danger.TButton", padding=(7, 0), background=p["danger"], foreground="#ffffff")
-        style.configure("MutedAction.TButton", padding=(7, 1), background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
-        style.map("MutedAction.TButton", background=[("active", p["selection"]), ("pressed", p["selection"]), ("disabled", p["surface"])], foreground=[("active", p["text"]), ("pressed", p["text"]), ("disabled", p["muted"])])
-        style.configure("SystemPause.TButton", padding=(8, 2), background=p["warning"], foreground="#111111", font=("Segoe UI Semibold", 9))
-        style.map("SystemPause.TButton", background=[("disabled", p["surface2"]), ("active", p["accent_hover"]), ("pressed", p["accent_hover"])], foreground=[("disabled", p["muted"])])
-        style.configure("SystemResume.TButton", padding=(8, 2), background=p["live"], foreground="#ffffff", font=("Segoe UI Semibold", 9))
-        style.map("SystemResume.TButton", background=[("disabled", p["surface2"]), ("active", p["accent_hover"]), ("pressed", p["accent_hover"])], foreground=[("disabled", p["muted"])])
-        style.configure("Valid.TButton", padding=(9, 0), font=("Segoe UI Semibold", 9), background=p["live"], foreground="#ffffff")
-        style.configure("Foul.TButton", padding=(9, 0), font=("Segoe UI Semibold", 9), background=p["danger"], foreground="#ffffff")
-        style.configure("Review.TButton", padding=(9, 0), font=("Segoe UI Semibold", 9), background=p["warning"], foreground="#111111")
-        style.configure("JudgePending.TButton", padding=(9, 1), font=("Segoe UI Semibold", 9), background=p["pending_soft"], foreground=p["text"])
-        style.map("JudgePending.TButton", background=[("disabled", p["surface2"]), ("active", p["selection"]), ("pressed", p["selection"])], foreground=[("disabled", p["muted"])])
-        for name, background, foreground in (
-            ("JudgeValid.TButton", p["live"], "#ffffff"),
-            ("JudgeFoul.TButton", p["danger"], "#ffffff"),
-            ("JudgeReview.TButton", p["warning"], "#111111"),
-        ):
-            style.configure(name, padding=(9, 1), font=("Segoe UI Semibold", 9), background=background, foreground=foreground)
-            style.map(name, background=[("disabled", p["surface2"]), ("active", background), ("pressed", background)], foreground=[("disabled", p["muted"])])
-        style.configure("Sidebar.TButton", padding=(9, 1), anchor="w", background=p["surface2"], foreground=p["text"])
-        style.map("Sidebar.TButton", background=[("active", p["selection"]), ("pressed", p["selection"])])
         style.configure("Treeview", background=p["surface"], fieldbackground=p["surface"], foreground=p["text"], rowheight=19, borderwidth=0)
         style.configure("Treeview.Heading", background=p["surface2"], foreground=p["muted"], font=("Segoe UI Semibold", 9), relief="flat")
         style.map("Treeview", background=[("selected", p["selection"])], foreground=[("selected", p["text"])])
@@ -428,7 +692,7 @@ class ThemeManager:
         style.map("TEntry", fieldbackground=[("disabled", p["surface"]), ("readonly", p["surface2"])], foreground=[("disabled", p["muted"])])
         style.configure("TSpinbox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["text"], insertcolor=p["text"])
         style.map("TSpinbox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])])
-        style.configure("TCombobox", fieldbackground=p["surface2"], foreground=p["text"], arrowcolor=p["muted"], selectbackground=p["selection"], selectforeground=p["text"], padding=(7, 0), borderwidth=1, relief="flat", arrowsize=12)
+        style.configure("TCombobox", fieldbackground=p["button_bg"], foreground=p["text"], arrowcolor=p["muted"], selectbackground=p["selection"], selectforeground=p["text"], padding=(10, 5), borderwidth=1, relief="flat", arrowsize=12)
         style.map("TCombobox", fieldbackground=[("readonly", p["surface2"]), ("disabled", p["surface"])], foreground=[("readonly", p["text"]), ("disabled", p["muted"])], bordercolor=[("focus", p["accent"]), ("active", p["accent"]), ("readonly", p["border"])], arrowcolor=[("active", p["text"]), ("readonly", p["muted"])], selectbackground=[("readonly", p["surface2"])], selectforeground=[("readonly", p["text"])])
         for scrollbar_style in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
             style.configure(scrollbar_style, background=p["surface2"], troughcolor=p["bg"], arrowcolor=p["muted"], bordercolor=p["border"], lightcolor=p["surface2"], darkcolor=p["border"], relief="flat")
@@ -452,8 +716,6 @@ class ThemeManager:
         style.configure("SettingsRowDesc.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 8))
         style.configure("SettingsSection.TLabelframe", background=p["surface"], bordercolor=p["border"], relief="solid", borderwidth=1)
         style.configure("SettingsSection.TLabelframe.Label", background=p["surface"], foreground=p["muted"], font=("Segoe UI Semibold", 9))
-        style.configure("SettingsNav.TButton", padding=(10, 2), anchor="w", background=p["surface2"], foreground=p["muted"], borderwidth=0)
-        style.map("SettingsNav.TButton", background=[("active", p["selection"]), ("pressed", p["selection"]), ("selected", p["selection"])], foreground=[("active", p["text"]), ("pressed", p["text"]), ("selected", p["text"])])
         style.configure("WizardRail.TFrame", background=p["surface2"], borderwidth=1, relief="solid")
         style.configure("WizardRail.TLabel", background=p["surface2"], foreground=p["muted"], font=("Segoe UI", 9), padding=(9, 6))
         style.configure("WizardRailActive.TLabel", background=p["selection"], foreground=p["text"], font=("Segoe UI Semibold", 9), padding=(9, 6))
@@ -467,7 +729,6 @@ class ThemeManager:
         style.configure("Dialog.TFrame", background=p["surface"])
         style.configure("DialogTitle.TLabel", background=p["surface"], foreground=p["text"], font=("Segoe UI Semibold", 13))
         style.configure("DialogBody.TLabel", background=p["surface"], foreground=p["muted"], font=("Segoe UI", 10))
-        self._install_rounded_controls(style, p)
         # ttk combobox pop-downs use a classic rectangular Tk Listbox on Windows.
         self.root.option_add("*TCombobox*Listbox.background", p["surface2"])
         self.root.option_add("*TCombobox*Listbox.foreground", p["text"])

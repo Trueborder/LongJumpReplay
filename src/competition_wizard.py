@@ -114,10 +114,10 @@ class CompetitionWizard(tk.Toplevel):
         getattr(self, f"_page_{step}")(content)
         ttk.Label(self.footer, textvariable=self.error_var, style="Warning.TLabel").pack(side="left", padx=(8, 0))
         ttk.Button(self.footer, text=self.tr("wizard.cancel"), command=self._close).pack(side="left")
+        label = self.tr("wizard.finish") if step == "review" else self.tr("wizard.next")
+        ttk.Button(self.footer, text=label, style="Primary.TButton", command=self._setup_next).pack(side="right")
         if self.setup_index > 0:
             ttk.Button(self.footer, text=self.tr("wizard.back"), command=self._setup_back).pack(side="right", padx=(8, 0))
-        label = self.tr("wizard.finish") if step == "review" else self.tr("wizard.next")
-        ttk.Button(self.footer, text=label, style="Accent.TButton", command=self._setup_next).pack(side="right")
         # The review page is intentionally static after confirmation.  The
         # old periodic rebuild destroyed and recreated the widgets every 1.2s,
         # which looked like flashing and could steal focus from the final
@@ -131,7 +131,7 @@ class CompetitionWizard(tk.Toplevel):
             ttk.Label(card, text=self.tr(f"wizard.template.{template}.title"), style="WizardCardTitle.TLabel").pack(anchor="w")
             ttk.Label(card, text=self.tr(f"wizard.template.{template}.desc"), style="Muted.TLabel", wraplength=680, justify="left").pack(anchor="w", pady=(5, 10))
             selected = self.model.template == template
-            ttk.Button(card, text=self.tr("wizard.template.selected") if selected else self.tr("wizard.template.choose"), style="Accent.TButton" if selected else "Control.TButton", command=lambda value=template: self._choose_template(value)).pack(anchor="e")
+            ttk.Button(card, text=self.tr("wizard.template.selected") if selected else self.tr("wizard.template.choose"), style="Primary.TButton" if selected else "Secondary.TButton", command=lambda value=template: self._choose_template(value)).pack(anchor="e")
 
     def _choose_template(self, template: CompetitionTemplate) -> None:
         self._sync_model(quiet=True)

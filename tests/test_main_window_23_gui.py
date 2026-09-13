@@ -188,11 +188,14 @@ def test_board_tab_owns_plain_arrows_and_enter_but_not_space(tmp_path):
         app.side_notebook.select(app.board_tab)
         app.competition_board.focus_cell((1, 1))
         root.update()
+        assert app.wizard_button.master is app.competition_strip
+        assert app.competition_banner.master is app.competition_strip
         assert app._competition_board_keyboard_active()
-        assert app.hotkeys.bindtag in app.special_result_button.bindtags()
+        assert not hasattr(app, "special_result_button")
+        assert app.hotkeys.bindtag in app.wizard_button.bindtags()
 
         def event(key, state=0):
-            return SimpleNamespace(keysym=key, state=state, widget=app.special_result_button)
+            return SimpleNamespace(keysym=key, state=state, widget=app.wizard_button)
         assert not app.hotkeys._handle_override(event("Right"))
         assert app.competition_board._focused_cell == (1, 1)
         assert app.hotkeys._handle_override(event("Down"))

@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="LongJumpReplay.Core/LongJumpReplay.Core.csproj" />
   <Project Path="LongJumpReplay.Video.Windows/LongJumpReplay.Video.Windows.csproj" />
+  <Project Path="LongJumpReplay.CaptureHost/LongJumpReplay.CaptureHost.csproj" />
   <Project Path="LongJumpReplay.Infrastructure/LongJumpReplay.Infrastructure.csproj" />
   <Project Path="LongJumpReplay.App/LongJumpReplay.App.csproj" />
   <Project Path="LongJumpReplay.Tests/LongJumpReplay.Tests.csproj" />

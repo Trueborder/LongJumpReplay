@@ -27,6 +27,7 @@ export interface Env {
   RATE_LIMIT_REQUEST_CODE?: string;
   RATE_LIMIT_VERIFY_CODE?: string;
   RATE_LIMIT_ACTIVATE?: string;
+  RATE_LIMIT_PAIRING_STATUS?: string;
   RATE_LIMIT_ACTIVATION_KEY?: string;
   RATE_LIMIT_VERIFY?: string;
   RATE_LIMIT_CONTACT?: string;
@@ -102,6 +103,7 @@ export function rateLimits(env: Env) {
     requestCode: [int(env.RATE_LIMIT_REQUEST_CODE, 5), window] as [number, number],
     verifyCode: [int(env.RATE_LIMIT_VERIFY_CODE, 10), window] as [number, number],
     activate: [int(env.RATE_LIMIT_ACTIVATE, 20), window] as [number, number],
+    pairingStatus: [int(env.RATE_LIMIT_PAIRING_STATUS, 240), window] as [number, number],
     activationKey: [int(env.RATE_LIMIT_ACTIVATION_KEY, 30), window] as [number, number],
     verify: [int(env.RATE_LIMIT_VERIFY, 120), window] as [number, number],
     contact: [int(env.RATE_LIMIT_CONTACT, 3), window] as [number, number],

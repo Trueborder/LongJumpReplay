@@ -20,7 +20,7 @@ describe("customer portal page routing", () => {
   });
 
   it("serves every dashboard category at its own protected URL", () => {
-    for (const category of ["overview", "licence", "activation-key", "devices", "billing", "help"]) {
+    for (const category of ["overview", "licence", "activation-key", "activation", "devices", "billing", "help"]) {
       expect(portalPageRoute(`/dashboard/${category}`, false)).toEqual({ kind: "redirect", location: "/login" });
       expect(portalPageRoute(`/dashboard/${category}`, true)).toEqual({ kind: "asset", assetPath: "/dashboard/" });
       expect(portalPageRoute(`/dashboard/${category}/`, true)).toEqual({ kind: "redirect", location: `/dashboard/${category}` });

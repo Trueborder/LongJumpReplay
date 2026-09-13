@@ -7,6 +7,7 @@ export const DASHBOARD_ROUTES = [
   "overview",
   "licence",
   "activation-key",
+  "activation",
   "devices",
   "billing",
   "help",

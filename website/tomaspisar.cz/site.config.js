@@ -12,7 +12,7 @@ window.SITE_CONFIG = {
       downloadRoute: "/software/longjumpreplay/download/",
       licensingRoute: "/software/longjumpreplay/licensing/",
       privacyRoute: "/software/longjumpreplay/privacy/",
-      version: "6.2.7",
+      version: "6.2.8",
       versionShort: "6.2",
       price: "4 990 Kč",
       platform: "Windows",

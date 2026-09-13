@@ -178,6 +178,49 @@ def verify_code(email: str, code: str, opener: Callable[..., Any] = urlopen) -> 
     return grant
 
 
+@dataclass(frozen=True)
+class PairingStart:
+    token: str
+    code: str
+    portal_url: str
+    expires_in_seconds: int
+
+
+def start_pairing(opener: Callable[..., Any] = urlopen) -> PairingStart:
+    """Create a short-lived portal pairing request for this computer."""
+    data = _post(
+        "/api/license/pairing/start",
+        {"machine_id": device_id(), "device_name": device_name(), **_device_metadata()},
+        opener,
+    )
+    token, code, portal_url = data.get("pairing_token"), data.get("pairing_code"), data.get("portal_url")
+    if not all(isinstance(value, str) and value for value in (token, code, portal_url)):
+        raise ActivationError("The licensing server did not return a pairing request.")
+    return PairingStart(token, code, portal_url, int(data.get("expires_in_seconds") or 600))
+
+
+def pairing_status(token: str, opener: Callable[..., Any] = urlopen) -> dict[str, Any]:
+    """Poll a pairing request; pending responses are intentionally normal."""
+    return _post("/api/license/pairing/status", {"pairing_token": token}, opener)
+
+
+def activate_pairing(token: str, opener: Callable[..., Any] = urlopen) -> "ActivationResult":
+    """Finish an owner-approved pairing and persist its signed authorization."""
+    data = pairing_status(token, opener)
+    authorization = data.get("authorization")
+    if not isinstance(authorization, str) or not authorization:
+        raise ActivationError("The pairing has not been approved yet.", "pairing_pending")
+    valid, reason, _ = verify_authorization(authorization, device_id())
+    if not valid:
+        raise ActivationError(f"The authorization could not be verified ({reason}).", reason)
+    _store_authorization(authorization)
+    return ActivationResult(
+        license_type=str(data.get("license_type") or "unknown"),
+        max_devices=int(data.get("max_devices") or 0),
+        authorization=authorization,
+    )
+
+
 @dataclass
 class ActivationResult:
     license_type: str

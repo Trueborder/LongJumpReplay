@@ -6,7 +6,7 @@ import numpy as np
 
 from src.attempts import AttemptManager
 from src.config import AttemptsConfig, ExportConfig
-from src.models import AttemptState, FramePacket
+from src.models import AttemptState
 from src.ring_buffer import TimeRingBuffer
 
 
@@ -75,56 +75,6 @@ def test_selected_attempt_does_not_expire(tmp_path, jpeg_frame):
     manager.clear_selection()
     assert manager.selected_attempt() is None
     manager.stop()
-
-
-def test_explicit_recording_creates_marked_attempt(tmp_path, jpeg_frame):
-    jpeg, _ = jpeg_frame
-    ring = TimeRingBuffer(2, 128)
-    manager = AttemptManager(ring, AttemptsConfig(retention_minutes=1), ExportConfig(), tmp_path / 'cache', Queue())
-    manager.start()
-    base = time.monotonic_ns()
-    wall = time.time_ns()
-    assert manager.start_recording()
-    for index in range(4):
-        manager.append_recording_packet(FramePacket(index, base + index * 20_000_000, jpeg, 160, 90, wall + index * 20_000_000))
-    attempt_id = manager.stop_recording('Boys', 1, 1)
-    assert attempt_id is not None
-    attempt = manager.get_attempt(attempt_id)
-    assert attempt and attempt.media_start_wall_time_ns == wall
-    assert [marker.label for marker in attempt.markers] == ['Record', 'Stop']
-    manager.stop()
-
-
-def test_explicit_recording_is_persistent_and_recovered(tmp_path, jpeg_frame):
-    jpeg, _ = jpeg_frame
-    ring = TimeRingBuffer(2, 128)
-    cache = tmp_path / "cache"
-    recordings = tmp_path / "recordings"
-    manager = AttemptManager(ring, AttemptsConfig(retention_minutes=1), ExportConfig(), cache, Queue(), recordings)
-    manager.start()
-    base = time.monotonic_ns()
-    wall = time.time_ns()
-    assert manager.start_recording()
-    for index in range(5):
-        manager.append_recording_packet(FramePacket(index, base + index * 20_000_000, jpeg, 160, 90, wall + index * 20_000_000))
-    attempt_id = manager.stop_recording("Boys", 2, 3)
-    assert attempt_id is not None
-    ready = _wait_for(manager, attempt_id, {AttemptState.READY, AttemptState.ERROR})
-    assert ready and ready.state is AttemptState.READY, ready.error if ready else "missing"
-    assert ready.persistent
-    assert ready.temp_video_path and ready.temp_video_path.parent == recordings
-    assert ready.temp_metadata_path and ready.temp_metadata_path.exists()
-    assert manager.clear_all() == 0
-    assert ready.temp_video_path.exists()
-    manager.stop()
-
-    recovered_manager = AttemptManager(ring, AttemptsConfig(), ExportConfig(), cache, Queue(), recordings)
-    recovered_manager.start()
-    recovered = recovered_manager.get_attempt(attempt_id)
-    assert recovered and recovered.persistent
-    assert recovered.temp_video_path and recovered.temp_video_path.exists()
-    assert recovered.duration_seconds > 0
-    recovered_manager.stop()
 
 
 def test_in_progress_attempt_cannot_be_deleted(tmp_path, jpeg_frame):

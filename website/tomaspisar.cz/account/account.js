@@ -3,9 +3,9 @@
   const { deriveDashboardEntitlement, deriveDevicePortalState } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
   const dashboardRoute = page === 'dashboard' ? (window.location.pathname.split('/').filter(Boolean)[1] || 'overview') : '';
-  const dashboardRoutes = new Set(['overview', 'licence', 'activation-key', 'devices', 'billing', 'help']);
+  const dashboardRoutes = new Set(['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help']);
   const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null,
-    keyVisible: false, keyValue: '', keyLicenceId: '', ensuredKeys: new Set() };
+    keyVisible: false, keyValue: '', keyLicenceId: '', ensuredKeys: new Set(), pairing: null };
   const $ = (selector) => document.querySelector(selector);
   const copy = {
     en: {
@@ -25,7 +25,8 @@
       inactiveLicenceEyebrow: 'NO ACTIVE LICENCE', inactiveLicenceTitle: 'No active licence for this account.',
       inactiveLicenceCopy: 'Your previous plan is inactive. Purchase again with this email address to restore access.',
       notApplicable: 'Not applicable', additionalTitle: 'Additional computers', addUpTo: 'You can add up to', usedOf: 'computers used', computer: 'Computer', purchase: 'Purchase securely with Stripe', quantity: 'Quantity', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.',
-      method: 'Method', lastActive: 'Last active', actions: 'Actions', details: 'Details', delete: 'Delete', emailMethod: 'Email', keyMethod: 'Key'
+      method: 'Method', lastActive: 'Last active', actions: 'Actions', details: 'Details', delete: 'Delete', emailMethod: 'Email', keyMethod: 'Key',
+      pairingRequired: 'Enter the six-digit code shown by LongJumpReplay or open the QR link.', pairingFound: 'Computer found. Choose an active licence with an available slot.', pairingApproved: 'Approved. The app can finish activation now.', pairingNoCapacity: 'No active licence has an available computer slot.', pairingExpired: 'This pairing request is missing or expired.', pairingSameMachine: 'Already used by this computer', pairingAvailable: 'available slot', pairingApprove: 'Approve and activate'
     },
     cs: {
       expiredCode: 'Kód vypršel. Požádejte o nový.', verified: 'Ověřeno. Otevírám účet…',
@@ -44,7 +45,8 @@
       inactiveLicenceEyebrow: 'ŽÁDNÁ AKTIVNÍ LICENCE', inactiveLicenceTitle: 'Pro tento účet není aktivní žádná licence.',
       inactiveLicenceCopy: 'Předchozí plán je neaktivní. Pro obnovení přístupu nakupte znovu se stejnou e-mailovou adresou.',
       notApplicable: 'Nevztahuje se', additionalTitle: 'Další počítače', addUpTo: 'Můžete přidat až', usedOf: 'počítače využity', computer: 'Počítač', purchase: 'Bezpečně zaplatit přes Stripe', quantity: 'Počet', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.',
-      method: 'Způsob', lastActive: 'Poslední aktivita', actions: 'Akce', details: 'Podrobnosti', delete: 'Smazat', emailMethod: 'E-mail', keyMethod: 'Klíč'
+      method: 'Způsob', lastActive: 'Poslední aktivita', actions: 'Akce', details: 'Podrobnosti', delete: 'Smazat', emailMethod: 'E-mail', keyMethod: 'Klíč',
+      pairingRequired: 'Zadejte šestimístný kód z LongJumpReplay nebo otevřete QR odkaz.', pairingFound: 'Počítač nalezen. Vyberte aktivní licenci s volným místem.', pairingApproved: 'Schváleno. Aplikace nyní dokončí aktivaci.', pairingNoCapacity: 'Žádná aktivní licence nemá volné místo pro počítač.', pairingExpired: 'Párování chybí nebo vypršelo.', pairingSameMachine: 'Tento počítač je již použit', pairingAvailable: 'volné místo', pairingApprove: 'Schválit a aktivovat'
     }
   };
 
@@ -58,6 +60,7 @@
       overview: ['ACCOUNT OVERVIEW', 'Account overview.', 'Your licence, computers and access in one place.'],
       licence: ['LICENCE & ACCESS', 'Your licence.', 'Review plan status, competition access and available computer capacity.'],
       'activation-key': ['QUICK ACTIVATION', 'Quick activation.', 'Reveal or rotate the private key used to prepare your Windows stations.'],
+      activation: ['PAIR A COMPUTER', 'Connect the app.', 'Approve a waiting LongJumpReplay station without sharing a password or reusable key.'],
       devices: ['COMPUTERS', 'Your computers.', 'See activation method, recent activity and the slots used by each station.'],
       billing: ['BILLING', 'Billing and invoices.', 'Manage subscription payments and keep your purchase documents together.'],
       help: ['HELP & SECURITY', 'Help & security.', 'Installation, support and practical guidance for keeping access safe.']
@@ -66,6 +69,7 @@
       overview: ['PŘEHLED ÚČTU', 'Přehled účtu.', 'Licence, počítače a přístup na jednom místě.'],
       licence: ['LICENCE A PŘÍSTUP', 'Vaše licence.', 'Zkontrolujte stav plánu, závodní přístup a kapacitu počítačů.'],
       'activation-key': ['RYCHLÁ AKTIVACE', 'Rychlá aktivace.', 'Zobrazte nebo obnovte soukromý klíč pro přípravu stanic Windows.'],
+      activation: ['SPÁROVAT POČÍTAČ', 'Propojte aplikaci.', 'Schvalte čekající stanici LongJumpReplay bez sdílení hesla nebo opakovaně použitelného klíče.'],
       devices: ['POČÍTAČE', 'Vaše počítače.', 'Způsob aktivace, poslední aktivita a místa využitá jednotlivými stanicemi.'],
       billing: ['PLATBY', 'Platby a faktury.', 'Spravujte platby předplatného a mějte doklady o nákupu pohromadě.'],
       help: ['POMOC A ZABEZPEČENÍ', 'Pomoc a zabezpečení.', 'Instalace, podpora a praktické rady pro bezpečný přístup.']
@@ -263,6 +267,77 @@
       catch (error) { setStatus(error.message); button.disabled = false; await loadDashboard(); }
     });
   };
+
+  const pairingLicenceOrder = (pairing) => (state.account?.licenses || [])
+    .filter((licence) => licence.status === 'active')
+    .map((licence) => {
+      const devices = (state.account?.devices || []).filter((device) => device.license_id === licence.id && device.status === 'active');
+      const sameMachine = devices.some((device) => device.machine_id && device.machine_id === pairing?.machine_id);
+      const available = sameMachine || devices.length < Number(licence.max_devices || 0);
+      return { licence, devices, sameMachine, available };
+    })
+    .sort((a, b) => Number(b.sameMachine) - Number(a.sameMachine) || Number(b.available) - Number(a.available) || (a.licence.type === 'lifetime' ? -1 : 1));
+
+  const renderPairing = (pairing) => {
+    const review = $('#pairing-review');
+    const select = $('#pairing-licence');
+    const capacity = $('#pairing-capacity');
+    if (!review || !select || !pairing) return;
+    const choices = pairingLicenceOrder(pairing);
+    const available = choices.filter((choice) => choice.available);
+    select.innerHTML = choices.map(({ licence, devices, sameMachine, available: canUse }) => {
+      const name = licence.type === 'subscription' ? t('subscription') : t('lifetime');
+      const detail = sameMachine ? ` · ${t('pairingSameMachine')}` : ` · ${Math.max(0, Number(licence.max_devices || 0) - devices.length)} ${t('pairingAvailable')}`;
+      return `<option value="${escapeHtml(licence.id)}" ${canUse ? '' : 'disabled'}>${escapeHtml(name + detail)}</option>`;
+    }).join('');
+    const first = available[0] || choices[0];
+    if (first) select.value = first.licence.id;
+    $('#pairing-device-name').textContent = pairing.device_name || 'LongJumpReplay computer';
+    $('#pairing-device-details').textContent = [pairing.app_version, pairing.os_version, pairing.architecture].filter(Boolean).join(' · ') || '—';
+    capacity.textContent = available.length ? t('pairingFound') : t('pairingNoCapacity');
+    capacity.dataset.state = available.length ? 'ready' : 'warning';
+    $('#pairing-confirm').disabled = !available.length;
+    review.hidden = false;
+  };
+
+  const inspectPairing = async (value) => {
+    const input = String(value || $('#pairing-code')?.value || '').trim();
+    const payload = /^\d{6}$/.test(input) ? { pairing_code: input } : { pairing_token: input };
+    if (!payload.pairing_code && !payload.pairing_token) { setStatus(t('pairingRequired')); return; }
+    const find = $('#pairing-find');
+    if (find) { find.disabled = true; find.setAttribute('aria-busy', 'true'); }
+    setStatus(t('sending'));
+    try {
+      const data = await api('/api/portal/pairing/inspect', { method: 'POST', body: JSON.stringify(payload) });
+      state.pairing = data.pairing;
+      renderPairing(state.pairing);
+      setStatus(t('pairingFound'));
+    } catch (error) {
+      state.pairing = null;
+      $('#pairing-review')?.setAttribute('hidden', '');
+      setStatus(error.status === 410 ? t('pairingExpired') : error.message);
+    } finally {
+      if (find) { find.disabled = false; find.removeAttribute('aria-busy'); }
+    }
+  };
+
+  const confirmPairing = async () => {
+    if (!state.pairing) return;
+    const licenseId = $('#pairing-licence')?.value;
+    if (!licenseId) return;
+    const button = $('#pairing-confirm');
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    setStatus(t('sending'));
+    try {
+      await api('/api/portal/pairing/confirm', { method: 'POST', body: JSON.stringify({ pairing_id: state.pairing.id, license_id: licenseId }) });
+      setStatus(t('pairingApproved'));
+      renderPairing({ ...state.pairing });
+      await loadDashboard();
+    } catch (error) { setStatus(error.message); button.disabled = false; }
+    finally { button.removeAttribute('aria-busy'); }
+  };
+
   const renderDashboard = (data) => {
     state.account = data;
     const licences = data.licenses || [];
@@ -299,6 +374,7 @@
     renderInvoices(data.invoices || []);
     renderAdditionalComputers(data.additional_computers || []);
     renderDashboardRoute(hasActiveLicence);
+    if (state.pairing) renderPairing(state.pairing);
     $('#dashboard-loading').hidden = true;
     $('#dashboard-content').hidden = false;
   };
@@ -441,6 +517,8 @@
     $('#activation-key-reveal')?.addEventListener('click', revealActivationKey);
     $('#activation-key-copy')?.addEventListener('click', copyActivationKey);
     $('#activation-key-regenerate')?.addEventListener('click', regenerateActivationKey);
+    $('#pairing-form')?.addEventListener('submit', (event) => { event.preventDefault(); inspectPairing(); });
+    $('#pairing-confirm')?.addEventListener('click', confirmPairing);
     $('#licence-key-select')?.addEventListener('change', async (event) => {
       state.keyLicenceId = event.target.value; hideActivationKey();
       if (!state.ensuredKeys.has(state.keyLicenceId)) {
@@ -448,12 +526,18 @@
         catch (error) { setStatus(error.message); }
       }
     });
-    loadDashboard();
+    loadDashboard().then(() => {
+      if (dashboardRoute === 'activation') {
+        const token = new URLSearchParams(window.location.search).get('pair');
+        if (token) inspectPairing(token);
+      }
+    });
   };
 
   document.querySelector('[data-lang-toggle]')?.addEventListener('click', () => window.setTimeout(() => {
     state.lang = document.documentElement.lang === 'cs' ? 'cs' : 'en';
     if (state.account && page === 'dashboard') renderDashboard(state.account);
+    if (state.pairing && page === 'dashboard') renderPairing(state.pairing);
     if (state.codeSent && page === 'login') $('#login-submit').textContent = state.lang === 'cs' ? 'Přihlásit' : 'Sign in';
   }, 0));
 

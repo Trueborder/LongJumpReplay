@@ -549,6 +549,7 @@ def reconstruct_shoe_overhead(
     contact_mask = observed_mask.copy() if verdict_status != "review" else np.zeros_like(observed_mask)
     profile = calibration.camera_profile or {}
     diagnostics = (
+        "temporal_consensus=anchor_plus_minus_1_frame_max_300ms",
         f"accepted_observations={len(accepted)}",
         f"tracked_observations={tracked_observations}",
         f"full_segmentation_refinements={full_refinements}",

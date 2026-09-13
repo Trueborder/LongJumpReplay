@@ -31,6 +31,7 @@ from .adjudication import (
     parse_distance_centimetres,
     parse_wind_metres_per_second,
 )
+from .background_tasks import BackgroundTaskController, TaskSnapshot, TaskState
 from . import VERSION_SHORT, __version__
 from .activation import authorization_permits, current_authorization
 from .attempts import AttemptManager
@@ -54,7 +55,11 @@ from .config import (
 from .i18n import Translator
 from .exporter import save_bgr_png
 from .hotkeys import HotkeyRouter
+from .legacy_recording_migration import migrate_legacy_recordings
 from .models import AttemptDecision, AttemptSession, AttemptState, TimelineModel
+from .notifications import Notice, NoticeSeverity
+from .performance_monitor import PerformanceMonitor
+from .performance_view import PerformanceView
 from .playback import PlaybackController, PlaybackMode
 from .progress import ProgressState, StartupProgressEvent
 from .portable_paths import app_data_paths, writable_data_directory
@@ -181,7 +186,7 @@ class MainWindow:
             config.camera,
             config.buffer,
             self.buffer,
-            buffer_enabled=config.capture.mode == "buffer",
+            buffer_enabled=True,
         )
         self.attempts = AttemptManager(
             self.buffer,
@@ -192,7 +197,8 @@ class MainWindow:
             persistent_directory=self.data_paths.recordings,
         )
         self.thumbnail_worker = RecordingThumbnailWorker(self.data_paths.thumbnails, self.event_queue)
-        self.capture.set_packet_listener(self.attempts.append_recording_packet)
+        self.background_tasks = BackgroundTaskController(self.event_queue)
+        self.performance_monitor = PerformanceMonitor(self.data_paths.exports)
         self.adjudication = AdjudicationSessionStore(self.data_paths.adjudication, writable_data_directory() / "adjudication-recovery")
         self.playback = PlaybackController(self.buffer, self.attempts)
         self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
@@ -273,7 +279,6 @@ class MainWindow:
         self._measurement_popup: tk.Toplevel | None = None
         self._measurement_popup_save_button: ttk.Button | None = None
         self._attempt_editor: tk.Toplevel | None = None
-        self._recording_auto_stop_job: str | None = None
         self._hold_playback = False
         self._hold_playback_job: str | None = None
         self._telemetry = RuntimeTelemetry()
@@ -318,10 +323,7 @@ class MainWindow:
             self._schedule_trial_expiry_check()
         if not self.config.general.onboarding_completed:
             self.root.after(350, self.show_onboarding)
-        if not self.config.general.recording_mode_prompted:
-            # Let startup actions, camera readiness, and the onboarding card
-            # settle before presenting this non-blocking mode choice.
-            self.root.after(5000, self._prompt_recording_mode)
+        self._schedule_legacy_recording_migration()
         if self._startup_update_task is not None:
             self.root.after(700, lambda: self._poll_update_task(self._startup_update_task, manual=False))
         report("Judge station ready", 4, 4, "Required workers are running", phase="services")
@@ -359,7 +361,6 @@ class MainWindow:
         self.status_var = tk.StringVar(value="Initialising…")
         self.message_var = tk.StringVar(value="")
         self.warning_var = tk.StringVar(value="")
-        self.recording_var = tk.StringVar(value="")
         self.assist_warning_var = tk.StringVar(value="")
         self.camera_warning_var = tk.StringVar(value="")
         self.attempt_summary_var = tk.StringVar(value=self._t("attempts.none"))
@@ -568,7 +569,7 @@ class MainWindow:
         self.root.after(80, poll)
 
     def _style_all_menus(self) -> None:
-        for name in ("file_menu", "camera_menu", "view_menu", "layout_menu", "theme_menu", "help_menu", "special_result_menu"):
+        for name in ("file_menu", "camera_menu", "view_menu", "layout_menu", "theme_menu", "help_menu"):
             menu = getattr(self, name, None)
             if isinstance(menu, tk.Menu):
                 self.theme.style_menu(menu)
@@ -633,7 +634,7 @@ class MainWindow:
         self.timer_value_label.pack(side="left", padx=(0, 6), pady=3)
         for widget in (self.timer_frame, self.timer_prefix_label, self.timer_value_label):
             widget.bind("<Button-1>", self._on_timer_click)
-        self.system_pause_button = ttk.Button(header, text=self._t("button.pause_system"), width=14, style="SystemPause.TButton", command=self.toggle_system_pause)
+        self.system_pause_button = ttk.Button(header, text=self._t("button.pause_system"), width=14, style="Warning.TButton", command=self.toggle_system_pause)
         self.system_pause_button.pack(side="right", padx=(12, 0), pady=(1, 0))
         self.mode_badge = tk.Label(header, textvariable=self.mode_var, width=14, anchor="center", padx=10, pady=4, borderwidth=0, font=("Segoe UI Semibold", 9))
         self.mode_badge.pack(side="right", padx=(10, 0))
@@ -649,10 +650,18 @@ class MainWindow:
                 bg="#5b4300", fg="#fff1b8",
             )
             self.evaluation_banner.pack(fill="x", pady=(0, 8))
-        self.competition_banner = tk.Label(self.outer, textvariable=self.competition_banner_var, anchor="center", padx=10, pady=5, font=("Segoe UI Semibold", 9))
-
-        self.wizard_button = ttk.Button(self.outer, text=self._t("button.wizard"), style="Accent.TButton", command=self.start_competition_wizard)
-        self.wizard_button.pack(anchor="w", pady=(0, 6))
+        self.competition_strip = ttk.Frame(self.outer, style="App.TFrame")
+        self.competition_strip.pack(fill="x", pady=(0, 6))
+        self.wizard_button = ttk.Button(self.competition_strip, text=self._t("button.wizard"), style="Primary.TButton", command=self.start_competition_wizard)
+        self.wizard_button.pack(side="left")
+        self.competition_banner = tk.Label(
+            self.competition_strip,
+            textvariable=self.competition_banner_var,
+            anchor="center",
+            padx=10,
+            pady=4,
+            font=("Segoe UI Semibold", 9),
+        )
         if self._evaluation_mode:
             self.wizard_button.configure(state="disabled")
 
@@ -701,14 +710,12 @@ class MainWindow:
 
         self.controls = ttk.Frame(self.workspace, style="ControlDock.TFrame", padding=(7, 5))
         self.controls.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), width=14, style="PrimaryJudge.TButton", command=self.toggle_freeze)
+        self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), width=14, style="Primary.TButton", command=self.toggle_freeze)
         self.freeze_button.pack(side="left")
         # Freeze and Live are one primary toggle. Keep the old attribute as an
         # alias for integrations, but do not create a second visible button.
         self.live_button = self.freeze_button
         self.freeze_button.pack(side="left", padx=(0, 12))
-        self.recording_status_label = ttk.Label(self.controls, textvariable=self.recording_var, style="Warning.TLabel")
-        self.recording_status_label.pack(side="left", padx=(0, 12))
         self.assist_warning_label = ttk.Label(self.controls, textvariable=self.assist_warning_var, style="Warning.TLabel")
         # Keep the failure notice out of the way until a frozen attempt needs it.
         self.assist_warning_label.pack_forget()
@@ -717,11 +724,11 @@ class MainWindow:
         self.frame_group_label.pack(anchor="w")
         frame_buttons = ttk.Frame(self.frame_group, style="ControlDock.TFrame")
         frame_buttons.pack(anchor="w", pady=(2, 0))
-        self.prev_frame_button = ttk.Button(frame_buttons, text=self._t("button.previous_frame"), width=12, style="Control.TButton", command=lambda: self.step_frame(-1))
+        self.prev_frame_button = ttk.Button(frame_buttons, text=self._t("button.previous_frame"), style="Secondary.TButton", command=lambda: self.step_frame(-1))
         self.prev_frame_button.pack(side="left", padx=(0, 2))
-        self.next_frame_button = ttk.Button(frame_buttons, text=self._t("button.next_frame"), width=12, style="Control.TButton", command=lambda: self.step_frame(1))
+        self.next_frame_button = ttk.Button(frame_buttons, text=self._t("button.next_frame"), style="Secondary.TButton", command=lambda: self.step_frame(1))
         self.next_frame_button.pack(side="left", padx=2)
-        self.top_view_button = ttk.Button(frame_buttons, text=self._t("button.top_view"), width=16, style="Control.TButton", command=self.open_top_view_projection)
+        self.top_view_button = ttk.Button(frame_buttons, text=self._t("button.top_view"), style="Secondary.TButton", command=self.open_top_view_projection)
         self.top_view_button.pack(side="left", padx=(7, 0))
         self.frame_group.pack(side="left", padx=(0, 12))
 
@@ -749,7 +756,7 @@ class MainWindow:
         self.measurement_distance_entry.pack(side="left", padx=(5, 12))
         self.measurement_wind_label = ttk.Label(self.measurement_frame, text=self._t("measurement.wind"), style="Muted.TLabel")
         self.measurement_wind_entry = ttk.Entry(self.measurement_frame, textvariable=self.measurement_wind_var, width=7)
-        self.measurement_save_button = ttk.Button(self.measurement_frame, text=self._t("measurement.save"), style="Accent.TButton", command=self._save_measurement)
+        self.measurement_save_button = ttk.Button(self.measurement_frame, text=self._t("measurement.save"), style="Primary.TButton", command=self._save_measurement)
         self.measurement_save_button.pack(side="right")
         self.measurement_skip_button = ttk.Button(self.measurement_frame, text=self._t("measurement.skip"), command=self._skip_measurement)
         self.measurement_skip_button.pack(side="right", padx=(0, 7))
@@ -767,9 +774,9 @@ class MainWindow:
         self.camera_waiting_progress = ttk.Progressbar(self.camera_waiting_frame, mode="indeterminate", length=300)
         self.camera_waiting_progress.pack(fill="x")
         self.camera_action_frame = ttk.Frame(self.video_host, style="Toolbar.TFrame", padding=(8, 6))
-        self.camera_try_again_button = ttk.Button(self.camera_action_frame, text=self._t("camera.try_again"), style="Accent.TButton", command=self._try_camera_again)
+        self.camera_try_again_button = ttk.Button(self.camera_action_frame, text=self._t("camera.try_again"), style="Primary.TButton", command=self._try_camera_again)
         self.camera_try_again_button.pack(side="left")
-        self.camera_help_button = ttk.Button(self.camera_action_frame, text=self._t("camera.help_button"), style="Control.TButton", command=self.show_camera_help)
+        self.camera_help_button = ttk.Button(self.camera_action_frame, text=self._t("camera.help_button"), style="Secondary.TButton", command=self.show_camera_help)
         self.camera_help_button.pack(side="left", padx=(8, 0))
         self.camera_waiting_frame.place_forget()
         self.camera_action_frame.place_forget()
@@ -783,10 +790,17 @@ class MainWindow:
             style="StatusWarning.TLabel", anchor="e",
         )
         self.camera_warning_label.grid(row=0, column=1, sticky="e", padx=(10, 0))
+        self.task_status_var = tk.StringVar(value="")
+        self.task_status_button = ttk.Button(
+            self.status_bar, textvariable=self.task_status_var,
+            style="Toolbar.TButton", command=self._show_task_drawer,
+        )
+        self.task_status_button.grid(row=0, column=2, sticky="e", padx=(10, 0))
+        self.task_status_button.grid_remove()
         self.status_progress = ttk.Progressbar(self.status_bar, mode="indeterminate", length=110)
-        self.status_progress.grid(row=0, column=2, sticky="e", padx=(12, 0))
+        self.status_progress.grid(row=0, column=3, sticky="e", padx=(12, 0))
         self.status_progress.grid_remove()
-        ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel", anchor="e").grid(row=0, column=3, sticky="e", padx=(12, 0))
+        ttk.Label(self.status_bar, textvariable=self.message_var, style="Status.TLabel", anchor="e").grid(row=0, column=4, sticky="e", padx=(12, 0))
 
     def _video_calibration_kwargs(self) -> dict:
         d = self.config.display
@@ -815,8 +829,15 @@ class MainWindow:
         self.side_notebook.pack(fill="both", expand=True)
         self.recordings_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
         self.board_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
+        self.performance_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
         self.side_notebook.add(self.recordings_tab, text=self._t("captures.title").title())
         self.side_notebook.add(self.board_tab, text=self._t("board.title").title())
+        self.side_notebook.add(self.performance_tab, text=self._t("performance.title").title())
+        self.performance_view = PerformanceView(
+            self.performance_tab, self.performance_monitor, self.palette,
+            self.config.general.language,
+        )
+        self.performance_view.pack(fill="both", expand=True)
 
         self._thumbnail_images: dict[int, ImageTk.PhotoImage] = {}
         self._thumbnail_fallback = ImageTk.PhotoImage(Image.new("RGB", (72, 44), self.palette["surface2"]))
@@ -871,14 +892,6 @@ class MainWindow:
         self.board_target_title_label.grid(row=0, column=0, sticky="w")
         self.board_target_label = ttk.Label(self.board_navigation, textvariable=self.board_target_var, style="ContextValue.TLabel")
         self.board_target_label.grid(row=1, column=0, sticky="w")
-        self.special_result_button = ttk.Menubutton(self.board_navigation, text=self._t("button.more"))
-        self.special_result_menu = tk.Menu(self.special_result_button, tearoff=False)
-        self.special_result_menu.add_command(label=self._t("status.passed"), command=lambda: self.mark_special_result(AttemptDecision.PASSED))
-        self.special_result_menu.add_command(label=self._t("status.missing"), command=lambda: self.mark_special_result(AttemptDecision.MISSING))
-        self.special_result_menu.add_command(label=self._t("status.withdrawn"), command=lambda: self.mark_special_result(AttemptDecision.WITHDRAWN))
-        self.special_result_menu.add_separator(); self.special_result_menu.add_command(label=self._t("status.reattempt"), command=self.grant_reattempt)
-        self.special_result_button.configure(menu=self.special_result_menu); self.theme.style_menu(self.special_result_menu)
-        self.special_result_button.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(10, 0))
         self.board_keyboard_hint = ttk.Label(
             self.board_navigation,
             text=self._t("board.keyboard_hint"),
@@ -903,13 +916,13 @@ class MainWindow:
         row = ttk.Frame(footer, style="Panel.TFrame"); row.pack(fill="x")
         for column in range(4):
             row.columnconfigure(column, weight=1, uniform="attempt-actions")
-        self.open_attempt_button = ttk.Button(row, text=self._t("attempts.open"), command=self._open_attempt_from_recordings, style="MutedAction.TButton")
+        self.open_attempt_button = ttk.Button(row, text=self._t("attempts.open"), command=self._open_attempt_from_recordings, style="Neutral.TButton")
         self.open_attempt_button.grid(row=0, column=0, sticky="ew")
-        self.export_button = ttk.Button(row, text=self._t("attempts.export"), command=self.export_current_attempt, style="MutedAction.TButton")
+        self.export_button = ttk.Button(row, text=self._t("attempts.export"), command=self.export_current_attempt, style="Neutral.TButton")
         self.export_button.grid(row=0, column=1, sticky="ew", padx=5)
-        self.delete_button = ttk.Button(row, text=self._t("attempts.delete"), command=self.delete_current_attempt, style="MutedAction.TButton")
+        self.delete_button = ttk.Button(row, text=self._t("attempts.delete"), command=self.delete_current_attempt, style="Neutral.TButton")
         self.delete_button.grid(row=0, column=2, sticky="ew")
-        self.clear_button = ttk.Button(row, text=self._t("attempts.clear"), command=self.clear_all_recordings, style="MutedAction.TButton")
+        self.clear_button = ttk.Button(row, text=self._t("attempts.clear"), command=self.clear_all_recordings, style="Neutral.TButton")
         self.clear_button.grid(row=0, column=3, sticky="ew", padx=(5, 0))
         for button in (self.open_attempt_button, self.export_button, self.delete_button, self.clear_button):
             button.state(["disabled"])
@@ -1229,14 +1242,7 @@ class MainWindow:
     def _update_video_labels(self) -> None:
         self._update_judging_controls()
         p = self.palette; stats = self.capture.stats()
-        if self.config.capture.mode == "capture":
-            self.freeze_button.configure(text="Stop recording" if self.attempts.is_recording else "Record")
-            if self.attempts.is_recording:
-                self.recording_var.set(f"● RECORDING {self.attempts.recording_elapsed_seconds():05.1f}s")
-            elif self.recording_var.get().startswith("●"):
-                self.recording_var.set("")
-        else:
-            self.freeze_button.configure(text=self._t("button.live") if self.playback.mode is not PlaybackMode.LIVE else self._t("button.freeze"))
+        self.freeze_button.configure(text=self._t("button.live") if self.playback.mode is not PlaybackMode.LIVE else self._t("button.freeze"))
         if self._system_paused:
             self.camera_waiting_frame.place_forget(); self.camera_action_frame.place_forget()
             self.mode_var.set(self._t("mode.paused")); self.mode_badge.configure(bg=p["muted"], fg="#ffffff")
@@ -1277,18 +1283,31 @@ class MainWindow:
                 self.replay_canvas.set_status(label, color, secondary)
 
     def _update_status(self) -> None:
+        capture, buffer = self.capture.stats(), self.buffer.stats()
+        cache_gb = self.attempts.cache_size_bytes() / 1024 ** 3
+        runtime = self._telemetry.snapshot(capture, buffer)
+        # Keep health monitoring independent of the capture pause state.  The
+        # camera/buffer status may be intentionally frozen, but CPU/RAM/disk
+        # and the performance history must continue to describe the process.
+        sampled = self.performance_monitor.sample(
+            capture, buffer,
+            cache_bytes=self.attempts.cache_size_bytes(),
+            ui_p95_ms=runtime.ui_p95_ms,
+            capture_active=self.capture.is_running and not self._system_paused,
+        )
+        if sampled is not None and hasattr(self, "performance_view"):
+            self.performance_view.refresh(
+                capture, buffer,
+                target_fps=self.config.camera.fps,
+                queue_capacity=self.config.buffer.encoder_queue_size,
+            )
         if self._system_paused:
             self.camera_var.set(self._t("mode.paused")); self.clock_var.set(time.strftime("%H:%M:%S"))
             self.status_var.set(self._t("system.paused_status"))
             self.camera_warning_var.set("")
             return
-        capture, buffer = self.capture.stats(), self.buffer.stats()
-        cache_gb = self.attempts.cache_size_bytes() / 1024 ** 3
         self.camera_var.set(capture.source_description); self.clock_var.set(time.strftime("%H:%M:%S"))
-        if self.config.capture.mode == "capture":
-            capture_text = f"CAP {capture.capture_fps:5.1f} fps  ·  CAPTURE MODE"
-        else:
-            capture_text = f"CAP {capture.capture_fps:5.1f} fps  ·  BUFFER {capture.encode_fps:5.1f} fps / {buffer.duration_seconds:4.1f} s"
+        capture_text = f"CAP {capture.capture_fps:5.1f} fps  ·  BUFFER {capture.encode_fps:5.1f} fps / {buffer.duration_seconds:4.1f} s"
         self.status_var.set(
             f"{capture_text}  ·  RAM {buffer.memory_bytes / 1024 ** 2:,.0f} MB  ·  drops {capture.queue_drops}  ·  cache {cache_gb:.2f} GB"
         )
@@ -1527,7 +1546,7 @@ class MainWindow:
         paused_or_stopping = self._system_paused or self._system_pause_transition
         self.system_pause_button.configure(
             text=self._t("button.resume_system") if self._system_paused and not self._system_pause_transition else self._t("button.pause_system"),
-            style="SystemResume.TButton" if self._system_paused and not self._system_pause_transition else "SystemPause.TButton",
+            style="Success.TButton" if self._system_paused and not self._system_pause_transition else "Warning.TButton",
         )
         self.system_pause_button.state(["disabled"] if self._system_pause_transition else ["!disabled"])
         state = ["disabled"] if paused_or_stopping or self._trial_expired else ["!disabled"]
@@ -1551,6 +1570,18 @@ class MainWindow:
         self.top_view_button.state(state)
         for button in (self.not_decided_button, self.valid_button, self.foul_button, self.review_button):
             button.state(state)
+        active_decision = AttemptDecision.NOT_DECIDED
+        if enabled and self.playback.attempt_id is not None:
+            active_attempt = self.attempts.get_attempt(self.playback.attempt_id)
+            if active_attempt is not None:
+                active_decision = active_attempt.decision
+        for button, decision in (
+            (self.not_decided_button, AttemptDecision.NOT_DECIDED),
+            (self.valid_button, AttemptDecision.VALID),
+            (self.foul_button, AttemptDecision.FOUL),
+            (self.review_button, AttemptDecision.REVIEW),
+        ):
+            button.state(["selected"] if enabled and active_decision is decision else ["!selected"])
 
         # Recordings actions follow the explicit selection in either the
         # Recordings list or the Competition Board. Export and Delete are
@@ -1568,12 +1599,12 @@ class MainWindow:
         self.open_attempt_button.state(["!disabled"] if selected_attempt else ["disabled"])
         self.export_button.state(["!disabled"] if selected_attempt and export_allowed else ["disabled"])
         self.delete_button.state(["!disabled"] if selected_attempt else ["disabled"])
-        self.open_attempt_button.configure(style="Control.TButton" if selected_attempt else "MutedAction.TButton")
-        self.export_button.configure(style="Control.TButton" if selected_attempt and export_allowed else "MutedAction.TButton")
-        self.delete_button.configure(style="Control.TButton" if selected_attempt else "MutedAction.TButton")
+        self.open_attempt_button.configure(style="Secondary.TButton" if selected_attempt else "Neutral.TButton")
+        self.export_button.configure(style="Secondary.TButton" if selected_attempt and export_allowed else "Neutral.TButton")
+        self.delete_button.configure(style="Secondary.TButton" if selected_attempt else "Neutral.TButton")
         has_temporary_recordings = any(not attempt.persistent for attempt in self.attempts.attempts())
         self.clear_button.state(["!disabled"] if has_temporary_recordings else ["disabled"])
-        clear_style = "Danger.TButton" if has_temporary_recordings else "MutedAction.TButton"
+        clear_style = "Destructive.TButton" if has_temporary_recordings else "Neutral.TButton"
         if self.clear_button.cget("style") != clear_style:
             self.clear_button.configure(style=clear_style)
 
@@ -1683,19 +1714,24 @@ class MainWindow:
         group = self.competition.current_group()
         self.group_var.set(self._group_display(group))
         self.competitor_var.set(str(self.competition.current_competitor()))
-        if c.enable_special_results and c.enabled:
-            if not self.special_result_button.winfo_manager(): self.special_result_button.pack(side="right")
-        elif self.special_result_button.winfo_manager():
-            self.special_result_button.pack_forget()
-        if c.wizard_button_visible and not self._operator_mode:
-            if not self.wizard_button.winfo_manager(): self.wizard_button.pack(anchor="w", before=self.content_pane, pady=(0, 6))
+        show_wizard = bool(c.wizard_button_visible and not self._operator_mode)
+        show_banner = bool(c.enabled and c.show_state_banner)
+        if show_wizard:
+            if not self.wizard_button.winfo_manager():
+                self.wizard_button.pack(side="left")
         elif self.wizard_button.winfo_manager():
             self.wizard_button.pack_forget()
-        if c.enabled and c.show_state_banner:
-            if not self.competition_banner.winfo_manager(): self.competition_banner.pack(fill="x", before=self.content_pane, pady=(0, 6))
+        if show_banner:
+            if not self.competition_banner.winfo_manager():
+                self.competition_banner.pack(side="left", fill="x", expand=True, padx=(8 if show_wizard else 0, 0))
             self.competition_banner.configure(bg=self.palette["surface2"], fg=self.palette["text"])
         elif self.competition_banner.winfo_manager():
             self.competition_banner.pack_forget()
+        if show_wizard or show_banner:
+            if not self.competition_strip.winfo_manager():
+                self.competition_strip.pack(fill="x", before=self.content_pane, pady=(0, 6))
+        elif self.competition_strip.winfo_manager():
+            self.competition_strip.pack_forget()
         self._refresh_current_try()
 
     def _refresh_current_try(self) -> None:
@@ -2209,6 +2245,20 @@ class MainWindow:
                 # The neutral thumbnail remains visible; the media state and
                 # the recording itself are still usable.
                 self._logger.debug("recording_thumbnail_failed attempt=%s error=%s", payload[0], payload[1])
+            elif event == "background_task":
+                snapshot = payload
+                if isinstance(snapshot, TaskSnapshot):
+                    self._update_background_task_status(snapshot)
+            elif event == "legacy_recording_migration":
+                report = payload
+                moved = len(report.migrated)
+                quarantined = len(report.quarantined)
+                if moved or quarantined:
+                    message = (
+                        f"Legacy recordings: {moved} moved to exports"
+                        + (f", {quarantined} quarantined" if quarantined else "")
+                    )
+                    self._show_message(message, 12, NoticeSeverity.WARNING if quarantined else NoticeSeverity.SUCCESS)
             elif event == "system_pause_complete":
                 self._end_busy()
                 self._system_pause_transition = False
@@ -2389,7 +2439,7 @@ class MainWindow:
 
         ttk.Button(actions, text=self._t("settings.cancel"), command=close_popup).pack(side="right")
         self._measurement_popup_save_button = ttk.Button(
-            actions, text=self._t("measurement.save_changes"), style="Accent.TButton", command=save_popup,
+            actions, text=self._t("measurement.save_changes"), style="Primary.TButton", command=save_popup,
         )
         self._measurement_popup_save_button.pack(side="right", padx=(0, 7))
         dialog.protocol("WM_DELETE_WINDOW", close_popup)
@@ -2542,7 +2592,7 @@ class MainWindow:
         ttk.Button(footer, text=self._t("attempt_editor.open_replay"), command=close_editor).pack(side="left", padx=(7, 0))
         ttk.Button(footer, text=self._t("attempts.export"), command=lambda: (close_editor(), self.export_current_attempt())).pack(side="left", padx=(7, 0))
         ttk.Button(footer, text=self._t("settings.cancel"), command=close_editor).pack(side="right")
-        ttk.Button(footer, text=self._t("measurement.save_changes"), style="Accent.TButton", command=save_editor).pack(side="right", padx=(0, 7))
+        ttk.Button(footer, text=self._t("measurement.save_changes"), style="Primary.TButton", command=save_editor).pack(side="right", padx=(0, 7))
 
         verdict_var.trace_add("write", update_measurement_state)
         update_measurement_state()
@@ -2559,69 +2609,6 @@ class MainWindow:
         if announce:
             self._show_message("The evaluation is locked. Activate a paid licence to continue.", 8)
         return False
-
-    def _recording_assignment(self) -> RosterAssignment | None:
-        assignment = self.competition.assignment_for_current(self.attempts.attempts())
-        if self.config.competition.enabled and assignment is None and self._maybe_start_final_round():
-            assignment = self.competition.assignment_for_current(self.attempts.attempts())
-        return assignment
-
-    def toggle_recording(self) -> None:
-        if not self._trial_action_allowed("freeze") or self._system_paused:
-            return
-        self._cancel_scheduled_review()
-        if self.attempts.is_recording:
-            assignment = self._recording_assignment()
-            attempt_id = self.attempts.stop_recording(
-                competitor_group=assignment.group if assignment else "",
-                competitor_number=assignment.competitor_number if assignment else 0,
-                competitor_attempt_number=assignment.attempt_number if assignment else 0,
-                competition_phase=assignment.phase if assignment else "qualification",
-            )
-            self._cancel_recording_auto_stop()
-            self.recording_var.set("")
-            if attempt_id is None:
-                self._show_message("No encoded frames were available for this capture.", 5)
-                return
-            self._selected_action_attempt_id = attempt_id
-            self.playback.select_attempt(attempt_id, at_freeze=False)
-            attempt = self.attempts.get_attempt(attempt_id)
-            if attempt is not None:
-                try:
-                    self._ensure_adjudication_record(attempt)
-                    self._durability_blocked_attempt_id = None
-                except DurabilityError as exc:
-                    self._durability_blocked_attempt_id = attempt_id
-                    self._show_message(f"Capture saved, but result storage is unavailable: {exc}", 10)
-            self.competition_board.clear_focus()
-            self.athlete_timer.stop(); self._update_athlete_timer_display()
-            self._last_replay_key = None; self._last_board_signature = None
-            self._refresh_attempts(); self._refresh_current_try()
-            return
-        assignment = self._recording_assignment()
-        if self.config.competition.enabled and assignment is None:
-            self._show_message("The selected athlete has completed all configured attempts. Select another athlete or configure the final round.", 7)
-            return
-        if not self.attempts.start_recording():
-            return
-        self.recording_var.set("● RECORDING")
-        self._recording_auto_stop_job = self.root.after(
-            max(1000, int(self.config.capture.max_duration_seconds * 1000)),
-            self._auto_stop_recording,
-        )
-        self._show_message("Capture recording started.", 3)
-
-    def _auto_stop_recording(self) -> None:
-        self._recording_auto_stop_job = None
-        if self.attempts.is_recording:
-            self._show_message("Maximum capture duration reached; recording stopped.", 6)
-            self.toggle_recording()
-
-    def _cancel_recording_auto_stop(self) -> None:
-        if self._recording_auto_stop_job:
-            try: self.root.after_cancel(self._recording_auto_stop_job)
-            except tk.TclError: pass
-            self._recording_auto_stop_job = None
 
     def select_latest_capture(self) -> None:
         attempts = self.attempts.attempts()
@@ -2650,9 +2637,6 @@ class MainWindow:
         self._hold_playback_job = self.root.after(33, self._hold_playback_tick)
 
     def toggle_freeze(self) -> None:
-        if self.config.capture.mode == "capture":
-            self.toggle_recording()
-            return
         if not self._trial_action_allowed("freeze"):
             return
         self._cancel_scheduled_review()
@@ -3214,7 +3198,7 @@ class MainWindow:
                 show_themed_info(dialog, "Select finalists", f"Select no more than {self.config.competition.finalists_count} athletes."); return
             self.competition.set_finalists(group, selected); dialog.destroy()
         ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right")
-        ttk.Button(footer, text="Use selected athletes", style="Accent.TButton", command=apply_selection).pack(side="right", padx=(0, 7))
+        ttk.Button(footer, text="Use selected athletes", style="Primary.TButton", command=apply_selection).pack(side="right", padx=(0, 7))
         self.root.wait_window(dialog)
 
     def _show_next_athlete_overlay(self, assignment: RosterAssignment) -> None:
@@ -3374,7 +3358,7 @@ class MainWindow:
         ttk.Label(body, text=details, style="Muted.TLabel", justify="left").pack(anchor="w", pady=(7, 16))
         buttons = ttk.Frame(body, style="App.TFrame")
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Clear everything" if self.config.general.language != "cs" else "Vymazat vše", style="Danger.TButton", command=lambda: result.set("all")).pack(fill="x", pady=3)
+        ttk.Button(buttons, text="Clear everything" if self.config.general.language != "cs" else "Vymazat vše", style="Destructive.TButton", command=lambda: result.set("all")).pack(fill="x", pady=3)
         ttk.Button(buttons, text="Clear live buffer only" if self.config.general.language != "cs" else "Vymazat jen živý buffer", command=lambda: result.set("live")).pack(fill="x", pady=3)
         ttk.Button(buttons, text="Clear unresolved recordings" if self.config.general.language != "cs" else "Vymazat nerozhodnuté záznamy", command=lambda: result.set("unresolved")).pack(fill="x", pady=3)
         ttk.Button(buttons, text=self._t("settings.cancel"), command=lambda: result.set("cancel")).pack(fill="x", pady=(10, 0))
@@ -3735,6 +3719,8 @@ class MainWindow:
         self.timeline.apply_palette(self.palette)
         if hasattr(self, "competition_board"):
             self.competition_board.apply_palette(self.palette)
+        if hasattr(self, "performance_view"):
+            self.performance_view.apply_palette(self.palette)
         self._style_all_menus()
         self._refresh_attempts(); self._update_video_labels()
         self._update_athlete_timer_display()
@@ -3749,36 +3735,6 @@ class MainWindow:
             self.show_onboarding,
             self.check_for_updates,
         )
-
-    def _prompt_recording_mode(self) -> None:
-        if self._closing or self.config.general.recording_mode_prompted:
-            return
-        if self._board_calibration_wizard is not None:
-            self.root.after(500, self._prompt_recording_mode)
-            return
-        dialog = tk.Toplevel(self.root)
-        configure_popup(dialog, self.root)
-        dialog.title("Choose recording mode")
-        dialog.geometry("560x330")
-        dialog.resizable(False, False)
-        dialog.transient(self.root)
-        body = ttk.Frame(dialog, style="App.TFrame", padding=24)
-        body.pack(fill="both", expand=True)
-        ttk.Label(body, text="Choose how LongJumpReplay records", style="SettingsHeroTitle.TLabel").pack(anchor="w")
-        ttk.Label(body, text="This choice controls whether the live rolling buffer is used. You can change it later in Settings; a restart is required.", style="SettingsHeroDesc.TLabel", wraplength=500, justify="left").pack(anchor="w", pady=(6, 16))
-        mode = tk.StringVar(dialog, value=self.config.capture.mode)
-        ttk.Radiobutton(body, text="Buffer mode — keep the current rolling replay and Freeze workflow", variable=mode, value="buffer").pack(anchor="w", pady=5)
-        ttk.Radiobutton(body, text="Capture mode — no rolling buffer; use Record and Stop", variable=mode, value="capture").pack(anchor="w", pady=5)
-        actions = ttk.Frame(body, style="App.TFrame")
-        actions.pack(fill="x", pady=(20, 0))
-        def finish() -> None:
-            self.config.capture.mode = mode.get()
-            self.config.general.recording_mode_prompted = True
-            save_config(self._config_for_persistence(self.config), self.config_path)
-            dialog.destroy()
-            self._show_message("Recording mode saved. Restart LongJumpReplay to apply it.", 8)
-        ttk.Button(actions, text="Save choice", style="Accent.TButton", command=finish).pack(side="right")
-        dialog.protocol("WM_DELETE_WINDOW", finish)
 
     def restart_now(self, startup_camera_index: int | None = None) -> None:
         """Launch the same command line again, then use the normal bounded shutdown."""
@@ -3842,7 +3798,7 @@ class MainWindow:
             else: index["value"] += 1; render()
         ttk.Button(buttons, text="Skip" if lang == "en" else "Přeskočit", command=skip).pack(side="left")
         back = ttk.Button(buttons, text="Back" if lang == "en" else "Zpět", command=previous); back.pack(side="right", padx=(8, 0))
-        next_button = ttk.Button(buttons, style="Accent.TButton", command=next_step); next_button.pack(side="right")
+        next_button = ttk.Button(buttons, style="Primary.TButton", command=next_step); next_button.pack(side="right")
         win.protocol("WM_DELETE_WINDOW", finish); render()
 
     def _refresh_ui_language(self) -> None:
@@ -3851,6 +3807,8 @@ class MainWindow:
         if hasattr(self, "timeline"):
             self.timeline.set_language(self.config.general.language)
             self.timeline_hint_label.configure(text="")
+        if hasattr(self, "performance_view"):
+            self.performance_view.set_language(self.config.general.language)
         if hasattr(self, "replay_canvas"):
             for canvas in self._all_video_canvases():
                 canvas.set_language(self.config.general.language)
@@ -3873,7 +3831,6 @@ class MainWindow:
         self.frame_group_label.configure(text=self._t("controls.frame_review"))
         self.decision_group_label.configure(text=self._t("controls.judging"))
         self.wizard_button.configure(text=self._t("button.wizard"))
-        self.special_result_button.configure(text=self._t("button.more"))
         self.board_target_title_label.configure(text=self._t("board.next_target"))
         self.board_keyboard_hint.configure(text=self._t("board.keyboard_hint"))
         for key, label in (("recording", self._t("table.recording")), ("group", self._t("table.group")), ("athlete", "#"), ("try", self._t("table.attempt")), ("result", self._t("table.result")), ("distance", self._t("table.distance")), ("wind", self._t("table.wind")), ("time", self._t("table.time")), ("duration", self._t("table.duration")), ("media", self._t("table.media")), ("keep", self._t("table.keep"))):
@@ -3902,6 +3859,7 @@ class MainWindow:
         try:
             self.side_notebook.tab(self.recordings_tab, text=self._t("captures.title").title())
             self.side_notebook.tab(self.board_tab, text=self._t("board.title").title())
+            self.side_notebook.tab(self.performance_tab, text=self._t("performance.title").title())
         except tk.TclError:
             pass
         # Recreate popup menus only on an actual language/settings change, not
@@ -3913,6 +3871,28 @@ class MainWindow:
         self.help_menu_button.configure(menu=self.help_menu)
         self._refresh_competitor_selector()
         self._refresh_attempts()
+
+    def _schedule_legacy_recording_migration(self) -> None:
+        recordings = self.data_paths.recordings
+        candidates = list(recordings.glob("recording_*.mp4")) + list(recordings.glob("recording_*.avi"))
+        incomplete = recordings / ".incomplete"
+        if incomplete.exists():
+            candidates.extend(incomplete.glob("recording_*.mp4"))
+            candidates.extend(incomplete.glob("recording_*.avi"))
+        if not candidates:
+            return
+
+        def migrate(context) -> None:
+            report = migrate_legacy_recordings(recordings, self.data_paths.exports, context)
+            self.event_queue.put(("legacy_recording_migration", report))
+
+        self.background_tasks.submit(
+            "migration",
+            "Migrating legacy Capture Mode recordings",
+            migrate,
+            priority=10,
+            destination=self.data_paths.exports / "legacy-recordings",
+        )
 
     def apply_settings(self, new_config: AppConfig) -> None:
         preserved_timeline_height: int | None = None
@@ -3931,15 +3911,10 @@ class MainWindow:
             new_config.competition.auto_save_evidence = False
             new_config.display.show_decision_controls = False
         camera_changed = new_config.camera != self.config.camera or new_config.buffer != self.config.buffer
-        requested_capture_mode = new_config.capture.mode
-        capture_mode_changed = requested_capture_mode != self.config.capture.mode
         language_changed = new_config.general.language != self.config.general.language
         timer_duration_changed = new_config.athlete_timer.duration_seconds != self.config.athlete_timer.duration_seconds
         if self._persistent_camera_source_type is not None and new_config.camera.source_type != self.config.camera.source_type:
             self._persistent_camera_source_type = new_config.camera.source_type
-        if capture_mode_changed:
-            new_config = deepcopy(new_config)
-            new_config.capture.mode = self.config.capture.mode
         self.config = new_config
         if preserved_timeline_height is not None:
             self.config.display.timeline_height = preserved_timeline_height
@@ -3979,12 +3954,7 @@ class MainWindow:
         self.shuttle = ShuttleHIDPoller(new_config.shuttle, self.action_queue)
         self.shuttle.start()
         persisted_config = self._config_for_persistence(new_config)
-        if capture_mode_changed:
-            persisted_config.capture.mode = requested_capture_mode
-            persisted_config.general.recording_mode_prompted = True
         save_config(persisted_config, self.config_path)
-        if capture_mode_changed:
-            self._show_message("Recording mode changed in Settings. Restart LongJumpReplay to apply it.", 8)
         if camera_changed:
             language_is_en = new_config.general.language != "cs"
             restart = ask_themed_yes_no(
@@ -4406,8 +4376,67 @@ class MainWindow:
             f"Shuttle status: {self.shuttle.status}\n{shuttle}\n\nLast camera error: {c.last_error or 'None'}",
         )
 
-    def _show_message(self, text: str, seconds: float = 5.0) -> None:
-        self.message_var.set(text); self._message_until = time.perf_counter() + max(0, seconds)
+    def _update_background_task_status(self, snapshot: TaskSnapshot) -> None:
+        active = [item for item in self.background_tasks.snapshots() if item.state in {TaskState.QUEUED, TaskState.RUNNING}]
+        failed = [item for item in self.background_tasks.snapshots() if item.state is TaskState.FAILED]
+        if active:
+            self.task_status_var.set(f"… {len(active)} task" + ("s" if len(active) != 1 else ""))
+            self.task_status_button.grid()
+        elif failed:
+            self.task_status_var.set(f"⚠ {len(failed)} failed")
+            self.task_status_button.grid()
+        else:
+            self.task_status_button.grid_remove()
+        if hasattr(self, "_task_tree") and self._task_tree.winfo_exists():
+            self._refresh_task_drawer()
+
+    def _show_task_drawer(self) -> None:
+        existing = getattr(self, "_task_drawer", None)
+        if existing is not None and existing.winfo_exists():
+            existing.lift(); existing.focus_force(); return
+        window = tk.Toplevel(self.root)
+        window.title("Background tasks" if self.config.general.language != "cs" else "Úlohy na pozadí")
+        window.geometry("720x360")
+        window.minsize(580, 280)
+        configure_popup(window, self.root)
+        self._task_drawer = window
+        body = ttk.Frame(window, style="App.TFrame", padding=14)
+        body.pack(fill="both", expand=True)
+        columns = ("state", "task", "progress", "destination")
+        tree = ttk.Treeview(body, columns=columns, show="headings", selectmode="browse")
+        labels = ("State", "Task", "Progress", "Destination") if self.config.general.language != "cs" else ("Stav", "Úloha", "Průběh", "Cíl")
+        for key, label in zip(columns, labels): tree.heading(key, text=label)
+        tree.column("state", width=95, stretch=False); tree.column("task", width=220)
+        tree.column("progress", width=100, stretch=False); tree.column("destination", width=240)
+        tree.pack(fill="both", expand=True)
+        self._task_tree = tree
+        actions = ttk.Frame(body, style="App.TFrame"); actions.pack(fill="x", pady=(10, 0))
+        ttk.Button(actions, text="Close" if self.config.general.language != "cs" else "Zavřít", command=window.destroy).pack(side="right")
+        ttk.Button(actions, text="Retry" if self.config.general.language != "cs" else "Zkusit znovu", command=self._retry_selected_task).pack(side="right", padx=(0, 7))
+        ttk.Button(actions, text="Cancel" if self.config.general.language != "cs" else "Zrušit", command=self._cancel_selected_task).pack(side="right", padx=(0, 7))
+        self._refresh_task_drawer()
+
+    def _refresh_task_drawer(self) -> None:
+        tree = self._task_tree
+        selected = tree.selection()
+        for item in tree.get_children(): tree.delete(item)
+        symbols = {TaskState.QUEUED: "…", TaskState.RUNNING: "…", TaskState.COMPLETED: "✓", TaskState.FAILED: "⚠", TaskState.CANCELLED: "✕"}
+        for task in self.background_tasks.snapshots():
+            progress = "—" if task.total is None else f"{min(task.completed, task.total)}/{task.total}"
+            tree.insert("", "end", iid=task.task_id, values=(f"{symbols[task.state]} {task.state.value.title()}", task.label, progress, task.destination))
+        if selected and tree.exists(selected[0]): tree.selection_set(selected[0])
+
+    def _cancel_selected_task(self) -> None:
+        selected = self._task_tree.selection()
+        if selected: self.background_tasks.cancel(selected[0])
+
+    def _retry_selected_task(self) -> None:
+        selected = self._task_tree.selection()
+        if selected: self.background_tasks.retry(selected[0])
+
+    def _show_message(self, text: str, seconds: float = 5.0, severity: NoticeSeverity = NoticeSeverity.INFO) -> None:
+        self.message_var.set(Notice(str(text), severity).display_text)
+        self._message_until = time.perf_counter() + max(0, seconds)
     def _save_config_safely(self) -> None:
         try:
             save_config(self._config_for_persistence(self.config), self.config_path)
@@ -4435,9 +4464,6 @@ class MainWindow:
         if self._board_calibration_wizard is not None:
             self._board_calibration_wizard.close()
             self._board_calibration_wizard = None
-        self._cancel_recording_auto_stop()
-        if self.attempts.is_recording:
-            self.attempts.stop_recording()
         self._camera_probe_generation += 1
         self._camera_probe_stop.set()
         log_event(self._logger, "shutdown_requested", playback_mode=self.playback.mode.value)
@@ -4482,9 +4508,8 @@ class MainWindow:
             except Exception: pass
             try: alive.extend(self.capture.stop(timeout=2.0))
             except Exception: pass
-            # Persistent Capture Mode media must finish its staged encode
-            # before the process exits; temporary attempts can still be
-            # cancelled inside the same manager.
+            try: alive.extend(self.background_tasks.stop(timeout=2.0))
+            except Exception: pass
             try: alive.extend(self.attempts.stop(timeout=8.0))
             except Exception: pass
             self.event_queue.put(("shutdown_done", alive))

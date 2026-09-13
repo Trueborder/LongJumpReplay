@@ -61,99 +61,9 @@ class AttemptManager:
         self._cancelled_attempt_ids: set[int] = set()
         self._cache_size_value: int | None = None
         self._cache_size_checked_at = 0.0
-        self._recording_packets: list[FramePacket] | None = None
-        self._recording_started_wall_time = 0.0
-
-    @property
-    def is_recording(self) -> bool:
-        with self._lock:
-            return self._recording_packets is not None
-
-    def start_recording(self) -> bool:
-        with self._lock:
-            if self._recording_packets is not None:
-                return False
-            self._recording_packets = []
-            self._recording_started_wall_time = time.time()
-            return True
-
-    def append_recording_packet(self, packet: FramePacket) -> None:
-        with self._lock:
-            if self._recording_packets is not None:
-                self._recording_packets.append(packet)
-
-    def recording_elapsed_seconds(self) -> float:
-        with self._lock:
-            if self._recording_packets and len(self._recording_packets) > 1:
-                return max(0.0, (self._recording_packets[-1].timestamp_ns - self._recording_packets[0].timestamp_ns) / 1e9)
-            if self._recording_packets:
-                return max(0.0, time.time() - self._recording_started_wall_time)
-            return 0.0
-
-    def stop_recording(
-        self,
-        competitor_group: str = "",
-        competitor_number: int = 0,
-        competitor_attempt_number: int = 0,
-        competition_phase: str = "qualification",
-    ) -> int | None:
-        with self._lock:
-            packets = self._recording_packets
-            self._recording_packets = None
-            self._recording_started_wall_time = 0.0
-            if not packets:
-                return None
-            for existing in self._attempts:
-                existing.selected = False
-            first, last = packets[0], packets[-1]
-            now = first.wall_time_ns / 1e9 if first.wall_time_ns else time.time()
-            attempt = AttemptSession(
-                attempt_id=self._next_id,
-                created_monotonic_ns=time.monotonic_ns(),
-                created_wall_time=now,
-                freeze_timestamp_ns=last.timestamp_ns,
-                pre_seconds=0.0,
-                post_seconds=0.0,
-                expires_at_wall_time=float("inf"),
-                state=AttemptState.ENCODING,
-                packets=list(packets),
-                frame_count=len(packets),
-                freeze_frame_index=len(packets) - 1,
-                fps=estimate_fps(packets, fallback=30.0),
-                width=first.width,
-                height=first.height,
-                media_start_timestamp_ns=first.timestamp_ns,
-                media_end_timestamp_ns=last.timestamp_ns,
-                media_start_wall_time_ns=first.wall_time_ns,
-                markers=[
-                    AttemptMarker(first.timestamp_ns, "Record"),
-                    AttemptMarker(last.timestamp_ns, "Stop"),
-                ],
-                selected=self.config.auto_select_new,
-                competitor_group=competitor_group,
-                competitor_number=competitor_number,
-                competitor_attempt_number=competitor_attempt_number,
-                competition_phase=competition_phase,
-                persistent=True,
-            )
-            self._next_id += 1
-            self._attempts.append(attempt)
-            self._write_metadata_locked(attempt)
-        self.event_queue.put(("attempt_updated", attempt.attempt_id))
-        self._submit_encode(attempt.attempt_id)
-        return attempt.attempt_id
-
     def start(self) -> None:
         self.cache_directory.mkdir(parents=True, exist_ok=True)
         self.persistent_directory.mkdir(parents=True, exist_ok=True)
-        incomplete = self.persistent_directory / ".incomplete"
-        if incomplete.exists():
-            for path in incomplete.glob("recording_*.*"):
-                if path.is_file():
-                    try:
-                        path.unlink(missing_ok=True)
-                    except OSError:
-                        pass
         self._recover_cache_index()
         self._stop.clear()
         self._thread = Thread(target=self._loop, name="attempt-manager", daemon=True)
@@ -868,9 +778,10 @@ class AttemptManager:
     def _recover_cache_index(self) -> None:
         # Sessions from a previous crash remain useful until their recorded expiry.
         now = time.time()
+        # The recordings directory belonged to the removed explicit Capture
+        # Mode. Its files are migrated to exports by MainWindow and must not be
+        # mixed back into the rolling-buffer attempt list.
         sources = [(self.cache_directory, False)]
-        if self.persistent_directory.resolve() != self.cache_directory.resolve():
-            sources.append((self.persistent_directory, True))
         for directory, persistent in sources:
             directory.mkdir(parents=True, exist_ok=True)
             for path in sorted(directory.glob("*.session.json")):

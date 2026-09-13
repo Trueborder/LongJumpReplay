@@ -75,7 +75,6 @@ def test_top_down_projection_uses_current_frame_without_chooser(tmp_path):
     config.attempts.pre_seconds, config.attempts.post_seconds = .2, .1
     config.display.window_geometry = "1000x650"
     config.general.onboarding_completed = True
-    config.general.recording_mode_prompted = True
     config.shuttle.enabled = False
     path = tmp_path / "config.json"
     save_config(config, path)

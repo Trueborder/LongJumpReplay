@@ -51,11 +51,12 @@ MAX_TIMELINE_HEIGHT = 500
 @dataclass(slots=True)
 class GeneralConfig:
     language: str = "en"
+    settings_view: str = "simple"  # simple | advanced
+    language_migration_pending: bool = False
     confirm_destructive_actions: bool = True
     show_tooltips: bool = True
     onboarding_completed: bool = False
     progress_details_expanded: bool = False
-    recording_mode_prompted: bool = False
 
 
 @dataclass(slots=True)
@@ -67,7 +68,7 @@ class CameraConfig:
     height: int = 720
     fps: float = 120.0
     fourcc: str = "MJPG"
-    backend: str = "DSHOW"  # DSHOW | MSMF | ANY
+    backend: str = "DSHOW"  # MF_NATIVE | DSHOW | MSMF | ANY
     buffer_size: int = 1
     loop_file: bool = True
     reconnect_seconds: float = 2.0
@@ -80,12 +81,6 @@ class BufferConfig:
     encoder_queue_size: int = 128
     max_memory_mb: int = 4096
     store_every_nth_frame: int = 1
-
-
-@dataclass(slots=True)
-class CaptureConfig:
-    mode: str = "buffer"  # buffer | capture
-    max_duration_seconds: float = 600.0
 
 
 @dataclass(slots=True)
@@ -345,7 +340,6 @@ class AppConfig:
     general: GeneralConfig = field(default_factory=GeneralConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     buffer: BufferConfig = field(default_factory=BufferConfig)
-    capture: CaptureConfig = field(default_factory=CaptureConfig)
     attempts: AttemptsConfig = field(default_factory=AttemptsConfig)
     athlete_timer: AthleteTimerConfig = field(default_factory=AthleteTimerConfig)
     competition: CompetitionConfig = field(default_factory=CompetitionConfig)
@@ -361,8 +355,12 @@ class AppConfig:
     def validate(self) -> None:
         if self.general.language not in SUPPORTED_LANGUAGES:
             raise ValueError(f"general.language must be one of: {', '.join(SUPPORTED_LANGUAGES)}")
+        if self.general.settings_view not in {"simple", "advanced"}:
+            raise ValueError("general.settings_view must be simple or advanced")
         if self.camera.source_type not in {"camera", "synthetic", "file"}:
             raise ValueError("camera.source_type must be camera, synthetic, or file")
+        if self.camera.backend.upper() not in {"MF_NATIVE", "DSHOW", "MSMF", "ANY"}:
+            raise ValueError("camera.backend must be MF_NATIVE, DSHOW, MSMF, or ANY")
         if self.camera.source_type == "file" and not self.camera.file_path.strip():
             raise ValueError("camera.file_path is required for a file source")
         if self.camera.width <= 0 or self.camera.height <= 0:
@@ -383,10 +381,6 @@ class AppConfig:
             raise ValueError("buffer.max_memory_mb must be at least 128")
         if isinstance(self.buffer.store_every_nth_frame, bool) or not isinstance(self.buffer.store_every_nth_frame, int) or not 1 <= self.buffer.store_every_nth_frame <= 100:
             raise ValueError("buffer.store_every_nth_frame must be an integer between 1 and 100")
-        if self.capture.mode not in {"buffer", "capture"}:
-            raise ValueError("capture.mode must be buffer or capture")
-        if not 1 <= self.capture.max_duration_seconds <= 3600:
-            raise ValueError("capture.max_duration_seconds must be between 1 and 3600")
         if self.attempts.pre_seconds < 0 or self.attempts.post_seconds < 0:
             raise ValueError("Attempt pre/post roll cannot be negative")
         if self.attempts.retention_minutes < 0.5:
@@ -566,6 +560,20 @@ def _deep_update(base: dict[str, Any], override: dict[str, Any]) -> dict[str, An
 def config_from_dict(data: dict[str, Any]) -> AppConfig:
     if not isinstance(data, dict):
         raise ValueError("The root of config.json must be a JSON object")
+    # Capture Mode was removed after 6.2.7.  Its old object is deliberately
+    # ignored so an existing config upgrades to the buffer workflow without
+    # being quarantined as malformed.
+    data = dict(data)
+    had_settings_view = isinstance(data.get("general"), dict) and "settings_view" in data["general"]
+    data.pop("capture", None)
+    if isinstance(data.get("general"), dict):
+        general = dict(data["general"])
+        general.pop("recording_mode_prompted", None)
+        data["general"] = general
+    if isinstance(data.get("camera"), dict) and isinstance(data["camera"].get("backend"), str):
+        camera = dict(data["camera"])
+        camera["backend"] = camera["backend"].upper()
+        data["camera"] = camera
     merged = _deep_update(asdict(AppConfig()), data)
     try:
         config = AppConfig(
@@ -586,6 +594,10 @@ def config_from_dict(data: dict[str, Any]) -> AppConfig:
         )
     except (KeyError, TypeError) as exc:
         raise ValueError(f"Invalid configuration structure: {exc}") from exc
+    if not had_settings_view:
+        # Existing installations retain the complete Settings surface.  New
+        # configurations are created directly from AppConfig and use Simple.
+        config.general.settings_view = "advanced"
     # Migrate pre-2.3 configs which only had display.refresh_hz.
     if "performance" not in data:
         config.performance.preview_refresh_hz = config.display.refresh_hz

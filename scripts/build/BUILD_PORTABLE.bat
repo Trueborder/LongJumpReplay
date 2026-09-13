@@ -42,6 +42,10 @@ call "%REPO_ROOT%\scripts\run\RUN_TESTS.bat" || goto :fail
 python app.py --self-test --self-test-report SELF_TEST_SOURCE.txt || goto :fail
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\scripts\build\Write-VersionInfo.ps1" || goto :fail
 python "%REPO_ROOT%\scripts\build\write_default_config.py" || goto :fail
+where dotnet >nul 2>nul || goto :missing_dotnet
+if not exist packaging\generated\native mkdir packaging\generated\native
+dotnet publish native\LongJumpReplay.CaptureHost\LongJumpReplay.CaptureHost.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o packaging\generated\native || goto :fail
+if not exist packaging\generated\native\LongJumpReplay.CaptureHost.exe goto :fail
 
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
@@ -80,3 +84,7 @@ echo.
 echo BUILD FAILED. Read the error above.
 if not defined LJR_NO_PAUSE pause
 exit /b 1
+
+:missing_dotnet
+echo .NET SDK was not found. It is required to build the native Media Foundation capture helper.
+goto :fail

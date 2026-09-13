@@ -4,6 +4,46 @@
         Title="Long Jump Replay · Native migration preview" WindowState="Maximized"
         MinWidth="1000" MinHeight="650" Background="#10151D" Foreground="#F4F7FB"
         KeyDown="Window_KeyDown" Closing="Window_Closing">
+  <Window.Resources>
+    <!-- Keep the preview aligned with the production Tk button language. -->
+    <Style TargetType="{x:Type Button}">
+      <Setter Property="Background" Value="#182131" />
+      <Setter Property="Foreground" Value="#F4F7FB" />
+      <Setter Property="BorderBrush" Value="#344761" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="12,4" />
+      <Setter Property="Margin" Value="4" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="{x:Type Button}">
+            <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="5" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#203149" />
+                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#5C7FA8" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#142033" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#78A8FF" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#111722" />
+                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#263143" />
+                <Setter Property="Foreground" Value="#66758A" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
   <Grid Margin="18">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
