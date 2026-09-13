@@ -26,6 +26,7 @@
           route: '/products/long-jump-replay/',
           links: [
             { en: 'Overview', cs: 'Přehled', href: '/products/long-jump-replay/' },
+            { en: 'Downloads', cs: 'Stažení', href: '/products/long-jump-replay/download/' },
             { en: 'Licensing', cs: 'Licence', href: '/products/long-jump-replay/licensing/' },
             { en: 'Privacy', cs: 'Soukromí', href: '/products/long-jump-replay/privacy/' }
           ]
@@ -58,13 +59,6 @@
      });
      nav.append(links);
 
-     const download = document.createElement('a');
-     download.className = 'button button-primary product-context-action';
-     download.href = '/products/long-jump-replay/download/';
-     download.dataset.en = 'Download';
-     download.dataset.cs = 'Stáhnout';
-     download.textContent = 'Download';
-     nav.append(download);
      header.insertAdjacentElement('afterend', nav);
    };
   renderProductContext();
