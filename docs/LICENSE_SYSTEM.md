@@ -81,7 +81,7 @@ Set with `wrangler secret put <NAME>` from `licensing-api/`. Never in
 | `VERIFICATION_PEPPER` | HMAC key for verification codes. Any 32 random bytes. |
 | `ACTIVATION_KEY_ENCRYPTION_KEY` | Encrypts reusable portal activation keys with AES-GCM. Use a separate high-entropy secret. |
 | `AUTHORIZATION_PRIVATE_KEY` | PKCS#8 RSA private key signing authorizations. |
-| `MAIL_API_KEY` | Transactional email provider key. |
+| `MAIL_API_KEY` | Transactional email provider key. Production must use a Resend key with a verified sending domain; Resend test keys only deliver to the provider's configured test address. |
 | `CONTACT_TURNSTILE_SECRET` | Server-side verification secret for the public contact form. |
 
 ## Database
