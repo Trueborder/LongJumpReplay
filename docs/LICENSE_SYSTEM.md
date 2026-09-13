@@ -191,10 +191,14 @@ codes are stored separately from activation codes and cannot activate the
 desktop application.
 
 An additive portal pairing path is now available alongside email OTP and the
-reusable key: the desktop shows a short-lived six-digit code and a portal link,
-the signed-in owner approves that exact computer and licence, and the code is
-consumed when the desktop receives its existing signed authorization. The
-portal still uses email OTP; pairing is not a replacement authentication flow.
+reusable key: the desktop shows a locally generated QR, a short-lived
+six-digit code, and a portal link. The signed-in owner approves that exact
+computer and licence, and the token is consumed when the desktop receives its
+existing signed authorization. New QR links carry only the opaque token in a
+URL fragment; the portal removes it from the visible URL and preserves it
+through the existing email OTP login. Legacy query links remain supported.
+The portal still uses email OTP; pairing is not a replacement authentication
+flow.
 Passkeys are a useful future portal-login upgrade. Floating network licences,
 shared permanent club passwords and hardware dongles are intentionally not
 planned because they add support burden or weaken ownership controls.

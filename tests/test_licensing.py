@@ -18,6 +18,16 @@ def test_portal_activation_key_input_is_grouped_live() -> None:
     assert format_activation_key_input("1234abcd") == "1234-ABCD-"
     assert format_activation_key_input("1234 abcd-2efg trailing") == "1234-ABCD-2EFG"
     assert format_activation_key_input("12x34-abio-01efg") == "1234-ABEF-G"
+
+
+def test_pairing_qr_is_generated_in_memory() -> None:
+    image = licensing.create_pairing_qr("https://account.example.com/dashboard/activation#pair=test-token")
+    if licensing.qrcode is None:
+        pytest.skip("optional QR dependency is not installed")
+    assert image is not None
+    assert image.mode == "RGB"
+    assert image.width == image.height
+    assert image.width > 100
 from tools.license_admin import create_license
 
 

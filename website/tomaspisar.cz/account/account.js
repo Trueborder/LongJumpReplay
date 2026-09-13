@@ -7,6 +7,40 @@
   const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null,
     keyVisible: false, keyValue: '', keyLicenceId: '', ensuredKeys: new Set(), pairing: null };
   const $ = (selector) => document.querySelector(selector);
+  const PENDING_PAIRING_KEY = 'ljr_pending_pairing_v1';
+  const pairingTokenFromLocation = () => {
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('pair');
+    const query = new URLSearchParams(window.location.search).get('pair');
+    const token = String(fragment || query || '').trim();
+    return /^[A-Za-z0-9_-]{20,256}$/.test(token) ? token : '';
+  };
+  const readPendingPairing = () => {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(PENDING_PAIRING_KEY) || 'null');
+      if (!stored?.token || Date.now() - Number(stored.savedAt || 0) > 15 * 60 * 1000) {
+        sessionStorage.removeItem(PENDING_PAIRING_KEY);
+        return '';
+      }
+      return String(stored.token);
+    } catch { return ''; }
+  };
+  const storePendingPairing = (token) => {
+    try { sessionStorage.setItem(PENDING_PAIRING_KEY, JSON.stringify({ token, savedAt: Date.now() })); } catch { /* best effort */ }
+  };
+  const clearPendingPairing = () => {
+    try { sessionStorage.removeItem(PENDING_PAIRING_KEY); } catch { /* best effort */ }
+  };
+  const stripPairingFromLocation = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('pair');
+    url.hash = '';
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+  };
+  const capturePairingFromLocation = () => {
+    const token = pairingTokenFromLocation();
+    if (token) { storePendingPairing(token); stripPairingFromLocation(); }
+    return token || readPendingPairing();
+  };
   const copy = {
     en: {
       expiredCode: 'This code has expired. Request a new one.', verified: 'Verified. Opening your account…',
@@ -167,7 +201,11 @@
       try {
         await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) });
         setStatus(t('verified'), '#login-status');
-        window.setTimeout(() => window.location.replace('/dashboard/overview'), 180);
+        const pendingPairing = readPendingPairing();
+        const destination = pendingPairing
+          ? `/dashboard/activation#pair=${encodeURIComponent(pendingPairing)}`
+          : '/dashboard/overview';
+        window.setTimeout(() => window.location.replace(destination), 180);
       } catch (error) {
         const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired');
         setStatus(expired ? t('expiredCode') : error.message, '#login-status');
@@ -180,7 +218,10 @@
     $('#resend-code').addEventListener('click', resendCode);
     $('#code').addEventListener('input', () => $('#code').removeAttribute('aria-invalid'));
     form.addEventListener('submit', (event) => { event.preventDefault(); state.codeSent ? verifyCode() : requestCode(); });
-    api('/api/portal/account').then(() => window.location.replace('/dashboard/overview')).catch(() => $('#email').focus());
+    api('/api/portal/account').then(() => {
+      const pendingPairing = readPendingPairing();
+      window.location.replace(pendingPairing ? `/dashboard/activation#pair=${encodeURIComponent(pendingPairing)}` : '/dashboard/overview');
+    }).catch(() => $('#email').focus());
   };
 
   const renderLicenceCards = (licences) => {
@@ -315,6 +356,7 @@
     } catch (error) {
       state.pairing = null;
       $('#pairing-review')?.setAttribute('hidden', '');
+      if (payload.pairing_token) clearPendingPairing();
       setStatus(error.status === 410 ? t('pairingExpired') : error.message);
     } finally {
       if (find) { find.disabled = false; find.removeAttribute('aria-busy'); }
@@ -331,6 +373,7 @@
     setStatus(t('sending'));
     try {
       await api('/api/portal/pairing/confirm', { method: 'POST', body: JSON.stringify({ pairing_id: state.pairing.id, license_id: licenseId }) });
+      clearPendingPairing();
       setStatus(t('pairingApproved'));
       renderPairing({ ...state.pairing });
       await loadDashboard();
@@ -500,6 +543,7 @@
   };
 
   const initDashboard = () => {
+    const pendingPairing = capturePairingFromLocation();
     renderDashboardRoute(false);
     document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-deactivate]');
@@ -528,8 +572,7 @@
     });
     loadDashboard().then(() => {
       if (dashboardRoute === 'activation') {
-        const token = new URLSearchParams(window.location.search).get('pair');
-        if (token) inspectPairing(token);
+        if (pendingPairing) inspectPairing(pendingPairing);
       }
     });
   };

@@ -10,10 +10,18 @@ import os
 import platform
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 import uuid
 import webbrowser
+
+try:
+    import qrcode
+except ImportError:  # pragma: no cover - the packaged build includes qrcode
+    qrcode = None
+
+from PIL import ImageTk
 
 from .theme import center_popup
 
@@ -183,9 +191,25 @@ def format_activation_key_input(value: str) -> str:
     return formatted
 
 
+def create_pairing_qr(url: str):
+    """Create an in-memory QR image for a short-lived portal pairing URL."""
+    if qrcode is None:
+        return None
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=4,
+        border=3,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    return qr.make_image(fill_color="black", back_color="white").convert("RGB")
+
+
 def _activation_copy(language: str) -> dict[str, str]:
     if language == "cs":
         return {
+            "pair_code": "Párovací kód", "pair_link": "Odkaz portálu", "pair_scan": "Naskenujte QR kód pro otevření párování", "pair_expires": "Platí ještě {seconds} s.", "pair_expired": "Párování vypršelo. Zavřete toto okno a začněte znovu.", "pair_qr_unavailable": "QR kód není v tomto prostředí dostupný. Použijte odkaz nebo šestimístný kód.",
             "title": "Aktivace LongJumpReplay", "intro": "Aktivujte počítač e-mailem použitým při nákupu. Pošleme vám šestimístný ověřovací kód.",
             "email": "E-mail z nákupu", "send": "Poslat ověřovací kód", "code": "Ověřovací kód z e-mailu",
             "activate": "Aktivovat tento počítač", "code_sent": "Kód byl odeslán na {email}. Platí {minutes} minut. Zkontrolujte také spam.",
@@ -201,6 +225,7 @@ def _activation_copy(language: str) -> dict[str, str]:
             "no_active_license": "E-mail byl ověřen, ale tento účet nemá zakoupenou aktivní licenci. Licenci můžete koupit na tomaspisar.cz.",
         }
     return {
+        "pair_code": "Pairing code", "pair_link": "Portal link", "pair_scan": "Scan the QR code to open pairing", "pair_expires": "Expires in {seconds}s.", "pair_expired": "Pairing expired. Close this window and start again.", "pair_qr_unavailable": "QR rendering is unavailable in this environment. Use the link or six-digit code.",
         "title": "Activate LongJumpReplay", "intro": "Activate this computer with the email address used for your purchase. We will send a six-digit verification code.",
         "email": "Purchase email", "send": "Send verification code", "code": "Verification code from email",
         "activate": "Activate this computer", "code_sent": "Code sent to {email}. It is valid for {minutes} minutes. Check spam too.",
@@ -404,13 +429,24 @@ def ensure_license_or_trial(
         pane.pack(fill="both", expand=True)
         ttk.Label(pane, text=copy["pair_title"], style="Title.TLabel").pack(anchor="w")
         ttk.Label(pane, text=copy["pair_hint"], wraplength=520, justify="left").pack(anchor="w", pady=(6, 18))
-        ttk.Label(pane, text="Pairing code", style="Heading.TLabel").pack(anchor="w")
+        pairing_content = ttk.Frame(pane)
+        pairing_content.pack(fill="x")
+        qr_column = ttk.Frame(pairing_content)
+        qr_column.pack(side="left", padx=(0, 18))
+        pair_qr = ttk.Label(qr_column, text=copy["working"], anchor="center", width=26)
+        pair_qr.pack(pady=(0, 4))
+        ttk.Label(qr_column, text=copy["pair_scan"], wraplength=180, justify="center").pack()
+        pairing_details = ttk.Frame(pairing_content)
+        pairing_details.pack(side="left", fill="both", expand=True)
+        ttk.Label(pairing_details, text=copy["pair_code"], style="Heading.TLabel").pack(anchor="w")
         pair_code = tk.StringVar(value="Starting…")
-        ttk.Label(pane, textvariable=pair_code, font=("Consolas", 22, "bold")).pack(anchor="w", pady=(4, 10))
-        ttk.Label(pane, text="Portal link", style="Heading.TLabel").pack(anchor="w")
+        ttk.Label(pairing_details, textvariable=pair_code, font=("Consolas", 22, "bold")).pack(anchor="w", pady=(4, 10))
+        ttk.Label(pairing_details, text=copy["pair_link"], style="Heading.TLabel").pack(anchor="w")
         pair_url = tk.StringVar(value="")
-        url_entry = ttk.Entry(pane, textvariable=pair_url, width=62, state="readonly")
+        url_entry = ttk.Entry(pairing_details, textvariable=pair_url, width=48, state="readonly")
         url_entry.pack(fill="x", pady=(4, 10))
+        pair_expiry = tk.StringVar(value="")
+        ttk.Label(pairing_details, textvariable=pair_expiry).pack(anchor="w")
         pair_status = ttk.Label(pane, text=copy["working"], wraplength=520, justify="left")
         pair_status.pack(anchor="w", pady=(4, 12))
         actions = ttk.Frame(pane)
@@ -421,6 +457,19 @@ def ensure_license_or_trial(
         copy_button.pack(side="left", fill="x", expand=True, padx=6)
         ttk.Button(actions, text=copy["cancel"], command=pair_dialog.destroy).pack(side="left", fill="x", expand=True, padx=(6, 0))
         pairing_token: str | None = None
+        pair_qr_photo = None
+        pair_started_at: float | None = None
+        pair_expiry_seconds = 600
+
+        def update_expiry() -> None:
+            if pair_started_at is None:
+                return
+            remaining = max(0, int(pair_expiry_seconds - (time.monotonic() - pair_started_at)))
+            pair_expiry.set(copy["pair_expires"].format(seconds=remaining))
+            if remaining:
+                pair_dialog.after(1000, update_expiry)
+            else:
+                pair_status.configure(text=copy["pair_expired"])
 
         def copy_pair_code() -> None:
             pair_dialog.clipboard_clear()
@@ -447,15 +496,34 @@ def ensure_license_or_trial(
 
             _run_background(pair_dialog, lambda: activation_api.activate_pairing(pairing_token or ""), succeeded, failed)
 
+        def qr_ready(image: object) -> None:
+            nonlocal pair_qr_photo
+            if image is None:
+                pair_qr.configure(text=copy["pair_qr_unavailable"], image="")
+                return
+            try:
+                pair_qr_photo = ImageTk.PhotoImage(image)
+                pair_qr.configure(image=pair_qr_photo, text="")
+            except (tk.TclError, TypeError, ValueError):
+                pair_qr.configure(text=copy["pair_qr_unavailable"], image="")
+
+        def qr_failed(_error: object) -> None:
+            pair_qr.configure(text=copy["pair_qr_unavailable"], image="")
+
         def pairing_started(value: object) -> None:
-            nonlocal pairing_token
+            nonlocal pairing_token, pair_started_at, pair_expiry_seconds
             start = value
             pairing_token = start.token
+            pair_started_at = time.monotonic()
+            pair_expiry_seconds = max(1, int(start.expires_in_seconds))
             pair_code.set(start.code)
             pair_url.set(start.portal_url)
             open_button.configure(state="normal", command=lambda: webbrowser.open(start.portal_url))
             copy_button.configure(state="normal", command=copy_pair_code)
             pair_status.configure(text=copy["pair_waiting"])
+            update_expiry()
+            _run_background(pair_dialog, lambda: create_pairing_qr(start.portal_url), qr_ready, qr_failed)
+            center_popup(pair_dialog, dialog)
             pair_dialog.after(600, poll)
 
         def pairing_failed(error: object) -> None:

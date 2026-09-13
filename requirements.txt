@@ -1,5 +1,6 @@
 opencv-python>=4.10,<5
 numpy>=2.0,<3
 Pillow>=10,<13
+qrcode>=8,<9
 hidapi>=0.14,<0.15
 openpyxl>=3.1,<4

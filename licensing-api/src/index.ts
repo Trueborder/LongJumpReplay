@@ -875,6 +875,12 @@ async function activateWithKey(request: Request, env: Env): Promise<Response> {
     authorization: authorization.token, expires_at: authorization.expiresAt });
 }
 
+export function buildPairingPortalUrl(portalOrigin: string, token: string): string {
+  const portalUrl = new URL("/dashboard/activation", portalOrigin);
+  portalUrl.hash = new URLSearchParams({ pair: token }).toString();
+  return portalUrl.toString();
+}
+
 async function startDevicePairing(request: Request, env: Env): Promise<Response> {
   const data = await readJson(request);
   const machineId = str(data.machine_id);
@@ -886,15 +892,16 @@ async function startDevicePairing(request: Request, env: Env): Promise<Response>
   const code = generateVerificationCode();
   const timestamp = now();
   const metadata = deviceMetadata(data);
+  await env.DB.prepare("UPDATE device_pairing_sessions SET status = 'expired' WHERE machine_id = ? AND status = 'pending'")
+    .bind(machineId).run();
   await env.DB.prepare(`INSERT INTO device_pairing_sessions
       (id, token_hash, code_hash, machine_id, device_name, app_version, os_version, architecture, created_at, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(randomId("pair"), await sha256(token), await hashCode(env.VERIFICATION_PEPPER, code), machineId,
       bounded(data.device_name, 120), metadata.appVersion, metadata.osVersion, metadata.architecture,
       timestamp, timestamp + 600).run();
-  const portalUrl = new URL("/dashboard/activation", env.PORTAL_ORIGIN);
-  portalUrl.searchParams.set("pair", token);
-  return json({ pairing_token: token, pairing_code: code, portal_url: portalUrl.toString(), expires_in_seconds: 600 });
+  const portalUrl = buildPairingPortalUrl(env.PORTAL_ORIGIN, token);
+  return json({ pairing_token: token, pairing_code: code, portal_url: portalUrl, expires_in_seconds: 600 });
 }
 
 async function pairingStatus(request: Request, env: Env): Promise<Response> {

@@ -34,6 +34,10 @@ export function portalPageRoute(path: string, authenticated: boolean): PortalPag
       ? { kind: "redirect", location: "/dashboard/overview" }
       : { kind: "asset", assetPath: "/login/" };
   }
+  // The activation shell must be reachable before login so a QR fragment can
+  // be captured by the browser. Its account data and all mutations still go
+  // through authenticated API calls from the page.
+  if (path === "/dashboard/activation") return { kind: "asset", assetPath: "/dashboard/" };
   if (dashboardPath(path)) {
     if (path.endsWith("/")) return { kind: "redirect", location: path.slice(0, -1) };
     return authenticated

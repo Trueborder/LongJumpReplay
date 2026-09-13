@@ -7,7 +7,7 @@ const accountRoot = path.join(__dirname, '..', 'tomaspisar.cz', 'account');
 const html = fs.readFileSync(path.join(accountRoot, 'dashboard', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(accountRoot, 'account.css'), 'utf8');
 const script = fs.readFileSync(path.join(accountRoot, 'account.js'), 'utf8');
-const categories = ['overview', 'licence', 'activation-key', 'devices', 'billing', 'help'];
+const categories = ['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help'];
 
 test('dashboard categories have distinct deep links and routed content', () => {
   for (const category of categories) {
@@ -15,7 +15,7 @@ test('dashboard categories have distinct deep links and routed content', () => {
     assert.match(html, new RegExp(`data-dashboard-route="${category}"`));
   }
   assert.doesNotMatch(html, /class="dashboard-nav"[\s\S]*?href="#/);
-  assert.match(script, /dashboardRoutes = new Set\(\['overview', 'licence', 'activation-key', 'devices', 'billing', 'help'\]\)/);
+  assert.match(script, /dashboardRoutes = new Set\(\['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help'\]\)/);
 });
 
 test('device controls keep actions together and use a dedicated SVG close icon', () => {
@@ -45,4 +45,14 @@ test('dashboard keeps secondary guidance out of the primary content flow', () =>
   assert.match(html, /How to use the activation key/);
   assert.match(html, /Billing help/);
   assert.match(html, /class="guidance-list"/);
+});
+
+test('pairing links use a short-lived fragment and survive OTP login', () => {
+  assert.match(script, /PENDING_PAIRING_KEY/);
+  assert.match(script, /window\.location\.hash\.replace\(\/\^#\//);
+  assert.match(script, /sessionStorage\.setItem\(PENDING_PAIRING_KEY/);
+  assert.match(script, /dashboard\/activation#pair=/);
+  assert.match(script, /history\.replaceState/);
+  assert.match(html, /Scan the QR code shown by LongJumpReplay/);
+  assert.match(html, /id="pairing-code"/);
 });
