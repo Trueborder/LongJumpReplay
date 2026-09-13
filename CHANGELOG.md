@@ -1,5 +1,13 @@
 # LongJumpReplay changelog
 
+## 6.2.10 - 2026-09-13
+
+- Makes the startup splash fade visibly into view while keeping a shorter
+  reduced-motion path, and removes the obsolete Details disclosure.
+- Adds semantic symbols to shared information, warning, error, and confirmation
+  popups.
+- Adds and deploys the branded bilingual website 404 page.
+
 ## 6.2.9 - 2026-09-13
 
 - Prevents the topmost startup window from remaining over the application
