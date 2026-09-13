@@ -30,5 +30,7 @@ test('login composition keeps a centered backdrop and reduced-motion fallback', 
   assert.match(styles, /portal-login-backdrop-in/);
   assert.match(styles, /\.portal-login-page \.account-login \{ z-index: 31;/);
   assert.match(styles, /pointer-events: auto/);
+  assert.match(styles, /#login-status:empty/);
+  assert.match(styles, /\.login-actions-secondary \{ min-height: 0; padding-top: 0; \}/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
 });

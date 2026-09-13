@@ -85,6 +85,9 @@
 .login-actions-secondary .text-button[hidden] { display: none; }
 .portal-login-page .login-card input[aria-invalid="true"] { border-color: var(--coral); box-shadow: 0 0 0 4px color-mix(in srgb, var(--coral) 14%, transparent); }
 .portal-login-page .login-card .status { min-height: 2.2em; }
+.portal-login-page .login-actions-secondary { min-height: 0; padding-top: 0; }
+.portal-login-page .login-actions-secondary .text-button:not([hidden]) { margin-top: .55rem; }
+.portal-login-page .login-card #login-status:empty { min-height: 0; margin-top: 0; }
 
 @media (max-width: 650px) {
   .portal-login-page .login-shell { width: calc(100% - 1.5rem); }
