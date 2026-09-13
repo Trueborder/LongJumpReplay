@@ -9,6 +9,7 @@ from datetime import datetime
 from .models import TimelineModel
 from .i18n import tr
 from .language_catalog import normalize_language
+from .theme import bind_resize_only
 
 
 NICE_STEPS = [1 / 240, 1 / 120, 1 / 60, 1 / 30, .05, .1, .2, .5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800]
@@ -115,7 +116,7 @@ class ProfessionalTimeline(tk.Canvas):
         self._animated_playhead_ns: int | None = None
 
         self._create_item_pool()
-        self.bind("<Configure>", self._on_configure)
+        bind_resize_only(self, self._on_configure)
         self.bind("<ButtonPress-1>", self._on_press)
         self.bind("<B1-Motion>", self._on_drag)
         self.bind("<ButtonRelease-1>", self._on_release)

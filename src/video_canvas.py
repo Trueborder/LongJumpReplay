@@ -10,6 +10,7 @@ from PIL import Image, ImageTk
 
 from .i18n import tr
 from .language_catalog import normalize_language
+from .theme import bind_resize_only
 
 
 class VideoCanvas(tk.Canvas):
@@ -70,7 +71,7 @@ class VideoCanvas(tk.Canvas):
         self._render_pending = False
         self._render_suspended = False
         self._dirty_while_suspended = False
-        self.bind("<Configure>", lambda _e: self.request_render())
+        bind_resize_only(self, lambda _e: self.request_render())
         self.bind("<MouseWheel>", self._on_wheel)
         self.bind("<Button-4>", lambda e: self._on_linux_wheel(e, 1))
         self.bind("<Button-5>", lambda e: self._on_linux_wheel(e, -1))

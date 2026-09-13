@@ -8,6 +8,7 @@ from src.theme import (
     ThemeManager,
     _popup_is_fullscreen,
     _win32_window_and_monitor_rects,
+    bind_resize_only,
     button_style,
     configure_popup,
 )
@@ -19,6 +20,39 @@ class _FullscreenValue:
 
     def attributes(self, _name: str) -> object:
         return self.value
+
+
+class _BindableWidget:
+    def __init__(self) -> None:
+        self.handler = None
+
+    def bind(self, _sequence: str, handler, add: str = "") -> str:
+        self.handler = handler
+        assert add == "+"
+        return "resize-binding"
+
+    def winfo_width(self) -> int:
+        return 100
+
+    def winfo_height(self) -> int:
+        return 50
+
+
+def test_resize_binding_ignores_position_only_configure_events() -> None:
+    widget = _BindableWidget()
+    calls: list[tuple[int, int]] = []
+    bind_resize_only(widget, lambda event: calls.append((event.width, event.height)))
+
+    class Event:
+        width = 100
+        height = 50
+
+    assert widget.handler is not None
+    widget.handler(Event())
+    widget.handler(Event())
+    Event.width = 101
+    widget.handler(Event())
+    assert calls == [(100, 50), (101, 50)]
 
 
 def test_fullscreen_string_zero_does_not_disable_popup_centering() -> None:

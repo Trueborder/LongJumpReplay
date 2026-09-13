@@ -7,6 +7,9 @@
 - Adds semantic symbols to shared information, warning, error, and confirmation
   popups.
 - Adds and deploys the branded bilingual website 404 page.
+- Prevents window movement from suspending and rebuilding the live video,
+  timeline, Settings, performance, calibration, or projection surfaces; those
+  surfaces now react only to real size changes.
 
 ## 6.2.9 - 2026-09-13
 

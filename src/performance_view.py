@@ -5,6 +5,7 @@ from tkinter import ttk
 
 from .models import BufferStats, CaptureStats
 from .performance_monitor import PerformanceMonitor
+from .theme import bind_resize_only
 
 
 class PerformanceView(ttk.Frame):
@@ -80,7 +81,7 @@ class PerformanceView(ttk.Frame):
         self.resource_canvas = tk.Canvas(graph_host, height=105, highlightthickness=1, bd=0)
         self.resource_canvas.grid(row=5, column=0, sticky="nsew", pady=(3, 0))
         for canvas in (self.fps_canvas, self.queue_canvas, self.resource_canvas):
-            canvas.bind("<Configure>", lambda _event: self.redraw())
+            bind_resize_only(canvas, lambda _event: self.redraw())
         self.apply_palette(self.palette)
 
     def set_language(self, language: str) -> None:

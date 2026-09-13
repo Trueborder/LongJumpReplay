@@ -12,6 +12,8 @@ import traceback
 import tkinter as tk
 from tkinter import ttk
 
+from src.theme import bind_resize_only
+
 ACTIVATION_STARTUP_MINIMUM_SECONDS = 2.0
 
 
@@ -145,7 +147,7 @@ class RoundedProgressBar(tk.Canvas):
         self._maximum = max(1.0, float(maximum))
         self._length = length
         self._height = height
-        self.bind("<Configure>", lambda _event: self._draw(), add="+")
+        bind_resize_only(self, lambda _event: self._draw())
         self._draw()
 
     def _draw(self) -> None:

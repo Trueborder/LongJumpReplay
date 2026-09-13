@@ -1,5 +1,17 @@
 # Long Jump Replay — Project Knowledge
 
+## Resize-only rendering bindings (2026-09-13)
+
+- `src/theme.py::bind_resize_only()` centralizes the Tk `<Configure>` guard:
+  callbacks run when a widget's width or height changes, but not when a
+  toplevel is merely moved. This prevents expensive layout and raster redraws
+  while dragging windows.
+- The main window now suspends video/timeline rendering only during a real
+  resize. Settings page canvases, responsive descriptions, Performance graphs,
+  the timeline, video canvases, board calibration, and Top-down Projection use
+  the same helper. Settings pages remain cached; navigation only shows or
+  hides existing frames and never rebuilds them because of window movement.
+
 ## Screen-centred application popups (2026-09-12)
 
 - `src/theme.py::configure_popup()` waits for the popup to be mapped, then measures the complete decorated Win32 window (including title bar and borders) and centres that outer rectangle on the full monitor containing its parent. This preserves the dialog's final requested size and works on secondary monitors.

@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from .i18n import Translator
-from .theme import configure_popup
+from .theme import bind_resize_only, configure_popup
 from .top_view_projection import ProjectionCalibration, create_projection_calibration, detect_board_corners, detect_foul_line
 
 
@@ -93,7 +93,7 @@ class BoardCalibrationWizard:
 
         self.canvas = tk.Canvas(self.window, bg=palette["video"], highlightthickness=1, highlightbackground=palette["border"])
         self.canvas.grid(row=1, column=0, sticky="nsew", padx=16)
-        self.canvas.bind("<Configure>", lambda _event: self._render())
+        bind_resize_only(self.canvas, lambda _event: self._render())
         self.canvas.bind("<ButtonPress-1>", self._press)
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._release)

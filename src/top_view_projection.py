@@ -27,7 +27,7 @@ from .shoe_reconstruction import (
     estimate_camera_profile,
     reconstruct_shoe_overhead,
 )
-from .theme import center_popup
+from .theme import bind_resize_only, center_popup
 
 
 STANDARD_BOARD_LENGTH_CM = 120.1
@@ -1490,8 +1490,8 @@ class _LegacyTopViewProjectionWindow:
         self.reconstruction_progress.grid(row=1, column=0, sticky="ew", pady=(3, 0))
         self.projection_canvas = tk.Canvas(projection_frame, bg=palette["video"], highlightthickness=1, highlightbackground=palette["border"])
         self.projection_canvas.grid(row=2, column=0, sticky="nsew")
-        self.source_canvas.bind("<Configure>", lambda _event: self._refresh_source())
-        self.projection_canvas.bind("<Configure>", lambda _event: self._render_projection())
+        bind_resize_only(self.source_canvas, lambda _event: self._refresh_source())
+        bind_resize_only(self.projection_canvas, lambda _event: self._render_projection())
         self.source_canvas.bind("<ButtonPress-1>", self._source_press)
         self.source_canvas.bind("<B1-Motion>", self._source_drag)
         self.source_canvas.bind("<ButtonRelease-1>", self._source_release)
@@ -2170,7 +2170,7 @@ class ProjectionProgressDialog:
         if fullscreen and self._preview_frame is not None:
             self._preview_canvas = tk.Canvas(self.window, bg="#0b1018", highlightthickness=0)
             self._preview_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
-            self._preview_canvas.bind("<Configure>", lambda _event: self._render_preview())
+            bind_resize_only(self._preview_canvas, lambda _event: self._render_preview())
         frame = ttk.Frame(self.window, style="Panel.TFrame", padding=28 if fullscreen else 18)
         if fullscreen:
             frame.place(relx=0.5, rely=0.86, anchor="center", relwidth=0.72)
@@ -2374,7 +2374,7 @@ class TopViewProjectionWindow:
             self._thumbnail_photos.append(photo); self._thumbnail_labels.append(label)
         self.selection_canvas = tk.Canvas(self.selection_page, bg=palette["video"], highlightthickness=1, highlightbackground=palette["border"])
         self.selection_canvas.grid(row=1, column=1, sticky="nsew")
-        self.selection_canvas.bind("<Configure>", lambda _e: self._render_selection())
+        bind_resize_only(self.selection_canvas, lambda _e: self._render_selection())
         self.selection_canvas.bind("<Motion>", self._selection_hover)
         self.selection_canvas.bind("<Leave>", lambda _e: self.selection_canvas.delete("zoom"))
         selection_actions = ttk.Frame(self.selection_page, style="Panel.TFrame")
@@ -2477,7 +2477,7 @@ class TopViewProjectionWindow:
         self.split_review_button.state(["disabled"])
         self.source_canvas = tk.Canvas(self.workspace_page, height=220, bg=palette["video"], highlightthickness=1, highlightbackground=palette["border"])
         self.source_canvas.grid(row=1, column=0, sticky="ew", pady=(8, 8))
-        self.source_canvas.bind("<Configure>", lambda _e: self._render_source())
+        bind_resize_only(self.source_canvas, lambda _e: self._render_source())
         self.source_canvas.bind("<ButtonPress-1>", self._source_press)
         self.source_canvas.bind("<B1-Motion>", self._source_drag)
         self.source_canvas.bind("<ButtonRelease-1>", self._source_release)
@@ -2627,7 +2627,7 @@ class TopViewProjectionWindow:
         canvas = tk.Canvas(panel, bg=self.palette["video"], highlightthickness=1, highlightbackground=self.palette["border"])
         canvas.grid(row=1, column=0, sticky="nsew")
         button = ttk.Button(panel, text=self._text("Compute", "Vypočítat"), style="Primary.TButton", command=lambda: self._compute(target))
-        canvas.bind("<Configure>", lambda _e, target=target: self._render_result(target))
+        bind_resize_only(canvas, lambda _e, target=target: self._render_result(target))
         canvas.bind("<Button-1>", lambda event, target=target: self._open_fullscreen(target, event))
         if target == "overhead":
             canvas.bind("<Motion>", self._result_hover, add="+")
@@ -3644,7 +3644,7 @@ class TopViewProjectionWindow:
             self._fit_review_image(left_canvas, original, holders[0])
             self._fit_review_image(right_canvas, result, holders[1])
             self._split_review_photos = holders[0] + holders[1]
-        left_canvas.bind("<Configure>", render); right_canvas.bind("<Configure>", render)
+        bind_resize_only(left_canvas, render); bind_resize_only(right_canvas, render)
         review.after_idle(lambda: (review.focus_force(), render()))
 
     def _open_split_review(self) -> None:
@@ -3702,7 +3702,7 @@ class TopViewProjectionWindow:
             self._fit_review_image(right_canvas, result, holders[1], self._text("Waiting for computed top-down projection...", "Čekám na vypočtenou projekci shora..."))
             self._split_review_photos = holders[0] + holders[1]
         self._split_review_render = render
-        left_canvas.bind("<Configure>", render); right_canvas.bind("<Configure>", render)
+        bind_resize_only(left_canvas, render); bind_resize_only(right_canvas, render)
         review.after_idle(lambda: (review.focus_force(), render()))
         if self._overhead_result is not None or self._board_result is not None:
             self._update_split_review_result()
@@ -4074,7 +4074,7 @@ class TopViewProjectionWindow:
         canvas = tk.Canvas(fullscreen, bg="#000000", highlightthickness=0, cursor="crosshair")
         self._fullscreen_canvas = canvas
         canvas.pack(fill="both", expand=True)
-        canvas.bind("<Configure>", lambda _event: self._fit_fullscreen_image())
+        bind_resize_only(canvas, lambda _event: self._fit_fullscreen_image())
         canvas.bind("<ButtonPress-1>", self._fullscreen_pan_start)
         canvas.bind("<B1-Motion>", self._fullscreen_pan)
         canvas.bind("<ButtonRelease-1>", self._fullscreen_pan_end)

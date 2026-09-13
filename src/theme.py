@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 import ctypes
 from ctypes import wintypes
+from collections.abc import Callable
 
 
 # The original interface was laid out at approximately 130% of the density the
@@ -248,6 +249,39 @@ def style_popup_menu(menu: tk.Menu, parent: tk.Misc) -> None:
         )
     except tk.TclError:
         pass
+
+
+def bind_resize_only(
+    widget: tk.Misc,
+    callback: Callable[[tk.Event], object | None],
+    *,
+    add: str = "+",
+) -> str:
+    """Bind a callback to actual size changes, ignoring window movement.
+
+    Tk sends ``<Configure>`` for both geometry changes and changes to a
+    toplevel's screen position.  Rendering/layout callbacks should normally
+    respond to width/height changes only; otherwise dragging a window can
+    repeatedly rebuild expensive video or settings content for no visual
+    reason.
+    """
+    last_size: tuple[int, int] | None = None
+
+    def on_configure(event: tk.Event) -> object | None:
+        nonlocal last_size
+        try:
+            size = (int(event.width), int(event.height))
+        except (AttributeError, TypeError, ValueError):
+            try:
+                size = (int(widget.winfo_width()), int(widget.winfo_height()))
+            except (tk.TclError, TypeError, ValueError):
+                return None
+        if size == last_size:
+            return None
+        last_size = size
+        return callback(event)
+
+    return widget.bind("<Configure>", on_configure, add=add)
 
 
 def _dialog_kind_from_text(title: str, message: str) -> str:

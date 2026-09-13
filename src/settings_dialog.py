@@ -14,7 +14,7 @@ from .camera_devices import enumerate_camera_devices
 from .hotkeys import event_to_hotkey
 from .i18n import Translator
 from .language_catalog import LANGUAGE_OPTIONS, language_from_option, language_option
-from .theme import ask_themed_yes_no, ask_themed_yes_no_cancel, configure_popup, show_themed_info, style_popup_menu
+from .theme import ask_themed_yes_no, ask_themed_yes_no_cancel, bind_resize_only, configure_popup, show_themed_info, style_popup_menu
 
 
 ACTION_LABELS = {
@@ -222,7 +222,7 @@ class SettingsDialog(tk.Toplevel):
         self.nav_host = ttk.Frame(self.nav_canvas, style="Toolbar.TFrame")
         self._nav_window = self.nav_canvas.create_window((0, 0), window=self.nav_host, anchor="nw")
         self.nav_host.bind("<Configure>", self._update_navigation_scrollregion)
-        self.nav_canvas.bind("<Configure>", self._resize_navigation_host)
+        bind_resize_only(self.nav_canvas, self._resize_navigation_host)
         self._bind_navigation_wheel(self.nav_canvas)
         self._bind_navigation_wheel(self.nav_host)
 
@@ -331,7 +331,7 @@ class SettingsDialog(tk.Toplevel):
         inner = ttk.Frame(canvas, style="Panel.TFrame", padding=18)
         window = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda _e, c=canvas: c.configure(scrollregion=c.bbox("all")))
-        canvas.bind("<Configure>", lambda e, c=canvas, w=window: c.itemconfigure(w, width=e.width))
+        bind_resize_only(canvas, lambda e, c=canvas, w=window: c.itemconfigure(w, width=e.width))
         self._bind_scroll_events(canvas, lambda direction, c=canvas: c.yview_scroll(direction, "units"))
         self._pending_page_canvas = canvas
         return wrapper, inner
@@ -628,7 +628,7 @@ class SettingsDialog(tk.Toplevel):
             if int(label.cget("wraplength") or 0) != width:
                 label.configure(wraplength=width)
 
-        label.bind("<Configure>", resize, add="+")
+        bind_resize_only(label, resize)
 
     def _update_description_visibility(self) -> None:
         visible = bool(self._vars.get("show_tooltips") and self._vars["show_tooltips"].get())

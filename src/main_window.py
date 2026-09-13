@@ -80,7 +80,7 @@ from .top_view_projection import (
     filter_projection_candidates,
     rank_decoded_projection_frames,
 )
-from .theme import ThemeManager, ask_themed_yes_no, configure_popup, show_themed_info
+from .theme import ThemeManager, ask_themed_yes_no, bind_resize_only, configure_popup, show_themed_info
 from .timeline import ProfessionalTimeline, format_wall_time_ns
 from .trial import capabilities_for, record_successful_export, trial_exports_remaining, trial_is_active, trial_status
 from .video_canvas import VideoCanvas
@@ -234,7 +234,7 @@ class MainWindow:
         self._timeline_pane_added = False
         self._window_interacting = False
         self._window_interaction_job: str | None = None
-        self._last_root_geometry = ""
+        self._last_root_size = (0, 0)
         self._calibration_mode = False
         self._board_calibration_wizard: BoardCalibrationWizard | None = None
         self._startup_calibration_opened = False
@@ -305,7 +305,7 @@ class MainWindow:
         else:
             self.root.after_idle(self._apply_initial_window_state)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
-        self.root.bind("<Configure>", self._on_root_configure, add="+")
+        bind_resize_only(self.root, self._on_root_configure)
         report("Finishing interface construction…", 8, 8, "Main interface constructed")
 
         report("Starting background services…", 0, 4, phase="services")
@@ -1203,10 +1203,13 @@ class MainWindow:
     # ---------------------------------------------------------- window motion
     def _on_root_configure(self, event) -> None:
         if self._closing or event.widget is not self.root: return
-        try: geometry = self.root.geometry()
-        except tk.TclError: return
-        if geometry == self._last_root_geometry: return
-        self._last_root_geometry = geometry
+        try:
+            size = (int(event.width), int(event.height))
+        except (AttributeError, TypeError, ValueError):
+            try: size = (self.root.winfo_width(), self.root.winfo_height())
+            except tk.TclError: return
+        if size == self._last_root_size: return
+        self._last_root_size = size
         self._begin_window_interaction()
         if self._window_interaction_job is not None:
             try: self.root.after_cancel(self._window_interaction_job)
