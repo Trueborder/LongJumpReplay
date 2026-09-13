@@ -52,19 +52,16 @@
           </details>
         </div>
 
-        <div class="account-panel login-card" aria-labelledby="form-title">
+          <div class="account-panel login-card" aria-labelledby="form-title">
           <div class="panel-heading">
-            <span class="panel-icon" aria-hidden="true">↳</span>
-            <div><p class="eyebrow" data-en="SECURE SIGN IN" data-cs="BEZPEČNÉ PŘIHLÁŠENÍ">SECURE SIGN IN</p><h2 id="form-title" data-en="Open your account" data-cs="Otevřete svůj účet">Open your account</h2></div>
+            <h2 id="form-title" data-en="Open your account" data-cs="Otevřete svůj účet">Open your account</h2>
           </div>
           <form id="login-form" novalidate>
             <div id="email-step">
-              <p class="login-step-label" data-en="STEP 1 / EMAIL" data-cs="KROK 1 / E-MAIL">STEP 1 / EMAIL</p>
             <label for="email" data-en="Account email" data-cs="E-mail účtu">Account email</label>
             <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
             </div>
             <div id="code-field" hidden>
-              <p class="login-step-label" data-en="STEP 2 / VERIFICATION" data-cs="KROK 2 / OVĚŘENÍ">STEP 2 / VERIFICATION</p>
               <label for="code" data-en="Six-digit code" data-cs="Šestimístný kód">Six-digit code</label>
               <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456">
             </div>
@@ -75,8 +72,7 @@
             </div>
           </form>
           <p id="login-status" class="status" role="status" aria-live="polite"></p>
-          <p class="form-note" data-en="Codes expire after 10 minutes. The address does not need to have a purchase yet." data-cs="Platnost kódu je 10 minut. Na této adrese zatím nemusí být žádný nákup.">Codes expire after 10 minutes. The address does not need to have a purchase yet.</p>
-          <p class="support-note"><span data-en="Having trouble?" data-cs="Máte potíže?">Having trouble?</span> <a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
+          <p class="support-note"><span data-en="Having trouble?" data-cs="Máte potíže?">Having trouble?</span> <span class="login-info-wrap"><button class="login-info-button" type="button" aria-label="Login information" aria-describedby="login-info-tooltip">i</button><span class="login-info-tooltip" id="login-info-tooltip" role="tooltip"><span data-en="We send a one-time verification code to your email. It is valid for 10 minutes, and no password is needed." data-cs="Na váš e-mail pošleme jednorázový ověřovací kód. Platí 10 minut a heslo není potřeba.">We send a one-time verification code to your email. It is valid for 10 minutes, and no password is needed.</span></span></span> <a href="mailto:info@tomaspisar.cz">info@tomaspisar.cz</a></p>
         </div>
       </div>
     </section>

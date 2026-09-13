@@ -120,13 +120,59 @@
   position: fixed;
   inset: 0;
   z-index: 30;
-  pointer-events: none;
+  pointer-events: auto;
   background: color-mix(in srgb, var(--text) 18%, transparent);
   backdrop-filter: blur(2px) saturate(.82);
   animation: portal-login-backdrop-in 420ms ease-out both;
 }
-.portal-login-page .login-card .panel-heading { margin-bottom: 1.35rem; }
+.portal-login-page .login-card .panel-heading { justify-content: center; margin-bottom: 1.35rem; }
+.portal-login-page .login-card .panel-heading h2 { width: 100%; margin: 0; text-align: center; }
 .portal-login-page .login-card .panel-icon { flex-basis: 42px; width: 42px; height: 42px; border-radius: 12px; }
+.login-info-wrap { position: relative; display: inline-flex; vertical-align: middle; }
+.login-info-button {
+  display: inline-grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0 .15rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  color: var(--cyan);
+  font: 600 .72rem/1 var(--mono);
+  cursor: help;
+}
+.login-info-button:hover,
+.login-info-button:focus-visible { border-color: var(--cyan); background: color-mix(in srgb, var(--cyan) 10%, var(--surface)); }
+.login-info-tooltip {
+  position: absolute;
+  bottom: calc(100% + .7rem);
+  left: 50%;
+  z-index: 40;
+  width: min(280px, calc(100vw - 3rem));
+  padding: .75rem .85rem;
+  border: 1px solid color-mix(in srgb, var(--cyan) 32%, var(--account-border));
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--shadow) 70%, transparent);
+  color: var(--text);
+  font-size: .78rem;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translate(-50%, 4px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
+}
+.login-info-button:hover + .login-info-tooltip,
+.login-info-button:focus + .login-info-tooltip,
+.login-info-button:focus-visible + .login-info-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
 @keyframes portal-login-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -144,6 +190,7 @@
   .portal-login-page .login-card,
   .login-backdrop { animation: none; }
   .portal-login-page .login-context { transition: none; }
+  .login-info-tooltip { transition: none; }
 }
 
 /* Portal routes: /login and /dashboard */

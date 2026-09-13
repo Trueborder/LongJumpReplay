@@ -13,6 +13,11 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(login, /id="code-field"/);
   assert.match(login, /id="change-email"/);
   assert.match(login, /id="resend-code"/);
+  assert.match(login, /class="login-info-button"/);
+  assert.match(login, /id="login-info-tooltip"/);
+  assert.doesNotMatch(login, /SECURE SIGN IN/);
+  assert.doesNotMatch(login, /class="panel-icon"/);
+  assert.doesNotMatch(login, /class="form-note"/);
   assert.match(account, /\/api\/portal\/request-code/);
   assert.match(account, /\/api\/portal\/verify-code/);
   assert.match(account, /error\.status === 410/);
@@ -24,5 +29,6 @@ test('login composition keeps a centered backdrop and reduced-motion fallback', 
   assert.match(styles, /portal-login-card-in/);
   assert.match(styles, /portal-login-backdrop-in/);
   assert.match(styles, /\.portal-login-page \.account-login \{ z-index: 31;/);
+  assert.match(styles, /pointer-events: auto/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
 });
