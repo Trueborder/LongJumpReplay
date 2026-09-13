@@ -209,6 +209,8 @@ def activate_pairing(token: str, opener: Callable[..., Any] = urlopen) -> "Activ
     data = pairing_status(token, opener)
     authorization = data.get("authorization")
     if not isinstance(authorization, str) or not authorization:
+        if data.get("portal_viewed"):
+            raise ActivationError("The pairing page is open. Waiting for approval…", "pairing_viewed")
         raise ActivationError("The pairing has not been approved yet.", "pairing_pending")
     valid, reason, _ = verify_authorization(authorization, device_id())
     if not valid:

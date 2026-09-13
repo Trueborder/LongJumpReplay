@@ -907,6 +907,7 @@ type PairingRow = {
   result_message: string | null;
   completed_at: number | null;
   activation_started_at: number | null;
+  viewed_at: number | null;
 };
 
 async function findPairingByToken(db: D1Database, token: string): Promise<PairingRow | null> {
@@ -975,14 +976,14 @@ async function pairingStatus(request: Request, env: Env): Promise<Response> {
   if (row.status === "expired") return fail("pairing_expired", "This pairing request has expired.", 410);
   if (row.status === "declined") return fail("pairing_declined", row.result_message ?? "This pairing request was declined.", 409);
   if (row.status === "failed") return fail(row.result_code ?? "pairing_failed", row.result_message ?? "Activation could not be completed.", 409);
-  if (row.status === "pending") return json({ status: "pending" }, 202);
+  if (row.status === "pending") return json({ status: "pending", portal_viewed: Boolean(row.viewed_at) }, 202);
   if (row.status === "used") return fail("pairing_used", "This pairing request has already been used.", 409);
   if (row.status === "activating") {
     if (row.activation_started_at && timestamp - row.activation_started_at > 60) {
       await env.DB.prepare("UPDATE device_pairing_sessions SET status = 'approved', activation_started_at = NULL WHERE id = ? AND status = 'activating'")
         .bind(row.id).run();
     }
-    return json({ status: "pending" }, 202);
+    return json({ status: "pending", portal_viewed: Boolean(row.viewed_at) }, 202);
   }
   if (row.status !== "approved" || !row.license_id) return fail("pairing_invalid", "This pairing request is not available.", 409);
 
@@ -1080,6 +1081,9 @@ async function portalPairingView(request: Request, env: Env): Promise<Response> 
     row.status = "expired";
     row.completed_at = now();
   }
+  await env.DB.prepare("UPDATE device_pairing_sessions SET viewed_at = COALESCE(viewed_at, ?) WHERE id = ?")
+    .bind(now(), row.id).run();
+  row.viewed_at = row.viewed_at ?? now();
   const licenses = await listLicensesForCustomer(env.DB, auth.customer.id);
   const licenseOptions = await Promise.all(licenses.map(async (license) => {
     const activeDevices = await activeDeviceCount(env.DB, license.id);

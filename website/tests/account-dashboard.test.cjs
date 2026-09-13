@@ -70,4 +70,5 @@ test('QR approval is a standalone page with no dashboard chrome', () => {
   assert.match(pairingScript, /\/api\/portal\/pairing\/approve/);
   assert.match(pairingScript, /\/api\/portal\/pairing\/decline/);
   assert.match(pairingScript, /\/api\/portal\/pairing\/result/);
+  assert.match(css, /\.pairing-approval-page \[hidden\] \{ display: none !important; \}/);
 });

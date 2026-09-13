@@ -209,7 +209,7 @@ def create_pairing_qr(url: str):
 def _activation_copy(language: str) -> dict[str, str]:
     if language == "cs":
         return {
-            "pair_code": "Párovací kód", "pair_link": "Odkaz portálu", "pair_scan": "Naskenujte QR kód pro otevření párování", "pair_expires": "Platí ještě {seconds} s.", "pair_expired": "Párování vypršelo. Zavřete toto okno a začněte znovu.", "pair_qr_unavailable": "QR kód není v tomto prostředí dostupný. Použijte odkaz nebo šestimístný kód.",
+            "pair_code": "Párovací kód", "pair_link": "Odkaz portálu", "pair_scan": "Naskenujte QR kód pro otevření párování", "pair_opened": "Párovací stránka je otevřená v telefonu.", "pair_expires": "Platí ještě {seconds} s.", "pair_expired": "Párování vypršelo. Zavřete toto okno a začněte znovu.", "pair_qr_unavailable": "QR kód není v tomto prostředí dostupný. Použijte odkaz nebo šestimístný kód.",
             "title": "Aktivace LongJumpReplay", "intro": "Aktivujte počítač e-mailem použitým při nákupu. Pošleme vám šestimístný ověřovací kód.",
             "email": "E-mail z nákupu", "send": "Poslat ověřovací kód", "code": "Ověřovací kód z e-mailu",
             "activate": "Aktivovat tento počítač", "code_sent": "Kód byl odeslán na {email}. Platí {minutes} minut. Zkontrolujte také spam.",
@@ -225,7 +225,7 @@ def _activation_copy(language: str) -> dict[str, str]:
             "no_active_license": "E-mail byl ověřen, ale tento účet nemá zakoupenou aktivní licenci. Licenci můžete koupit na tomaspisar.cz.",
         }
     return {
-        "pair_code": "Pairing code", "pair_link": "Portal link", "pair_scan": "Scan the QR code to open pairing", "pair_expires": "Expires in {seconds}s.", "pair_expired": "Pairing expired. Close this window and start again.", "pair_qr_unavailable": "QR rendering is unavailable in this environment. Use the link or six-digit code.",
+        "pair_code": "Pairing code", "pair_link": "Portal link", "pair_scan": "Scan the QR code to open pairing", "pair_opened": "Pairing page is open on the phone.", "pair_expires": "Expires in {seconds}s.", "pair_expired": "Pairing expired. Close this window and start again.", "pair_qr_unavailable": "QR rendering is unavailable in this environment. Use the link or six-digit code.",
         "title": "Activate LongJumpReplay", "intro": "Activate this computer with the email address used for your purchase. We will send a six-digit verification code.",
         "email": "Purchase email", "send": "Send verification code", "code": "Verification code from email",
         "activate": "Activate this computer", "code_sent": "Code sent to {email}. It is valid for {minutes} minutes. Check spam too.",
@@ -435,7 +435,8 @@ def ensure_license_or_trial(
         qr_column.pack(side="left", padx=(0, 18))
         pair_qr = ttk.Label(qr_column, text=copy["working"], anchor="center", width=26)
         pair_qr.pack(pady=(0, 4))
-        ttk.Label(qr_column, text=copy["pair_scan"], wraplength=180, justify="center").pack()
+        pair_scan_label = ttk.Label(qr_column, text=copy["pair_scan"], wraplength=180, justify="center")
+        pair_scan_label.pack()
         pairing_details = ttk.Frame(pairing_content)
         pairing_details.pack(side="left", fill="both", expand=True)
         ttk.Label(pairing_details, text=copy["pair_code"], style="Heading.TLabel").pack(anchor="w")
@@ -481,6 +482,12 @@ def ensure_license_or_trial(
                 return
 
             def failed(error: object) -> None:
+                if getattr(error, "code", None) == "pairing_viewed":
+                    pair_qr.pack_forget()
+                    pair_scan_label.pack_forget()
+                    pair_status.configure(text=copy["pair_opened"])
+                    pair_dialog.after(1800, poll)
+                    return
                 if getattr(error, "code", None) == "pairing_pending":
                     pair_status.configure(text=copy["pair_waiting"])
                     pair_dialog.after(1800, poll)

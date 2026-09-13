@@ -374,6 +374,7 @@
    navigation. It reuses the account palette and only presents the current
    device request plus the approval decision. */
 .pairing-approval-page { min-height: 100dvh; background: var(--bg); }
+.pairing-approval-page [hidden] { display: none !important; }
 .pairing-approval-shell { display: grid; min-height: 100dvh; place-items: center; width: min(100%, 760px); margin: 0 auto; padding: 2rem 1rem; box-sizing: border-box; }
 .pairing-approval-card { width: min(100%, 560px); padding: clamp(1.4rem, 4vw, 2.4rem); border: 1px solid color-mix(in srgb, var(--cyan) 30%, var(--account-border)); border-radius: 20px; background: var(--account-panel); box-shadow: var(--account-shadow); backdrop-filter: blur(18px) saturate(120%); }
 .pairing-approval-brand { display: flex; align-items: center; gap: .65rem; margin-bottom: 2rem; color: var(--muted); font: 600 .72rem var(--mono); letter-spacing: .06em; text-transform: uppercase; }

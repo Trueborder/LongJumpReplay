@@ -204,7 +204,9 @@ manual six-digit pairing remains available. Pairing outcomes are persisted by
 completion metadata), so activation failures and declines are explainable and
 not mistaken for a pending request. Legacy query links remain supported.
 The portal still uses email OTP; pairing is not a replacement authentication
-flow.
+flow. Opening the standalone approval page records a timestamp so the desktop
+pairing dialog can hide its QR image once the page is open; approval and
+activation continue to use the existing polling protocol.
 Passkeys are a useful future portal-login upgrade. Floating network licences,
 shared permanent club passwords and hardware dongles are intentionally not
 planned because they add support burden or weaken ownership controls.

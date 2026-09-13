@@ -79,6 +79,15 @@ def test_verify_code_without_grant_is_an_error():
         activation.verify_code("buyer@example.com", "123456", opener)
 
 
+def test_pairing_reports_when_the_portal_page_has_been_opened():
+    opener = responder({
+        "/api/license/pairing/status": {"status": "pending", "portal_viewed": True},
+    })
+    with pytest.raises(ActivationError) as raised:
+        activation.activate_pairing("pairing-token", opener)
+    assert raised.value.code == "pairing_viewed"
+
+
 def test_activate_sends_derived_device_id_not_raw_hardware():
     record: list = []
     opener = responder(
