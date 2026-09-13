@@ -99,12 +99,19 @@ function fail(code: string, message: string, status = 400): Response {
   return json({ error: code, message }, status);
 }
 
+class InvalidJsonError extends Error {}
+
 async function readJson(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) throw new Error("request too large");
-  const parsed = JSON.parse(text);
+  if (text.length > MAX_BODY_BYTES) throw new InvalidJsonError("request too large");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new InvalidJsonError("invalid json");
+  }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("JSON object required");
+    throw new InvalidJsonError("JSON object required");
   }
   return parsed as Record<string, unknown>;
 }
@@ -1343,6 +1350,11 @@ export default {
       return path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
     } catch (error) {
       // Never surface internals. The message is logged, not returned.
+      if (error instanceof InvalidJsonError) {
+        const response = fail("invalid_input", "Send a valid JSON object and try again.");
+        return path === "/api/contact" ? withContactCors(response, request)
+          : path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
+      }
       console.error("unhandled", error instanceof Error ? error.message : "unknown");
       const response = fail("server_error", "Something went wrong. Please try again.", 500);
       return path === "/api/contact" ? withContactCors(response, request)

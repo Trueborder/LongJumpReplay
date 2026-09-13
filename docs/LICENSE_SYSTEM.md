@@ -268,7 +268,10 @@ is configured but intentionally has no credentials or live price IDs yet.
 1. ~~Create the database~~ **Done.** `longjumpreplay-licenses`,
    `afd54a54-bccb-494c-ac6d-377b00652c40`, primary region WEUR, already wired
    into both `d1_databases` blocks in `wrangler.jsonc`.
-2. ~~Apply the schema~~ **Done.** All 8 tables and 11 indexes exist on the
+2. ~~Apply the schema~~ **Done.** All production migrations, including the
+   device-pairing session table, are applied to the remote database.
+   The migration history is checked with `npm run migrate:remote -- --env
+   production` before deployment. The schema's tables and indexes exist on the
    remote database, which is empty. The unique constraints on
    `customers.email`, `devices(license_id, machine_id)` and the
    `stripe_events` primary key were each confirmed to reject a duplicate, and
@@ -285,6 +288,9 @@ is configured but intentionally has no credentials or live price IDs yet.
 5. Production was deployed with the API route and the account portal route.
    `/health`, webhook signature rejection, CORS, unauthenticated portal access,
    and static portal delivery were checked after deployment.
+   Use `npm run deploy:production` for future production releases; it applies
+   pending D1 migrations before publishing the Worker so new API flows cannot
+   be deployed ahead of their database schema.
 6. For a safe purchase rehearsal, create separate Stripe test-mode prices,
    webhook secret, restricted test key, and Resend test sending key, then set
    the staging secrets and deploy with `npx wrangler deploy --env staging`.

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "migrate:local": "wrangler d1 migrations apply longjumpreplay-licenses --local",
-    "migrate:remote": "wrangler d1 migrations apply longjumpreplay-licenses --remote"
+    "migrate:remote": "wrangler d1 migrations apply longjumpreplay-licenses --remote",
+    "deploy:production": "npm run migrate:remote -- --env production && wrangler deploy --env production"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260811.1",
