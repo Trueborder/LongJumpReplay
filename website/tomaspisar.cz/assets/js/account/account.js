@@ -203,7 +203,7 @@
         setStatus(t('verified'), '#login-status');
         const pendingPairing = readPendingPairing();
         const destination = pendingPairing
-          ? `/dashboard/activation#pair=${encodeURIComponent(pendingPairing)}`
+          ? `/approve/pairing#pair=${encodeURIComponent(pendingPairing)}`
           : '/dashboard/overview';
         window.setTimeout(() => window.location.replace(destination), 180);
       } catch (error) {
@@ -220,7 +220,7 @@
     form.addEventListener('submit', (event) => { event.preventDefault(); state.codeSent ? verifyCode() : requestCode(); });
     api('/api/portal/account').then(() => {
       const pendingPairing = readPendingPairing();
-      window.location.replace(pendingPairing ? `/dashboard/activation#pair=${encodeURIComponent(pendingPairing)}` : '/dashboard/overview');
+      window.location.replace(pendingPairing ? `/approve/pairing#pair=${encodeURIComponent(pendingPairing)}` : '/dashboard/overview');
     }).catch(() => $('#email').focus());
   };
 

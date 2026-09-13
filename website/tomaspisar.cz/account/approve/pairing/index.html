@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#f2f0e9">
+  <link rel="canonical" href="https://account.tomaspisar.cz/approve/pairing">
+  <link rel="icon" type="image/svg+xml" href="https://tomaspisar.cz/assets/icons/favicon.svg">
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/tokens.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/global.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/components.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/account.css">
+  <title>Approve computer — LongJumpReplay</title>
+</head>
+<body class="account-page pairing-approval-page">
+  <main class="pairing-approval-shell" id="main">
+    <section class="pairing-approval-card" aria-labelledby="pairing-title">
+      <div class="pairing-approval-brand" aria-hidden="true"><span class="brand-mark">TP</span><span>LongJumpReplay</span></div>
+      <p class="eyebrow"><span class="eyebrow-dot"></span><span data-en="SECURE DEVICE APPROVAL" data-cs="BEZPEČNÉ SCHVÁLENÍ ZAŘÍZENÍ">SECURE DEVICE APPROVAL</span></p>
+      <h1 id="pairing-title" data-en="Approve this computer" data-cs="Schválit tento počítač">Approve this computer</h1>
+      <p class="pairing-approval-lede" data-en="Review the request below before connecting this computer to your LongJumpReplay licence." data-cs="Před připojením tohoto počítače k licenci LongJumpReplay zkontrolujte níže uvedenou žádost.">Review the request below before connecting this computer to your LongJumpReplay licence.</p>
+
+      <div id="pairing-loading" class="pairing-approval-state" role="status" aria-live="polite">
+        <span class="loading-dot" aria-hidden="true"></span><span data-en="Loading request…" data-cs="Načítání žádosti…">Loading request…</span>
+      </div>
+      <div id="pairing-error" class="pairing-approval-state pairing-approval-error" role="alert" hidden></div>
+
+      <div id="pairing-request" hidden>
+        <div class="pairing-request-facts" aria-label="Device request details">
+          <div><span data-en="Computer" data-cs="Počítač">Computer</span><strong data-pairing-field="device_name">—</strong></div>
+          <div><span data-en="Application" data-cs="Aplikace">Application</span><strong data-pairing-field="app_version">—</strong></div>
+          <div><span data-en="Operating system" data-cs="Operační systém">Operating system</span><strong data-pairing-field="os_version">—</strong></div>
+          <div><span data-en="Architecture" data-cs="Architektura">Architecture</span><strong data-pairing-field="architecture">—</strong></div>
+          <div><span data-en="Request time" data-cs="Čas žádosti">Request time</span><strong data-pairing-field="created_at">—</strong></div>
+          <div><span data-en="Expires" data-cs="Platnost do">Expires</span><strong data-pairing-field="expires_at">—</strong></div>
+        </div>
+        <div class="pairing-licence-section">
+          <label for="pairing-licence" data-en="Licence to use" data-cs="Použitá licence">Licence to use</label>
+          <select id="pairing-licence"></select>
+          <p id="pairing-licence-note" class="form-note"></p>
+        </div>
+        <div class="pairing-approval-actions">
+          <button id="pairing-decline" class="button button-outline" type="button" data-en="Decline" data-cs="Odmítnout">Decline</button>
+          <button id="pairing-approve" class="button button-primary" type="button" data-en="Approve computer" data-cs="Schválit počítač">Approve computer</button>
+        </div>
+      </div>
+
+      <div id="pairing-result" class="pairing-approval-result" hidden role="status" aria-live="polite">
+        <span id="pairing-result-icon" class="pairing-result-icon" aria-hidden="true">✓</span>
+        <h2 id="pairing-result-title">—</h2>
+        <p id="pairing-result-message">—</p>
+        <button id="pairing-close" class="button button-outline" type="button" data-en="Close" data-cs="Zavřít">Close</button>
+      </div>
+    </section>
+  </main>
+  <script src="https://tomaspisar.cz/assets/js/account/pairing-approval.js"></script>
+</body>
+</html>

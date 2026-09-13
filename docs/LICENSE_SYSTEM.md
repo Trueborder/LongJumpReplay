@@ -193,10 +193,16 @@ desktop application.
 An additive portal pairing path is now available alongside email OTP and the
 reusable key: the desktop shows a locally generated QR, a short-lived
 six-digit code, and a portal link. The signed-in owner approves that exact
-computer and licence, and the token is consumed when the desktop receives its
-existing signed authorization. New QR links carry only the opaque token in a
-URL fragment; the portal removes it from the visible URL and preserves it
-through the existing email OTP login. Legacy query links remain supported.
+computer and licence on the standalone `/approve/pairing` page; the page does
+not render the customer dashboard. It shows the technical request summary,
+active licence choices, and Approve/Decline controls, then waits for the
+desktop result and remains on the page with the final state. QR links carry
+only the opaque token in a URL fragment; the page removes it from the visible
+URL and preserves it through the existing email OTP login. The dashboard's
+manual six-digit pairing remains available. Pairing outcomes are persisted by
+`0008_device_pairing_outcomes.sql` (`activating`, `declined`, `failed`, and
+completion metadata), so activation failures and declines are explainable and
+not mistaken for a pending request. Legacy query links remain supported.
 The portal still uses email OTP; pairing is not a replacement authentication
 flow.
 Passkeys are a useful future portal-login upgrade. Floating network licences,

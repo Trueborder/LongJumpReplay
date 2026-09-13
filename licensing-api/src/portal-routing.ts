@@ -13,6 +13,8 @@ export const DASHBOARD_ROUTES = [
   "help",
 ] as const;
 
+export const PAIRING_APPROVAL_ASSET = "/approve/pairing/";
+
 const dashboardPath = (path: string): boolean => {
   const match = path.match(/^\/dashboard\/([^/]+)\/?$/);
   return Boolean(match && DASHBOARD_ROUTES.includes(match[1] as (typeof DASHBOARD_ROUTES)[number]));
@@ -34,6 +36,8 @@ export function portalPageRoute(path: string, authenticated: boolean): PortalPag
       ? { kind: "redirect", location: "/dashboard/overview" }
       : { kind: "asset", assetPath: "/login/" };
   }
+  if (path === "/approve/pairing/") return { kind: "redirect", location: "/approve/pairing" };
+  if (path === "/approve/pairing") return { kind: "asset", assetPath: PAIRING_APPROVAL_ASSET };
   // The activation shell must be reachable before login so a QR fragment can
   // be captured by the browser. Its account data and all mutations still go
   // through authenticated API calls from the page.

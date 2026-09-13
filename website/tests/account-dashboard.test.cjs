@@ -6,8 +6,10 @@ const path = require('node:path');
 const accountRoot = path.join(__dirname, '..', 'tomaspisar.cz', 'account');
 const assetsRoot = path.join(__dirname, '..', 'tomaspisar.cz', 'assets');
 const html = fs.readFileSync(path.join(accountRoot, 'dashboard', 'index.html'), 'utf8');
+const pairingHtml = fs.readFileSync(path.join(accountRoot, 'approve', 'pairing', 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(assetsRoot, 'css', 'pages', 'account.css'), 'utf8');
 const script = fs.readFileSync(path.join(assetsRoot, 'js', 'account', 'account.js'), 'utf8');
+const pairingScript = fs.readFileSync(path.join(assetsRoot, 'js', 'account', 'pairing-approval.js'), 'utf8');
 const categories = ['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help'];
 
 test('dashboard categories have distinct deep links and routed content', () => {
@@ -52,8 +54,20 @@ test('pairing links use a short-lived fragment and survive OTP login', () => {
   assert.match(script, /PENDING_PAIRING_KEY/);
   assert.match(script, /window\.location\.hash\.replace\(\/\^#\//);
   assert.match(script, /sessionStorage\.setItem\(PENDING_PAIRING_KEY/);
-  assert.match(script, /dashboard\/activation#pair=/);
+  assert.match(script, /approve\/pairing#pair=/);
   assert.match(script, /history\.replaceState/);
   assert.match(html, /Scan the QR code shown by LongJumpReplay/);
   assert.match(html, /id="pairing-code"/);
+});
+
+test('QR approval is a standalone page with no dashboard chrome', () => {
+  assert.match(pairingHtml, /class="account-page pairing-approval-page"/);
+  assert.match(pairingHtml, /id="pairing-approve"/);
+  assert.match(pairingHtml, /id="pairing-decline"/);
+  assert.match(pairingHtml, /pairing-approval\.js/);
+  assert.doesNotMatch(pairingHtml, /class="site-header"|data-dashboard-route|account\.js/);
+  assert.match(pairingScript, /\/api\/portal\/pairing\/view/);
+  assert.match(pairingScript, /\/api\/portal\/pairing\/approve/);
+  assert.match(pairingScript, /\/api\/portal\/pairing\/decline/);
+  assert.match(pairingScript, /\/api\/portal\/pairing\/result/);
 });

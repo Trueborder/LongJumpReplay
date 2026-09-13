@@ -19,6 +19,12 @@ describe("customer portal page routing", () => {
     expect(portalPageRoute("/dashboard/", true)).toEqual({ kind: "redirect", location: "/dashboard/overview" });
   });
 
+  it("serves the standalone QR approval shell without exposing the dashboard", () => {
+    expect(portalPageRoute("/approve/pairing", false)).toEqual({ kind: "asset", assetPath: "/approve/pairing/" });
+    expect(portalPageRoute("/approve/pairing", true)).toEqual({ kind: "asset", assetPath: "/approve/pairing/" });
+    expect(portalPageRoute("/approve/pairing/", false)).toEqual({ kind: "redirect", location: "/approve/pairing" });
+  });
+
   it("serves every dashboard category at its own protected URL", () => {
     for (const category of ["overview", "licence", "activation-key", "activation", "devices", "billing", "help"]) {
       const unauthenticated = category === "activation"
