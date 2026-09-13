@@ -21,6 +21,13 @@ export interface VerificationEmail {
   replyTo?: string;
 }
 
+export class EmailDeliveryError extends Error {
+  constructor(public readonly providerStatus: number, detail = "") {
+    super(`email send failed with ${providerStatus}${detail ? `: ${detail}` : ""}`);
+    this.name = "EmailDeliveryError";
+  }
+}
+
 export function verificationEmail(
   code: string,
   ttlMinutes: number,
@@ -118,8 +125,20 @@ function resendMailer(env: Env): Mailer {
         }),
       });
       if (!response.ok) {
-        // Status only - the body can echo the recipient address.
-        throw new Error(`email send failed with ${response.status}`);
+        // Keep provider diagnostics useful without putting the recipient or
+        // provider response into the client-facing error.
+        let providerDetail = "";
+        try {
+          const body = await response.json() as { name?: unknown; message?: unknown; statusCode?: unknown };
+          const name = typeof body.name === "string" ? body.name : "";
+          const message = typeof body.message === "string"
+            ? body.message.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]").slice(0, 160)
+            : "";
+          providerDetail = [name, message].filter(Boolean).join(": ");
+        } catch {
+          // A non-JSON provider response is still represented by its status.
+        }
+        throw new EmailDeliveryError(response.status, providerDetail);
       }
     },
   };

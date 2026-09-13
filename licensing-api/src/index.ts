@@ -86,7 +86,7 @@ import {
   purgeOldDeviceActivity,
 } from "./db";
 import type { DeviceMetadata } from "./db";
-import { sendContactMessage, sendVerificationCode } from "./email";
+import { EmailDeliveryError, sendContactMessage, sendVerificationCode } from "./email";
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
   DEAD_SUBSCRIPTION_STATUSES,
@@ -123,6 +123,17 @@ function json(data: unknown, status = 200, headers?: HeadersInit): Response {
 /** User-facing errors only. Never leaks table names, SQL or stack traces. */
 function fail(code: string, message: string, status = 400): Response {
   return json({ error: code, message }, status);
+}
+
+function emailDeliveryFailure(error: unknown): Response {
+  if (error instanceof EmailDeliveryError && error.providerStatus === 422) {
+    return fail(
+      "email_provider_restricted",
+      "Email delivery is not enabled for this address yet. The account email service needs a verified sending domain before new accounts can be registered.",
+      503,
+    );
+  }
+  return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
 }
 
 class InvalidJsonError extends Error {}
@@ -598,9 +609,10 @@ export async function requestCode(request: Request, env: Env, purpose: Verificat
       const code = await createEmailOnlyCode(env, email, purpose);
       await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), purpose);
       await logEvent(env.DB, "portal_login_requested", null, { result: "sent" });
-    } catch {
+    } catch (error) {
       await logEvent(env.DB, "portal_login_requested", null, { result: "send failed" });
-      return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
+      console.error("portal login email send failed", error instanceof Error ? error.message : "unknown");
+      return emailDeliveryFailure(error);
     }
     return generic;
   }
@@ -614,9 +626,10 @@ export async function requestCode(request: Request, env: Env, purpose: Verificat
       const code = await createEmailOnlyCode(env, email, purpose);
       await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), purpose);
       await logEvent(env.DB, "verification_requested", null, { result: "sent before purchase" });
-    } catch {
+    } catch (error) {
       await logEvent(env.DB, "verification_requested", null, { result: "send failed" });
-      return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
+      console.error("activation email send failed", error instanceof Error ? error.message : "unknown");
+      return emailDeliveryFailure(error);
     }
     return generic;
   }
@@ -648,9 +661,10 @@ export async function requestCode(request: Request, env: Env, purpose: Verificat
   try {
     await sendVerificationCode(env, email, code, Math.floor(cfg.verificationCodeTtlSeconds / 60), purpose);
     await logEvent(env.DB, "verification_requested", license.id, { result: "sent" });
-  } catch {
+  } catch (error) {
     await logEvent(env.DB, "verification_requested", license.id, { result: "send failed" });
-    return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
+    console.error("activation email send failed", error instanceof Error ? error.message : "unknown");
+    return emailDeliveryFailure(error);
   }
   return generic;
 }
@@ -1376,9 +1390,10 @@ async function portalRegistrationRequestCode(request: Request, env: Env): Promis
   try {
     await sendVerificationCode(env, email, code, Math.floor(settings(env).verificationCodeTtlSeconds / 60), "registration");
     await logEvent(env.DB, "portal_registration_requested", null, { result: "sent" });
-  } catch {
+  } catch (error) {
     await logEvent(env.DB, "portal_registration_requested", null, { result: "send_failed" });
-    return fail("email_failed", "Could not send the verification email. Please try again shortly.", 502);
+    console.error("portal registration email send failed", error instanceof Error ? error.message : "unknown");
+    return emailDeliveryFailure(error);
   }
   return registrationGeneric(env);
 }
