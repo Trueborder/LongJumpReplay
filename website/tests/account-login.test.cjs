@@ -14,8 +14,9 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(login, /id="code-field"/);
   assert.match(login, /id="change-email"/);
   assert.match(login, /id="resend-code"/);
-  assert.match(login, /class="login-info-button"/);
-  assert.match(login, /id="login-info-tooltip"/);
+  assert.doesNotMatch(login, /Having trouble\?/);
+  assert.doesNotMatch(login, /class="login-info-button"/);
+  assert.doesNotMatch(login, /id="login-info-tooltip"/);
   assert.doesNotMatch(login, /SECURE SIGN IN/);
   assert.doesNotMatch(login, /class="panel-icon"/);
   assert.doesNotMatch(login, /class="form-note"/);
