@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const productPage = fs.readFileSync(
-  path.join(__dirname, '..', 'tomaspisar.cz', 'software', 'longjumpreplay', 'index.html'),
+  path.join(__dirname, '..', 'tomaspisar.cz', 'products', 'long-jump-replay', 'index.html'),
   'utf8'
 );
 

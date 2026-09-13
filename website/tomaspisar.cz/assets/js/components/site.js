@@ -9,54 +9,62 @@
     const favicon = document.createElement('link');
     favicon.rel = 'icon';
     favicon.type = 'image/svg+xml';
-    favicon.href = '/assets/favicon.svg';
+    favicon.href = '/assets/icons/favicon.svg';
     document.head.append(favicon);
   }
 
   const cfg = window.SITE_CONFIG || {};
   const product = cfg.products?.longJumpReplay || {};
 
-  // Product pages keep the global site navigation, then add a small local
-  // wayfinding row so downloads, licensing, and privacy stay in the product
-  // namespace instead of being mistaken for site-wide pages.
-  const productContext = location.pathname.startsWith('/software/relaylab/')
-    ? { name: 'RelayLab', route: '/software/relaylab/', links: [{ label: 'Overview', cs: 'Přehled', href: '/software/relaylab/' }] }
-    : location.pathname.startsWith('/software/longjumpreplay/')
-      ? { name: 'LongJumpReplay', route: '/software/longjumpreplay/', links: [
-          { label: 'Overview', cs: 'Přehled', href: '/software/longjumpreplay/' },
-          { label: 'Download', cs: 'Stažení', href: '/software/longjumpreplay/download/' },
-          { label: 'Licensing', cs: 'Licence', href: '/software/longjumpreplay/licensing/' },
-          { label: 'Privacy', cs: 'Soukromí', href: '/software/longjumpreplay/privacy/' }
-        ] }
+  // LongJumpReplay has a small set of product-level pages, so keep their
+  // navigation contextual without duplicating the global site header.
+  const renderProductContext = () => {
+    const pathname = window.location.pathname.replace(/\/?$/, '/');
+    const context = pathname.startsWith('/products/long-jump-replay/')
+      ? {
+          name: 'LongJumpReplay',
+          route: '/products/long-jump-replay/',
+          links: [
+            { en: 'Overview', cs: 'Přehled', href: '/products/long-jump-replay/' },
+            { en: 'Licensing', cs: 'Licence', href: '/products/long-jump-replay/licensing/' },
+            { en: 'Privacy', cs: 'Soukromí', href: '/products/long-jump-replay/privacy/' }
+          ]
+        }
       : null;
-  if (productContext && !document.querySelector('[data-product-context]')) {
     const header = document.querySelector('.site-header');
-    if (header) {
-      const context = document.createElement('nav');
-      context.className = 'product-context-nav';
-      context.dataset.productContext = '';
-      context.setAttribute('aria-label', `${productContext.name} navigation`);
-      const label = document.createElement('span');
-      label.className = 'product-context-name';
-      label.textContent = productContext.name;
-      context.append(label);
-      productContext.links.forEach(({ label: linkLabel, cs, href }) => {
-        const link = document.createElement('a');
-        link.href = href;
-        link.dataset.en = linkLabel;
-        link.dataset.cs = cs;
-        link.textContent = linkLabel;
-        if (location.pathname === href) link.setAttribute('aria-current', 'page');
-        context.append(link);
-      });
-      header.insertAdjacentElement('afterend', context);
-    }
-  }
+    if (!context || !header || document.querySelector('[data-product-context]')) return;
+
+    const nav = document.createElement('nav');
+    nav.className = 'product-context-nav';
+    nav.dataset.productContext = '';
+    nav.setAttribute('aria-label', `${context.name} product navigation`);
+
+    const productLink = document.createElement('a');
+    productLink.className = 'product-context-brand';
+    productLink.href = context.route;
+    productLink.innerHTML = '<span class="product-context-kicker" data-en="PRODUCT" data-cs="PRODUKT">PRODUCT</span><strong>LongJumpReplay</strong>';
+    nav.append(productLink);
+
+    const links = document.createElement('div');
+    links.className = 'product-context-links';
+    context.links.forEach(({ en, cs, href }) => {
+      const link = document.createElement('a');
+      link.href = href;
+      link.dataset.en = en;
+      link.dataset.cs = cs;
+      link.textContent = en;
+      if (pathname === href) link.setAttribute('aria-current', 'page');
+      links.append(link);
+    });
+    nav.append(links);
+    header.insertAdjacentElement('afterend', nav);
+  };
+  renderProductContext();
 
   // The readiness page is deliberately informational: it helps an operator
   // size a station before an event without pretending to probe the computer
   // from the public website. The desktop app remains authoritative at runtime.
-  if (location.pathname === '/software/longjumpreplay/' && !document.querySelector('[data-ljr-readiness]')) {
+  if (location.pathname === '/products/long-jump-replay/' && !document.querySelector('[data-ljr-readiness]')) {
     const requirements = document.querySelector('.requirements-list')?.closest('.content-section');
     if (requirements) {
       const section = document.createElement('section');
@@ -196,12 +204,12 @@
 
   const ui = {
     en: {
-      skip: 'Skip to content', software: 'Software', downloads: 'Downloads', about: 'About', contact: 'Contact', account: 'Account',
+      skip: 'Skip to content', software: 'Software', about: 'About', contact: 'Contact', account: 'Account',
       menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
       footer: 'Independent software development from the Czech Republic.', cookies: 'Cookie settings'
     },
     cs: {
-      skip: 'Přejít na obsah', software: 'Software', downloads: 'Stažení', about: 'O mně', contact: 'Kontakt', account: 'Účet',
+      skip: 'Přejít na obsah', software: 'Software', about: 'O mně', contact: 'Kontakt', account: 'Účet',
       menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
       footer: 'Nezávislý vývoj softwaru z České republiky.', cookies: 'Nastavení cookies'
     }
@@ -514,7 +522,7 @@
     const text = document.createElement('p');
     text.textContent = copy.text + ' ';
     const more = document.createElement('a');
-    more.href = 'https://tomaspisar.cz/privacy/';
+    more.href = 'https://tomaspisar.cz/legal/privacy/';
     more.className = 'text-link';
     more.textContent = copy.more + ' →';
     text.append(more);

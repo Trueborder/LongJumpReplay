@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Core = require('../tomaspisar.cz/software/relaylab/relaylab-core.js');
+const Core = require('../tomaspisar.cz/assets/js/pages/relaylab-core.js');
 
 const swimmer = (id, performances) => ({ id, firstName: `Swimmer ${id}`, lastName: '', performances });
 const perf = (stroke, timeMs, extra = {}) => ({ stroke, distance: 50, poolLength: 25, timeMs, date: '2026-06-01', relayPart: false, ...extra });

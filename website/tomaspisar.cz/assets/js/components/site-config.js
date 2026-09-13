@@ -8,10 +8,10 @@ window.SITE_CONFIG = {
     longJumpReplay: {
       key: "longjumpreplay",
       name: "LongJumpReplay",
-      route: "/software/longjumpreplay/",
-      downloadRoute: "/software/longjumpreplay/download/",
-      licensingRoute: "/software/longjumpreplay/licensing/",
-      privacyRoute: "/software/longjumpreplay/privacy/",
+      route: "/products/long-jump-replay/",
+      downloadRoute: "/products/long-jump-replay/download/",
+      licensingRoute: "/products/long-jump-replay/licensing/",
+      privacyRoute: "/products/long-jump-replay/privacy/",
       version: "6.2.10",
       versionShort: "6.2",
       price: "4 990 Kč",
@@ -20,12 +20,12 @@ window.SITE_CONFIG = {
       releaseManifestUrl: "https://files.tomaspisar.cz/latest.json",
       trialHours: 72,
       trialExportLimit: 3,
-      screenshots: ["/screenshots/main-screen.png", "/screenshots/recordings.png", "/screenshots/competition-board.png"]
+      screenshots: ["/assets/images/long-jump-replay/main-screen.png", "/assets/images/long-jump-replay/recordings.png", "/assets/images/long-jump-replay/competition-board.png"]
     },
     relayLab: {
       key: "relaylab",
       name: "RelayLab",
-      route: "/software/relaylab/",
+      route: "/products/relaylab/",
       platform: "Web",
       status: "Available"
     }

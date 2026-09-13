@@ -294,6 +294,16 @@ def _dialog_kind_from_text(title: str, message: str) -> str:
     return "info"
 
 
+def _confirmation_kind_from_text(title: str, message: str) -> str:
+    """Use a warning icon when confirming an action can lose user data."""
+    text = f"{title} {message}".lower()
+    destructive_tokens = (
+        "delete", "delet", "remove", "discard", "unsaved", "overwrite", "lose", "lost", "destroy",
+        "clear", "reset", "permanent", "smaz", "odstran", "neulo", "ztr",
+    )
+    return "warning" if any(token in text for token in destructive_tokens) else "question"
+
+
 def _dialog_icon(parent: tk.Misc, palette: dict[str, str], kind: str) -> tk.Canvas:
     """Create a compact Windows-like semantic symbol without external assets."""
     symbols = {
@@ -380,7 +390,7 @@ def ask_themed_yes_no(parent: tk.Misc, title: str, message: str, *, yes: str = "
     return themed_message(
         parent, title, message,
         buttons=((no, "no", "Secondary.TButton"), (yes, "yes", "Primary.TButton")),
-        kind="question",
+        kind=_confirmation_kind_from_text(title, message),
     ) == "yes"
 
 
@@ -390,7 +400,7 @@ def ask_themed_yes_no_cancel(
     value = themed_message(
         parent, title, message,
         buttons=((cancel, "cancel", "Secondary.TButton"), (no, "no", "Secondary.TButton"), (yes, "yes", "Primary.TButton")),
-        kind="question",
+        kind=_confirmation_kind_from_text(title, message),
     )
     return True if value == "yes" else False if value == "no" else None
 

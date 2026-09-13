@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {
   deriveDashboardEntitlement,
   deriveDevicePortalState,
-} = require('../tomaspisar.cz/account/account-state.js');
+} = require('../tomaspisar.cz/assets/js/account/state.js');
 
 test('a canceled subscription is history, not an active entitlement', () => {
   const state = deriveDashboardEntitlement(

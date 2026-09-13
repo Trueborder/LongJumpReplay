@@ -11,6 +11,7 @@ from src.theme import (
     bind_resize_only,
     button_style,
     configure_popup,
+    _confirmation_kind_from_text,
 )
 
 
@@ -20,6 +21,13 @@ class _FullscreenValue:
 
     def attributes(self, _name: str) -> object:
         return self.value
+
+
+def test_data_loss_confirmations_use_warning_icon_but_questions_remain_questions() -> None:
+    assert _confirmation_kind_from_text("Delete recording", "This file will be deleted.") == "warning"
+    assert _confirmation_kind_from_text("Confirm deletion", "The recording will be permanently removed.") == "warning"
+    assert _confirmation_kind_from_text("Unsaved changes", "Discard changes?") == "warning"
+    assert _confirmation_kind_from_text("Continue?", "Do you want to continue?") == "question"
 
 
 class _BindableWidget:

@@ -9,8 +9,8 @@
   <meta name="description" content="Your LongJumpReplay purchase is complete. Download, install and activate.">
   <title>Purchase complete — LongJumpReplay</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/overrides.css">
+  <link rel="stylesheet" href="/assets/css/tokens.css"><link rel="stylesheet" href="/assets/css/global.css"><link rel="stylesheet" href="/assets/css/pages/legacy.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
 
 </head>
 <body>
@@ -19,8 +19,8 @@
     <a class="brand" href="/"><span class="brand-mark">TP</span><span>Tomáš Pisár<small>Software / Development</small></span></a>
     <button class="menu-toggle" data-menu-toggle type="button">☰</button>
     <nav class="main-nav">
-      <a href="/software/" data-ui="software">Software</a>
-      <a href="/download/" data-ui="downloads">Downloads</a>
+      <a href="/products/" data-ui="software">Software</a>
+
       <a href="/about/" data-ui="about">About</a>
       <a href="/contact/" data-ui="contact">Contact</a>
     <a href="https://account.tomaspisar.cz/" data-ui="account" data-en="Account" data-cs="Účet">Account</a></nav>
@@ -36,7 +36,7 @@
       <p data-en="Your payment went through and your license has been created against the email address you used at checkout. Three short steps and you are running." data-cs="Vaše platba proběhla a licence byla vytvořena na e-mailovou adresu, kterou jste použili při platbě. Tři krátké kroky a můžete začít.">Your payment went through and your license has been created against the email address you used at checkout. Three short steps and you are running.</p>
       <div class="button-row">
         <a class="button button-primary" data-installer-url href="https://files.tomaspisar.cz/LJR_setup.exe" data-en="Download for Windows ↓" data-cs="Stáhnout pro Windows ↓">Download for Windows ↓</a>
-        <a class="button button-outline" href="/software/longjumpreplay/licensing/" data-en="How activation works" data-cs="Jak probíhá aktivace">How activation works</a>
+        <a class="button button-outline" href="/products/long-jump-replay/licensing/" data-en="How activation works" data-cs="Jak probíhá aktivace">How activation works</a>
       </div>
       <aside class="download-safety-alert" role="note" aria-labelledby="download-safety-title">
         <div class="download-safety-icon" aria-hidden="true">
@@ -113,7 +113,7 @@
     </div>
   </dialog>
   <footer class="site-footer"><span>© 2026 Tomáš Pisár</span><span data-ui="footer">Independent software development from the Czech Republic.</span><span>tomaspisar.cz</span></footer>
-  <script src="/site.config.js"></script><script src="/script.js"></script>
+  <script src="/assets/js/components/site-config.js"></script><script src="/assets/js/components/site.js"></script>
   <script>
     // Stripe can append ?session_id={CHECKOUT_SESSION_ID} to the redirect. It is
     // shown only as a reference the customer can quote in a support email; it is

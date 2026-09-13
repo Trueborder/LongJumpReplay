@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const accountRoot = path.join(__dirname, '..', 'tomaspisar.cz', 'account');
+const assetsRoot = path.join(__dirname, '..', 'tomaspisar.cz', 'assets');
 const html = fs.readFileSync(path.join(accountRoot, 'dashboard', 'index.html'), 'utf8');
-const css = fs.readFileSync(path.join(accountRoot, 'account.css'), 'utf8');
-const script = fs.readFileSync(path.join(accountRoot, 'account.js'), 'utf8');
+const css = fs.readFileSync(path.join(assetsRoot, 'css', 'pages', 'account.css'), 'utf8');
+const script = fs.readFileSync(path.join(assetsRoot, 'js', 'account', 'account.js'), 'utf8');
 const categories = ['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help'];
 
 test('dashboard categories have distinct deep links and routed content', () => {

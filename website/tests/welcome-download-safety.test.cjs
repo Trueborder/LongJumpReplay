@@ -5,9 +5,9 @@ const path = require('node:path');
 
 const siteRoot = path.join(__dirname, '..', 'tomaspisar.cz');
 const html = fs.readFileSync(path.join(siteRoot, 'welcome', 'index.html'), 'utf8');
-const downloadPage = fs.readFileSync(path.join(siteRoot, 'software', 'longjumpreplay', 'download', 'index.html'), 'utf8');
-const css = fs.readFileSync(path.join(siteRoot, 'overrides.css'), 'utf8');
-const script = fs.readFileSync(path.join(siteRoot, 'script.js'), 'utf8');
+const downloadPage = fs.readFileSync(path.join(siteRoot, 'products', 'long-jump-replay', 'download', 'index.html'), 'utf8');
+const css = fs.readFileSync(path.join(siteRoot, 'assets', 'css', 'components.css'), 'utf8');
+const script = fs.readFileSync(path.join(siteRoot, 'assets', 'js', 'components', 'site.js'), 'utf8');
 
 test('purchase confirmation shows download and SmartScreen guidance beside the installer action', () => {
   const download = html.indexOf('data-installer-url');

@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const css = fs.readFileSync(
-  path.resolve(__dirname, '..', 'tomaspisar.cz', 'overrides.css'),
+  path.resolve(__dirname, '..', 'tomaspisar.cz', 'assets', 'css', 'components.css'),
   'utf8',
 );
 

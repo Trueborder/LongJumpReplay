@@ -13,7 +13,7 @@ test('the website has a bilingual styled 404 fallback', () => {
   assert.match(page, /data-en="This page is not here\."/);
   assert.match(page, /data-cs="Tato stránka tu není\."/);
   assert.match(page, /href="\/"/);
-  assert.match(page, /href="\/software\/"/);
+  assert.match(page, /href="\/products\/"/);
 });
 
 test('Workers Assets is configured to serve the 404 page for unknown paths', () => {

@@ -6,15 +6,29 @@ const SWIMMING_API = 'https://vysledky.czechswimming.cz/cz.zma.csps.portal.rest/
 const SWIMMING_ORIGIN = 'https://vysledky.czechswimming.cz';
 
 const REDIRECTS: Record<string, string> = {
-  '/download': '/software/longjumpreplay/download/',
-  '/download/': '/software/longjumpreplay/download/',
-  '/download/ljr': '/software/longjumpreplay/download/',
-  '/download/ljr/': '/software/longjumpreplay/download/',
-  '/licensing': '/software/longjumpreplay/licensing/',
-  '/licensing/': '/software/longjumpreplay/licensing/',
-  '/swimming/relaylab': '/software/relaylab/',
-  '/swimming/relaylab/': '/software/relaylab/'
+  '/download': '/products/long-jump-replay/download/',
+  '/download/': '/products/long-jump-replay/download/',
+  '/download/ljr': '/products/long-jump-replay/download/',
+  '/download/ljr/': '/products/long-jump-replay/download/',
+  '/licensing': '/products/long-jump-replay/licensing/',
+  '/licensing/': '/products/long-jump-replay/licensing/',
+  '/swimming/relaylab': '/products/relaylab/',
+  '/swimming/relaylab/': '/products/relaylab/'
 };
+
+function legacyRouteRedirect(pathname: string): string | null {
+  const migrations = [
+    ['/software/longjumpreplay', '/products/long-jump-replay'],
+    ['/software/relaylab', '/products/relaylab']
+  ] as const;
+  for (const [legacy, target] of migrations) {
+    if (pathname === legacy || pathname === `${legacy}/`) return `${target}/`;
+    if (pathname.startsWith(`${legacy}/`)) return `${target}${pathname.slice(legacy.length)}`;
+  }
+  if (pathname === '/software' || pathname === '/software/') return '/products/';
+  if (pathname === '/privacy' || pathname === '/privacy/') return '/legal/privacy/';
+  return null;
+}
 
 function json(data: unknown, status = 200, cache = 'no-store'): Response {
   return new Response(JSON.stringify(data), {
@@ -137,11 +151,11 @@ export default {
   async fetch(request: Request, env: SiteEnv): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/swimming/')) return handleSwimmingApi(request, url);
-    const redirectTarget = REDIRECTS[url.pathname];
+    const redirectTarget = legacyRouteRedirect(url.pathname) || REDIRECTS[url.pathname];
     if (redirectTarget) {
       const destination = new URL(redirectTarget, url.origin);
       destination.search = url.search;
-      return new Response(null, { status: 308, headers: { location: destination.toString(), 'cache-control': 'public, max-age=3600' } });
+      return new Response(null, { status: 301, headers: { location: destination.toString(), 'cache-control': 'public, max-age=3600' } });
     }
     return env.ASSETS.fetch(request);
   },

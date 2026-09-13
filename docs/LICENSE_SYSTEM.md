@@ -61,10 +61,10 @@ Non-secret values, in `licensing-api/wrangler.jsonc`:
 | `RATE_LIMIT_*` | see `src/config.ts` | Overrides; omit in production |
 
 The public website Contact form posts to `/api/contact`. Its public Turnstile
-site key is configured in `website/tomaspisar.cz/site.config.js`; the matching
+site key is configured in `website/tomaspisar.cz/assets/js/components/site-config.js`; the matching
 private secret must be added to the Worker as `CONTACT_TURNSTILE_SECRET`.
 
-The website reads matching values from `website/tomaspisar.cz/site.config.js`
+The website reads matching values from `website/tomaspisar.cz/assets/js/components/site-config.js`
 (`licensing.deviceLimit`, `offlineGraceDays`, `updateMonths`). **These two are
 not automatically linked** - changing a Worker value means changing the site
 value too, or the customer-facing promise drifts from the enforcement.
@@ -327,7 +327,7 @@ identifier, activation and verification timestamps, and an event log. Not
 stored: card details, verification codes (only an HMAC), hardware serials,
 computer names, locations, or anything about competitions and athletes.
 
-`website/tomaspisar.cz/privacy/index.html` describes this. It was updated when
+`website/tomaspisar.cz/legal/privacy/index.html` describes this. It was updated when
 the site copy changed and should be re-read once the system is actually live.
 
 ## Remaining release gates

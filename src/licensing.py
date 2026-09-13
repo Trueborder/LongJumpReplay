@@ -665,7 +665,7 @@ def ensure_license_or_trial(
     send_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
     ttk.Button(licence_buttons, text=copy["alternate"], command=show_key_activation).grid(row=1, column=0, sticky="ew", padx=(0, 6))
     ttk.Button(licence_buttons, text=copy["pair"], command=show_pairing).grid(row=1, column=1, sticky="ew", padx=(6, 0))
-    ttk.Button(licence_buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/software/longjumpreplay/#buy")).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+    ttk.Button(licence_buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/products/long-jump-replay/#buy")).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
     ttk.Separator(body).pack(fill="x", pady=(18, 10))
     ttk.Label(body, text=copy["trial_limits"], wraplength=620, justify="left").pack(anchor="w")
     dialog.protocol("WM_DELETE_WINDOW", cancel)

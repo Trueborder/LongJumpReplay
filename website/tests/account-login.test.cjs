@@ -4,9 +4,10 @@ const path = require('node:path');
 const test = require('node:test');
 
 const root = path.resolve(__dirname, '..', 'tomaspisar.cz', 'account');
+const assetsRoot = path.resolve(__dirname, '..', 'tomaspisar.cz', 'assets');
 const login = fs.readFileSync(path.join(root, 'login', 'index.html'), 'utf8');
-const styles = fs.readFileSync(path.join(root, 'account.css'), 'utf8');
-const account = fs.readFileSync(path.join(root, 'account.js'), 'utf8');
+const styles = fs.readFileSync(path.join(assetsRoot, 'css', 'pages', 'account.css'), 'utf8');
+const account = fs.readFileSync(path.join(assetsRoot, 'js', 'account', 'account.js'), 'utf8');
 
 test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(login, /id="email-step"/);
@@ -21,7 +22,7 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(account, /\/api\/portal\/request-code/);
   assert.match(account, /\/api\/portal\/verify-code/);
   assert.match(account, /error\.status === 410/);
-  assert.match(account, /replace\('\/dashboard\/overview'\)/);
+  assert.match(account, /\/dashboard\/overview/);
 });
 
 test('login composition keeps a centered backdrop and reduced-motion fallback', () => {

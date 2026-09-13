@@ -1,35 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap");
-
 /*
   Evidence Desk redesign
   Live cyan = capture, review amber = human decision, coral = warning only.
 */
-:root {
-  --bg: #f2f0e9;
-  --bg-soft: #e9ece7;
-  --surface: #fbfaf6;
-  --surface-2: #dfe8e4;
-  --text: #11191c;
-  --muted: #58676b;
-  --line: #bcc9c7;
-  --cyan: #087f70;
-  --cyan-strong: #05695e;
-  --amber: #9c5d08;
-  --coral: #a74231;
-  --shadow: rgba(25, 42, 44, .16);
-  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --body: "Barlow", "Segoe UI", sans-serif;
-  --mono: "DM Mono", Consolas, monospace;
-  --space-1: .5rem;
-  --space-2: 1rem;
-  --space-3: 1.5rem;
-  --space-4: 2rem;
-  --space-6: 3rem;
-  --space-8: 4rem;
-  --header-height: 76px;
-  --page-width: 1240px;
-}
-
 * { box-sizing: border-box; }
 
 html {
@@ -340,7 +312,7 @@ h2 em { color: var(--cyan); }
 }
 
 .hero-image {
-  background: linear-gradient(90deg, rgba(4, 14, 18, .94), rgba(4, 14, 18, .2) 68%), url("assets/long_jump_splash.png") 56% center / cover;
+  background: linear-gradient(90deg, rgba(4, 14, 18, .94), rgba(4, 14, 18, .2) 68%), url("/assets/images/long-jump-replay/long_jump_splash.png") 56% center / cover;
   filter: saturate(.68) contrast(1.08);
   transform: scale(1.015);
 }

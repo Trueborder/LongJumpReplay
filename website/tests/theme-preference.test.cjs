@@ -4,12 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const siteRoot = path.join(__dirname, '..', 'tomaspisar.cz');
-const script = fs.readFileSync(path.join(siteRoot, 'script.js'), 'utf8');
+const script = fs.readFileSync(path.join(siteRoot, 'assets', 'js', 'components', 'site.js'), 'utf8');
 const css = [
-  'styles.css',
-  'redesign.css',
-  'overrides.css',
-  path.join('account', 'account.css')
+  path.join('assets', 'css', 'tokens.css'),
+  path.join('assets', 'css', 'global.css'),
+  path.join('assets', 'css', 'pages', 'legacy.css'),
+  path.join('assets', 'css', 'components.css'),
+  path.join('assets', 'css', 'pages', 'account.css')
 ].map((file) => fs.readFileSync(path.join(siteRoot, file), 'utf8')).join('\n');
 
 const htmlFiles = [];

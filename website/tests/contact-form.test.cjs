@@ -5,8 +5,8 @@ const test = require('node:test');
 
 const siteRoot = path.resolve(__dirname, '..', 'tomaspisar.cz');
 const html = fs.readFileSync(path.join(siteRoot, 'contact', 'index.html'), 'utf8');
-const script = fs.readFileSync(path.join(siteRoot, 'contact-form.js'), 'utf8');
-const config = fs.readFileSync(path.join(siteRoot, 'site.config.js'), 'utf8');
+const script = fs.readFileSync(path.join(siteRoot, 'assets', 'js', 'pages', 'contact.js'), 'utf8');
+const config = fs.readFileSync(path.join(siteRoot, 'assets', 'js', 'components', 'site-config.js'), 'utf8');
 
 test('contact page uses a labelled form and keeps direct support contact visible', () => {
   assert.match(html, /<form data-contact-form novalidate>/);

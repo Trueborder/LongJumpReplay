@@ -23,13 +23,13 @@ the production endpoint and live webhook are already deployed.
 ## Where the numbers live
 
 All customer-visible licensing figures come from `licensing` in
-`website/tomaspisar.cz/site.config.js`:
+`website/tomaspisar.cz/assets/js/components/site-config.js`:
 
 ```js
 licensing: { deviceLimit: 2, offlineGraceDays: 30, updateMonths: 12 }
 ```
 
-`script.js` writes them into `[data-license-devices]`, `[data-license-grace]`
+`assets/js/components/site.js` writes them into `[data-license-devices]`, `[data-license-grace]`
 and `[data-license-updates]`. Changing a number there changes every page at
 once. Keep these in step with whatever the backend actually enforces — they are
 presented to customers as commitments.
@@ -97,5 +97,5 @@ release gate remains separate: publishable Terms, seller identification
 (name, address, IČO, VAT status), delivery timing, the 14-day withdrawal and
 refund information, and the ČOI out-of-court dispute body must be supplied and
 reviewed before treating the public checkout as legally complete.
-`privacy/index.html` describes server-side storage of email addresses and
+`legal/privacy/index.html` describes server-side storage of email addresses and
 device activations and should receive the same final review.
