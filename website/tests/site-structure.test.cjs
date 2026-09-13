@@ -49,6 +49,9 @@ test('LongJumpReplay uses a compact contextual product navigation row', () => {
   assert.match(siteScript, /Licensing/);
   assert.match(siteScript, /Privacy/);
   assert.doesNotMatch(siteScript, /en: 'Download', cs: 'Stáhnout'/);
+  assert.match(siteScript, /product-context-action/);
+  assert.match(siteScript, /products\/long-jump-replay\/download/);
   assert.match(componentCss, /\.product-context-nav/);
   assert.match(componentCss, /\.product-context-links/);
+  assert.match(componentCss, /\.product-context-action/);
 });

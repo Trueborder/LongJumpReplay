@@ -47,18 +47,26 @@
 
     const links = document.createElement('div');
     links.className = 'product-context-links';
-    context.links.forEach(({ en, cs, href }) => {
-      const link = document.createElement('a');
-      link.href = href;
-      link.dataset.en = en;
-      link.dataset.cs = cs;
-      link.textContent = en;
-      if (pathname === href) link.setAttribute('aria-current', 'page');
-      links.append(link);
-    });
-    nav.append(links);
-    header.insertAdjacentElement('afterend', nav);
-  };
+     context.links.forEach(({ en, cs, href }) => {
+       const link = document.createElement('a');
+       link.href = href;
+       link.dataset.en = en;
+       link.dataset.cs = cs;
+       link.textContent = en;
+       if (pathname === href) link.setAttribute('aria-current', 'page');
+       links.append(link);
+     });
+     nav.append(links);
+
+     const download = document.createElement('a');
+     download.className = 'button button-primary product-context-action';
+     download.href = '/products/long-jump-replay/download/';
+     download.dataset.en = 'Download';
+     download.dataset.cs = 'Stáhnout';
+     download.textContent = 'Download';
+     nav.append(download);
+     header.insertAdjacentElement('afterend', nav);
+   };
   renderProductContext();
 
   // The readiness page is deliberately informational: it helps an operator

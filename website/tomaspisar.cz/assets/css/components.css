@@ -122,6 +122,14 @@ body::before { display: none; }
 .product-context-links a:focus-visible,
 .product-context-links a[aria-current="page"] { color: var(--text); background: color-mix(in srgb, var(--cyan) 13%, transparent); }
 
+.product-context-action {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: .65rem .9rem;
+  border-radius: 11px;
+  font-size: .68rem;
+}
+
 .icon-button,
 .language-button,
 .menu-toggle {
@@ -657,4 +665,5 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
   .product-context-brand { min-height: 38px; padding: .65rem .8rem; }
   .product-context-links { width: 100%; }
   .product-context-links a { min-height: 38px; padding: .65rem .7rem; font-size: .68rem; }
+  .product-context-action { align-self: stretch; text-align: center; }
 }
