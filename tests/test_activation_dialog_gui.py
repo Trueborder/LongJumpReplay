@@ -56,6 +56,13 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
             widget for widget in _descendants(dialog)
             if isinstance(widget, ttk.Button) and widget.cget("text") == copy["send"]
         )
+        pair = next(
+            widget for widget in _descendants(dialog)
+            if isinstance(widget, ttk.Button) and widget.cget("text") == copy["pair"]
+        )
+        dialog.update_idletasks()
+        observed["pair_is_primary"] = pair.cget("style") == "Primary.TButton"
+        observed["pair_precedes_email"] = pair.winfo_rooty() < send.winfo_rooty()
         initial_height = dialog.winfo_height()
         send.invoke()
         assert _wait_until(root, request_started.is_set)
@@ -138,6 +145,8 @@ def test_code_step_has_back_and_activate_actions(monkeypatch, language):
         "progress_thickness": 10,
         "progress_moves_while_working": True,
         "send_disabled_while_working": True,
+        "pair_is_primary": True,
+        "pair_precedes_email": True,
     }
 
 

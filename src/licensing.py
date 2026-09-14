@@ -210,7 +210,7 @@ def _activation_copy(language: str) -> dict[str, str]:
     if language == "cs":
         return {
             "pair_code": "Párovací kód", "pair_link": "Odkaz portálu", "pair_scan": "Naskenujte QR kód pro otevření párování", "pair_opened": "Párovací stránka je otevřená v telefonu.", "pair_expires": "Platí ještě {seconds} s.", "pair_expired": "Párování vypršelo. Zavřete toto okno a začněte znovu.", "pair_qr_unavailable": "QR kód není v tomto prostředí dostupný. Použijte odkaz nebo šestimístný kód.",
-            "title": "Aktivace LongJumpReplay", "intro": "Aktivujte počítač e-mailem použitým při nákupu. Pošleme vám šestimístný ověřovací kód.",
+            "title": "Aktivace LongJumpReplay", "intro": "Vyberte způsob propojení tohoto počítače s licencí LongJumpReplay.",
             "email": "E-mail z nákupu", "send": "Poslat ověřovací kód", "code": "Ověřovací kód z e-mailu",
             "activate": "Aktivovat tento počítač", "code_sent": "Kód byl odeslán na {email}. Platí {minutes} minut. Zkontrolujte také spam.",
             "activated": "Hotovo. Tento počítač je aktivován.", "working": "Pracuji…", "start": "Spustit 72hodinové hodnocení",
@@ -220,13 +220,16 @@ def _activation_copy(language: str) -> dict[str, str]:
             "key_hint": "Klíč ve formátu 0000-ABCD-2EFG najdete ve svém zákaznickém účtu.", "key_activate": "Aktivovat tento počítač",
             "back": "Zpět", "need_email": "Zadejte platnou e-mailovou adresu.", "need_code": "Zadejte šestimístný kód z e-mailu.",
             "need_key": "Zadejte platný aktivační klíč.", "buy": "Koupit licenci na tomaspisar.cz",
-            "licence_actions": "Aktivace licence", "evaluation_actions": "Zkušební režim",
+            "recommended": "DOPORUČENO", "pair_summary": "Nejrychlejší a nejbezpečnější způsob. Naskenujte QR kód a schvalte tento počítač v zákaznickém účtu.",
+            "licence_actions": "Další způsoby aktivace", "email_title": "Ověření e-mailem", "email_hint": "Použijte e-mail, se kterým byla licence zakoupena.",
+            "key_summary": "Máte opakovaně použitelný klíč ze zákaznického účtu?", "buy_hint": "Ještě nemáte licenci?",
+            "evaluation_actions": "Zkušební režim",
             "trial_limits": "72hodinové hodnocení slouží pro kameru, zmrazení a přehrávání. Soutěžní režim, rozhodování, výsledky a důkazní balíčky jsou vypnuté. Zahrnuje 3 samostatné exporty videa.",
             "no_active_license": "E-mail byl ověřen, ale tento účet nemá zakoupenou aktivní licenci. Licenci můžete koupit na tomaspisar.cz.",
         }
     return {
         "pair_code": "Pairing code", "pair_link": "Portal link", "pair_scan": "Scan the QR code to open pairing", "pair_opened": "Pairing page is open on the phone.", "pair_expires": "Expires in {seconds}s.", "pair_expired": "Pairing expired. Close this window and start again.", "pair_qr_unavailable": "QR rendering is unavailable in this environment. Use the link or six-digit code.",
-        "title": "Activate LongJumpReplay", "intro": "Activate this computer with the email address used for your purchase. We will send a six-digit verification code.",
+        "title": "Activate LongJumpReplay", "intro": "Choose how to connect this computer to your LongJumpReplay licence.",
         "email": "Purchase email", "send": "Send verification code", "code": "Verification code from email",
         "activate": "Activate this computer", "code_sent": "Code sent to {email}. It is valid for {minutes} minutes. Check spam too.",
         "activated": "Done. This computer is activated.", "working": "Working…", "start": "Start 72-hour evaluation",
@@ -236,7 +239,10 @@ def _activation_copy(language: str) -> dict[str, str]:
         "key_hint": "Find the 0000-ABCD-2EFG key in your customer account.", "key_activate": "Activate this computer",
         "back": "Back", "need_email": "Enter a valid email address.", "need_code": "Enter the six-digit code from the email.",
         "need_key": "Enter a valid activation key.", "buy": "Buy a licence at tomaspisar.cz",
-        "licence_actions": "Licence activation", "evaluation_actions": "Evaluation mode",
+        "recommended": "RECOMMENDED", "pair_summary": "The fastest and safest route. Scan a QR code and approve this computer from your customer account.",
+        "licence_actions": "Other activation methods", "email_title": "Email verification", "email_hint": "Use the email address that purchased the licence.",
+        "key_summary": "Already have a reusable key from your customer account?", "buy_hint": "Do not have a licence yet?",
+        "evaluation_actions": "Evaluation mode",
         "trial_limits": "The 72-hour evaluation demonstrates camera capture, freeze and replay. Competition setup, judging, results and evidence packages are disabled. Three standalone video exports are included.",
         "no_active_license": "Email verified, but this account has no purchased active licence. Buy one at tomaspisar.cz.",
     }
@@ -284,19 +290,41 @@ def ensure_license_or_trial(
     hero.pack(fill="x", pady=(0, 14))
     tk.Label(hero, text="LONGJUMPREPLAY", bg="#101a20", fg="#62d9c6", font=("Segoe UI Semibold", 10)).pack(anchor="w")
     tk.Label(hero, text=copy["title"], bg="#101a20", fg="#f4f7f8", font=("Segoe UI Semibold", 22)).pack(anchor="w", pady=(3, 0))
-    ttk.Label(body, text=copy["intro"], wraplength=560, justify="left").pack(anchor="w", pady=(8, 16))
+    ttk.Label(body, text=copy["intro"], wraplength=620, justify="left").pack(anchor="w", pady=(4, 14))
 
     if status.active:
         expiry = datetime.fromtimestamp(status.expires_at or 0).astimezone().strftime("%Y-%m-%d %H:%M")
         ttk.Label(body, text=copy["active"].format(expiry=expiry, remaining=status.exports_remaining), wraplength=560, justify="left").pack(anchor="w", pady=(0, 12))
 
-    ttk.Label(body, text="1  " + copy["email"], style="Heading.TLabel").pack(anchor="w")
-    email_var = tk.StringVar()
-    email_entry = ttk.Entry(body, textvariable=email_var, width=54)
-    email_entry.pack(fill="x", pady=(4, 8))
+    recommended = ttk.Frame(body, style="ActivationRecommended.TFrame", padding=16)
+    recommended.pack(fill="x", pady=(0, 14))
+    recommended.columnconfigure(0, weight=1)
+    ttk.Label(recommended, text=copy["recommended"], style="ActivationBadge.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(recommended, text=copy["pair"], style="ActivationRecommendedTitle.TLabel").grid(row=1, column=0, sticky="w", pady=(8, 2))
+    ttk.Label(recommended, text=copy["pair_summary"], style="ActivationRecommendedBody.TLabel", wraplength=430, justify="left").grid(row=2, column=0, sticky="w", pady=(0, 10))
 
-    code_frame = ttk.Frame(body)
-    ttk.Label(code_frame, text="2  " + copy["code"], style="Heading.TLabel").pack(anchor="w")
+    status_label = ttk.Label(body, text="", wraplength=620, justify="left")
+    status_label.pack(anchor="w", pady=(0, 8))
+    progress_bar = ttk.Progressbar(body, mode="indeterminate", style="Modal.Horizontal.TProgressbar")
+
+    licence_actions = ttk.LabelFrame(body, text=copy["licence_actions"], padding=14, style="ActivationSection.TLabelframe")
+    licence_actions.pack(fill="x", pady=(0, 12))
+    licence_actions.columnconfigure((0, 1), weight=1, uniform="activation-method")
+
+    email_method = ttk.Frame(licence_actions, style="ActivationMethod.TFrame")
+    email_method.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+    ttk.Label(email_method, text=copy["email_title"], style="ActivationMethodTitle.TLabel").pack(anchor="w")
+    ttk.Label(email_method, text=copy["email_hint"], style="ActivationMethodBody.TLabel", wraplength=270, justify="left").pack(anchor="w", pady=(2, 9))
+    ttk.Label(email_method, text=copy["email"], style="ActivationField.TLabel").pack(anchor="w")
+    email_var = tk.StringVar()
+    email_entry = ttk.Entry(email_method, textvariable=email_var, width=32)
+    email_entry.pack(fill="x", pady=(4, 8))
+    email_action_host = ttk.Frame(email_method, style="ActivationMethod.TFrame")
+    email_action_host.pack(fill="x")
+    email_action_host.columnconfigure(0, weight=1)
+
+    code_frame = ttk.Frame(email_method, style="ActivationMethod.TFrame")
+    ttk.Label(code_frame, text=copy["code"], style="ActivationField.TLabel").pack(anchor="w")
     code_var = tk.StringVar()
     code_entry = ttk.Entry(code_frame, textvariable=code_var, width=16)
     code_entry.pack(anchor="w", pady=(4, 4))
@@ -310,17 +338,15 @@ def ensure_license_or_trial(
     code_actions = ttk.Frame(code_frame)
     code_actions.pack(fill="x", pady=(8, 0))
 
-    status_label = ttk.Label(body, text="", wraplength=560, justify="left")
-    status_label.pack(anchor="w", pady=(10, 12))
-    progress_bar = ttk.Progressbar(body, mode="indeterminate", style="Modal.Horizontal.TProgressbar")
-    licence_actions = ttk.LabelFrame(body, text=copy["licence_actions"], padding=12)
-    licence_actions.pack(fill="x", pady=(0, 12))
-    licence_buttons = ttk.Frame(licence_actions)
-    licence_buttons.pack(fill="x")
-    licence_buttons.columnconfigure((0, 1), weight=1, uniform="licence-action")
-    evaluation_actions = ttk.LabelFrame(body, text=copy["evaluation_actions"], padding=12)
+    key_method = ttk.Frame(licence_actions, style="ActivationMethod.TFrame")
+    key_method.grid(row=0, column=1, sticky="nsew", padx=(14, 0))
+    ttk.Label(key_method, text=copy["alternate"], style="ActivationMethodTitle.TLabel").pack(anchor="w")
+    ttk.Label(key_method, text=copy["key_summary"], style="ActivationMethodBody.TLabel", wraplength=270, justify="left").pack(anchor="w", pady=(2, 10))
+
+    evaluation_actions = ttk.LabelFrame(body, text=copy["evaluation_actions"], padding=14, style="ActivationSection.TLabelframe")
     evaluation_actions.pack(fill="x", pady=(0, 12))
     evaluation_actions.columnconfigure(0, weight=1)
+    ttk.Label(evaluation_actions, text=copy["trial_limits"], style="ActivationMethodBody.TLabel", wraplength=600, justify="left").grid(row=0, column=0, sticky="w", pady=(0, 10))
     footer_actions = ttk.Frame(body)
     footer_actions.pack(fill="x")
     request_in_progress = False
@@ -372,7 +398,7 @@ def ensure_license_or_trial(
 
         def succeeded(minutes: object) -> None:
             stop_busy(send_button)
-            code_frame.pack(anchor="w", fill="x", before=status_label)
+            code_frame.pack(anchor="w", fill="x", pady=(8, 0))
             send_button.grid_remove()
             code_entry.focus_set()
             status_label.configure(text=copy["code_sent"].format(email=email, minutes=minutes))
@@ -661,20 +687,20 @@ def ensure_license_or_trial(
     code_activate_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
     ttk.Button(footer_actions, text=copy["cancel"], command=cancel).pack(side="right")
+    pair_button = ttk.Button(recommended, text=copy["pair"], command=show_pairing, style="Primary.TButton")
+    pair_button.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=(18, 0))
     if status.active:
-        ttk.Button(evaluation_actions, text=copy["continue"], command=continue_trial, style="Primary.TButton").grid(row=0, column=0, sticky="ew")
+        ttk.Button(evaluation_actions, text=copy["continue"], command=continue_trial, style="Secondary.TButton").grid(row=1, column=0, sticky="ew")
     else:
-        ttk.Button(evaluation_actions, text=copy["start"], command=begin_trial, style="Primary.TButton").grid(row=0, column=0, sticky="ew")
+        ttk.Button(evaluation_actions, text=copy["start"], command=begin_trial, style="Secondary.TButton").grid(row=1, column=0, sticky="ew")
     # The email step owns the Send action. Once the code arrives, the code
     # section exposes explicit Back and Activate controls instead of silently
     # repurposing the button at the bottom of the dialog.
-    send_button = ttk.Button(licence_buttons, text=copy["send"], command=send_code, style="Primary.TButton")
-    send_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-    ttk.Button(licence_buttons, text=copy["alternate"], command=show_key_activation).grid(row=1, column=0, sticky="ew", padx=(0, 6))
-    ttk.Button(licence_buttons, text=copy["pair"], command=show_pairing).grid(row=1, column=1, sticky="ew", padx=(6, 0))
-    ttk.Button(licence_buttons, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/products/long-jump-replay/#buy")).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-    ttk.Separator(body).pack(fill="x", pady=(18, 10))
-    ttk.Label(body, text=copy["trial_limits"], wraplength=620, justify="left").pack(anchor="w")
+    send_button = ttk.Button(email_action_host, text=copy["send"], command=send_code, style="Secondary.TButton")
+    send_button.grid(row=0, column=0, sticky="ew")
+    ttk.Button(key_method, text=copy["alternate"], command=show_key_activation, style="Secondary.TButton").pack(fill="x")
+    ttk.Label(key_method, text=copy["buy_hint"], style="ActivationMethodBody.TLabel").pack(anchor="w", pady=(12, 4))
+    ttk.Button(key_method, text=copy["buy"], command=lambda: webbrowser.open("https://tomaspisar.cz/products/long-jump-replay/#buy"), style="Secondary.TButton").pack(fill="x")
     dialog.protocol("WM_DELETE_WINDOW", cancel)
 
     def on_return(_event: object) -> None:
