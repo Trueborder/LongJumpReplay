@@ -52,6 +52,14 @@ def test_uncertain_edge_is_review(monkeypatch) -> None:
     assert result.status is AdvisoryStatus.REVIEW
 
 
+def test_missing_candidate_falls_back_to_target_frame(monkeypatch) -> None:
+    monkeypatch.setattr(module, "detect_takeoff_candidate", lambda *_args, **_kwargs: None)
+    packets = _packets(7)
+    result = analyse_attempt(packets, packets[4].timestamp_ns, (.1, .1, .8, .8), _calibration())
+    assert result.status is AdvisoryStatus.REVIEW
+    assert result.frame_index == 4
+
+
 def test_live_gate_metrics_are_quiet_without_change_and_active_near_line() -> None:
     previous = np.zeros((80, 120, 3), np.uint8)
     current = previous.copy()
@@ -88,5 +96,6 @@ def test_live_gate_emits_for_short_strong_takeoff() -> None:
             time.sleep(.01)
         assert len(events) == 1
         assert events[0].confidence > .5
+        assert events[0].timestamp_ns == 240_000_000
     finally:
         monitor.stop()

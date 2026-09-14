@@ -111,6 +111,37 @@ def test_takeoff_assist_never_selects_the_empty_departure_frame():
     assert int(originals[candidate.frame_index][70:112, 75:245].min()) < 30
 
 
+def test_departing_shoe_is_not_presence_in_the_empty_current_frame():
+    background = np.full((120, 220, 3), (80, 135, 175), dtype=np.uint8)
+    with_shoe = background.copy()
+    cv2.ellipse(with_shoe, (112, 62), (31, 14), 0, 0, 360, (18, 25, 35), -1)
+
+    _entry_score, entry_presence = takeoff_assist_module._transition_score(background, with_shoe)
+    _exit_score, exit_presence = takeoff_assist_module._transition_score(with_shoe, background)
+
+    assert entry_presence >= .08
+    assert exit_presence < .08
+
+
+def test_takeoff_assist_accepts_a_shoe_entering_through_the_top_crop():
+    frames = []
+    for i in range(28):
+        frame = np.full((150, 260, 3), (82, 132, 170), dtype=np.uint8)
+        cv2.rectangle(frame, (60, 45), (215, 72), (215, 220, 225), -1)
+        if 11 <= i <= 16:
+            x = 110 + (i - 11) * 11
+            cv2.ellipse(frame, (x, 1 + (i - 11) * 3), (27, 12), 0, 0, 360, (16, 23, 35), -1)
+        frames.append(packet(i, frame, 50.0))
+
+    candidate = detect_takeoff_candidate(
+        frames, frames[21].timestamp_ns, (0, 0, 1, .60),
+        before_seconds=.3, after_seconds=0, target_width=220,
+    )
+
+    assert candidate is not None
+    assert 11 <= candidate.frame_index <= 16
+
+
 def test_long_takeoff_window_uses_coarse_then_exact_local_analysis(monkeypatch):
     frames = []
     for i in range(150):

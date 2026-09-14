@@ -3623,14 +3623,18 @@ class MainWindow:
                     target_timestamp_ns + int(.4e9),
                 )
                 if len(packets) < 4:
+                    fallback_index = self.attempts.frame_index_at_timestamp(attempt_id, target_timestamp_ns)
                     advisory = AutomaticAdvisory(
-                        AdvisoryStatus.REVIEW, 0.0, 0, None, None,
+                        AdvisoryStatus.REVIEW, 0.0, fallback_index, None, None,
                         "Not enough buffered frames were available for automatic advice.", 0.0,
                     )
                 else:
                     advisory = analyse_attempt(
                         packets, target_timestamp_ns, roi, calibration,
-                        before_seconds=.70, after_seconds=.32,
+                        # The live gate already marks first near-line activity.
+                        # Keep this window local so damaged AVI blocks or an
+                        # earlier approach shadow cannot become the key frame.
+                        before_seconds=.30, after_seconds=.12,
                         target_width=min(320, max(160, config.downscale_width)),
                     )
                     if time.monotonic() > deadline:
@@ -3643,8 +3647,9 @@ class MainWindow:
                     advisory = replace(advisory, frame_index=mapped)
                 self.event_queue.put(("automatic_takeoff_result", (attempt_id, advisory)))
             except Exception as exc:
+                fallback_index = self.attempts.frame_index_at_timestamp(attempt_id, target_timestamp_ns)
                 advisory = AutomaticAdvisory(
-                    AdvisoryStatus.REVIEW, 0.0, 0, None, None,
+                    AdvisoryStatus.REVIEW, 0.0, fallback_index, None, None,
                     f"Automatic analysis failed: {exc}", 0.0,
                 )
                 self.event_queue.put(("automatic_takeoff_result", (attempt_id, advisory)))

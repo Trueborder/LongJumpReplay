@@ -56,7 +56,9 @@ def _transition_score(previous: np.ndarray, current: np.ndarray) -> tuple[float,
         shadow_u8 = shadow_mask.astype(np.uint8) * 255 if shadow_mask.dtype == bool else shadow_mask
         mask = cv2.bitwise_and(mask, cv2.bitwise_not(shadow_u8))
     current_gray = cv2.cvtColor(current, cv2.COLOR_BGR2GRAY)
-    difference = cv2.absdiff(current_gray, cv2.cvtColor(previous, cv2.COLOR_BGR2GRAY)).astype(np.float32)
+    previous_gray = cv2.cvtColor(previous, cv2.COLOR_BGR2GRAY)
+    previous_hsv = cv2.cvtColor(previous, cv2.COLOR_BGR2HSV)
+    difference = cv2.absdiff(current_gray, previous_gray).astype(np.float32)
     active = difference[mask > 0]
     active_fraction = active.size / difference.size if active.size else 0.0
     score = float(active.mean() * active_fraction) if active.size else 0.0
@@ -77,7 +79,11 @@ def _transition_score(previous: np.ndarray, current: np.ndarray) -> tuple[float,
         if contour_area < area * 0.003 or contour_area > area * 0.24:
             continue
         x, y, w, h = cv2.boundingRect(contour)
-        if x <= 1 or y <= 1 or x + w >= mask.shape[1] - 1 or y + h >= mask.shape[0] - 1:
+        touches_top = y <= 1
+        # The field camera can crop the approaching shoe at the top of the
+        # image. Permit only that expected entry edge, with a confidence
+        # penalty below; side/bottom clipping remains too ambiguous.
+        if x <= 1 or x + w >= mask.shape[1] - 1 or y + h >= mask.shape[0] - 1:
             continue
         aspect = max(w, h) / max(1.0, float(min(w, h)))
         if aspect > 7.0 or min(w, h) < 3:
@@ -87,17 +93,27 @@ def _transition_score(previous: np.ndarray, current: np.ndarray) -> tuple[float,
         contour_mask = np.zeros(mask.shape, dtype=np.uint8)
         cv2.drawContours(contour_mask, [contour], -1, 255, -1)
         contour_level = float(current_gray[contour_mask > 0].mean()) if np.any(contour_mask) else background_level
+        previous_level = float(previous_gray[contour_mask > 0].mean()) if np.any(contour_mask) else contour_level
         contour_saturation = float(current_hsv[:, :, 1][contour_mask > 0].mean()) if np.any(contour_mask) else background_saturation
+        previous_saturation = float(previous_hsv[:, :, 1][contour_mask > 0].mean()) if np.any(contour_mask) else contour_saturation
         dark_contrast = background_level - contour_level
         colour_contrast = abs(contour_saturation - background_saturation)
         if dark_contrast < 24.0 and colour_contrast < 34.0:
+            continue
+        # Absolute frame difference also marks the area where a shoe has just
+        # disappeared. Require evidence gained in the current frame so exposed
+        # track or a following shadow cannot masquerade as the shoe.
+        darkening = previous_level - contour_level
+        saturation_gain = contour_saturation - previous_saturation
+        if darkening < 8.0 and saturation_gain < 14.0:
             continue
         compactness = min(1.0, contour_area / max(1.0, float(w * h)))
         relative_area = contour_area / area
         size_score = min(1.0, relative_area / .065)
         if relative_area > .16:
             size_score *= max(.25, 1.0 - (relative_area - .16) / .12)
-        presence = max(presence, size_score * (0.55 + 0.45 * compactness))
+        visibility_penalty = .68 if touches_top else 1.0
+        presence = max(presence, size_score * (0.55 + 0.45 * compactness) * visibility_penalty)
     return score, float(presence)
 
 

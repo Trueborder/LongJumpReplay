@@ -1417,3 +1417,6 @@ A change is done only when:
   so unknown public paths render this page rather than a generic response.
 
 - Automatic take-off live gating samples the reduced board ROI at up to the UI refresh cadence, measures proximity from the nearest moving contour edge (not its centroid), and exposes `AUTO STARTING`, `AUTO READY`, `AUTO DETECTING`, calibration, and entitlement states on the live overlay. The full advisory remains conservative and never changes the official judge verdict.
+
+- Automatic triggering anchors detailed analysis to the first near-line activity rather than the later motion peak, because the latter is commonly the shoe leaving or a following shadow. Takeoff Assist requires current-frame appearance evidence, and failed automatic analysis falls back to the trigger timestamp instead of frame zero.
+- Takeoff Assist accepts a shoe entering through the top edge of a camera-cropped ROI with reduced confidence, while continuing to reject side/bottom-clipped contours; automatic analysis uses only a short post-trigger window to avoid selecting the following shadow.

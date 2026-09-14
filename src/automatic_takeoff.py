@@ -87,6 +87,7 @@ class AutomaticTakeoffMonitor:
         self._active_frames = 0
         self._quiet_after_active = 0
         self._peak: tuple[float, int] = (0.0, 0)
+        self._first_active_timestamp_ns = 0
         self._cooldown_until = 0.0
         self._last_drift_warning = 0.0
         self.last_motion = 0.0
@@ -108,6 +109,7 @@ class AutomaticTakeoffMonitor:
         self._previous = None
         self._still_frames = self._active_frames = self._quiet_after_active = 0
         self._peak = (0.0, 0)
+        self._first_active_timestamp_ns = 0
         self.last_motion = 0.0
         self.last_proximity = 0.0
 
@@ -225,6 +227,7 @@ class AutomaticTakeoffMonitor:
                         self._active_frames = 1
                         self._quiet_after_active = 0
                         self._peak = (motion * (.55 + .45 * proximity), sample.timestamp_ns)
+                        self._first_active_timestamp_ns = sample.timestamp_ns
                 elif self.state is MonitorState.APPROACH:
                     if active:
                         self._active_frames += 1
@@ -237,11 +240,16 @@ class AutomaticTakeoffMonitor:
                     strong_single_sample = self._peak[0] >= .050
                     if (self._active_frames >= 2 or strong_single_sample) and (self._quiet_after_active >= 2 or self._active_frames >= 18):
                         confidence = max(.0, min(1.0, self._peak[0] / .055))
-                        event = TakeoffEvent(self._peak[1], confidence)
+                        # The later motion peak is commonly the shoe leaving
+                        # or a following shadow. Analyse the first near-line
+                        # activity, while the shoe is still in the frame.
+                        event_timestamp_ns = self._first_active_timestamp_ns or self._peak[1]
+                        event = TakeoffEvent(event_timestamp_ns, confidence)
                         self._cooldown_until = now + self.cooldown_seconds
                         self.state = MonitorState.COOLDOWN
                         self._still_frames = self._active_frames = self._quiet_after_active = 0
                         self._peak = (0.0, 0)
+                        self._first_active_timestamp_ns = 0
                         _LOGGER.info(
                             "automatic_takeoff_event timestamp_ns=%s confidence=%.3f motion=%.4f proximity=%.3f",
                             event.timestamp_ns, event.confidence, self.last_motion, self.last_proximity,
@@ -250,6 +258,7 @@ class AutomaticTakeoffMonitor:
                     elif self._active_frames + self._quiet_after_active > 32:
                         self.state = MonitorState.ARMING
                         self._still_frames = self._active_frames = self._quiet_after_active = 0
+                        self._first_active_timestamp_ns = 0
             except Exception:
                 _LOGGER.exception("automatic take-off live gate failed")
                 self.reset()
@@ -263,9 +272,13 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
                     target_width: int = 256) -> AutomaticAdvisory:
     """Create a conservative temporal advisory from a bounded attempt window."""
     started = time.perf_counter()
+    fallback_index = (
+        min(range(len(packets)), key=lambda index: abs(packets[index].timestamp_ns - target_timestamp_ns))
+        if packets else 0
+    )
     candidate = detect_takeoff_candidate(packets, target_timestamp_ns, roi, before_seconds, after_seconds, target_width)
     if candidate is None:
-        return AutomaticAdvisory(AdvisoryStatus.REVIEW, 0.0, 0, None, None,
+        return AutomaticAdvisory(AdvisoryStatus.REVIEW, 0.0, fallback_index, None, None,
                                  "No reliable take-off frame was found.", (time.perf_counter() - started) * 1000)
     selected = sorted(set((candidate.frame_index, *candidate.usable_frame_indices)))
     selected = sorted(selected, key=lambda index: (abs(index - candidate.frame_index), index))[:3]
