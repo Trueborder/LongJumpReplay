@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import numpy as np
 
 from src import automatic_takeoff as module
@@ -59,3 +61,32 @@ def test_live_gate_metrics_are_quiet_without_change_and_active_near_line() -> No
     assert quiet == 0
     assert active > .01
     assert proximity > .5
+
+
+def test_live_gate_emits_for_short_strong_takeoff() -> None:
+    events = []
+    monitor = AutomaticTakeoffMonitor(events.append, width=120, sample_hz=30, cooldown_seconds=.5)
+    monitor.start()
+    try:
+        base = np.zeros((80, 120, 3), np.uint8)
+        timestamp = 0
+        for _ in range(6):
+            monitor.offer(base, timestamp, (0, 0, 1, 1), ((.5, 0), (.5, 1)), enabled=True)
+            timestamp += 40_000_000
+            time.sleep(.04)
+        moving = base.copy()
+        moving[25:60, 48:78] = 255
+        monitor.offer(moving, timestamp, (0, 0, 1, 1), ((.5, 0), (.5, 1)), enabled=True)
+        timestamp += 40_000_000
+        time.sleep(.04)
+        for _ in range(4):
+            monitor.offer(moving, timestamp, (0, 0, 1, 1), ((.5, 0), (.5, 1)), enabled=True)
+            timestamp += 40_000_000
+            time.sleep(.04)
+        deadline = time.monotonic() + .5
+        while not events and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert len(events) == 1
+        assert events[0].confidence > .5
+    finally:
+        monitor.stop()

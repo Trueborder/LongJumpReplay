@@ -31,7 +31,7 @@ from .adjudication import (
     parse_distance_centimetres,
     parse_wind_metres_per_second,
 )
-from .automatic_takeoff import AdvisoryStatus, AutomaticAdvisory, AutomaticTakeoffMonitor, TakeoffEvent, analyse_attempt
+from .automatic_takeoff import AdvisoryStatus, AutomaticAdvisory, AutomaticTakeoffMonitor, MonitorState, TakeoffEvent, analyse_attempt
 from .background_tasks import BackgroundTaskController, TaskSnapshot, TaskState
 from . import VERSION_SHORT, __version__
 from .activation import authorization_permits, current_authorization
@@ -1270,6 +1270,23 @@ class MainWindow:
             return ("attempt", self.playback.attempt_id, self.playback.attempt_frame_index, attempt.state if attempt else None, attempt.frame_count if attempt else 0)
         return ("buffer", self.playback.live_seq)
 
+    def _automatic_monitor_overlay(self) -> str:
+        if not (self.config.takeoff_assist.enabled and self.config.takeoff_assist.automatic_monitor_enabled):
+            return ""
+        if not self._takeoff_assist_entitled:
+            return self._t("assist.automatic.state.pro_required")
+        projection = self.config.top_view_projection
+        if self._automatic_calibration_suspect or len(projection.board_corners) != 4 or len(projection.foul_line) != 2:
+            return self._t("assist.automatic.state.calibrate")
+        labels = {
+            MonitorState.DISARMED: "assist.automatic.state.starting",
+            MonitorState.ARMING: "assist.automatic.state.starting",
+            MonitorState.ARMED: "assist.automatic.state.ready",
+            MonitorState.APPROACH: "assist.automatic.state.detecting",
+            MonitorState.COOLDOWN: "assist.automatic.state.resetting",
+        }
+        return self._t(labels[self.automatic_takeoff.state])
+
     def _update_video_labels(self) -> None:
         self._update_judging_controls()
         p = self.palette; stats = self.capture.stats()
@@ -1288,11 +1305,18 @@ class MainWindow:
             and (self._camera_input_timed_out or bool(stats.last_error) or stats.captured_frames == 0)
         )
         self._update_camera_input_overlay(no_video)
-        self.live_canvas.set_status(f"● LIVE · {stats.capture_fps:5.1f} fps", p["live"])
+        automatic_status = self._automatic_monitor_overlay()
+        live_status = f"● LIVE · {stats.capture_fps:5.1f} fps"
+        if automatic_status:
+            live_status = f"{live_status} · {automatic_status}"
+        self.live_canvas.set_status(live_status, p["live"])
         if self.playback.mode is PlaybackMode.LIVE:
             self.mode_var.set(self._t("mode.live")); self.mode_badge.configure(bg=p["live"], fg="#ffffff")
             self.freeze_button.configure(text=self._t("button.freeze"))
-            self.replay_canvas.set_status(f"● {self._t("overlay.live_review")}", p["live"], self._t("overlay.zoom_help"))
+            replay_status = f"● {self._t('overlay.live_review')}"
+            if automatic_status:
+                replay_status = f"{replay_status} · {automatic_status}"
+            self.replay_canvas.set_status(replay_status, p["live"], self._t("overlay.zoom_help"))
         elif self.playback.mode is PlaybackMode.LIVE_BUFFER:
             packet, newest = self.buffer.get(self.playback.live_seq), self.buffer.newest()
             offset = ((packet.timestamp_ns - newest.timestamp_ns) / 1e9) if packet and newest else 0

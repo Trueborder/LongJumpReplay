@@ -1415,3 +1415,5 @@ A change is done only when:
   existing header, typography, colours, language switch, footer, and catalog
   actions. `website/wrangler.jsonc` sets Workers Assets to `404-page` handling
   so unknown public paths render this page rather than a generic response.
+
+- Automatic take-off live gating samples the reduced board ROI at up to the UI refresh cadence, measures proximity from the nearest moving contour edge (not its centroid), and exposes `AUTO STARTING`, `AUTO READY`, `AUTO DETECTING`, calibration, and entitlement states on the live overlay. The full advisory remains conservative and never changes the official judge verdict.

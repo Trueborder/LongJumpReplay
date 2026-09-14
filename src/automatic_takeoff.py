@@ -69,7 +69,7 @@ class AutomaticTakeoffMonitor:
     """
 
     def __init__(self, callback: Callable[[TakeoffEvent], None], *, width: int = 192,
-                 sample_hz: float = 18.0, cooldown_seconds: float = 1.5,
+                 sample_hz: float = 24.0, cooldown_seconds: float = 1.5,
                  warning_callback: Callable[[str], None] | None = None) -> None:
         self.callback = callback
         self.warning_callback = warning_callback
@@ -89,6 +89,8 @@ class AutomaticTakeoffMonitor:
         self._peak: tuple[float, int] = (0.0, 0)
         self._cooldown_until = 0.0
         self._last_drift_warning = 0.0
+        self.last_motion = 0.0
+        self.last_proximity = 0.0
 
     def start(self) -> None:
         if not self._thread.is_alive():
@@ -106,6 +108,8 @@ class AutomaticTakeoffMonitor:
         self._previous = None
         self._still_frames = self._active_frames = self._quiet_after_active = 0
         self._peak = (0.0, 0)
+        self.last_motion = 0.0
+        self.last_proximity = 0.0
 
     def offer(self, frame: np.ndarray, timestamp_ns: int, roi: Sequence[float],
               foul_line: Sequence[Sequence[float]] | None, *, enabled: bool) -> None:
@@ -169,12 +173,21 @@ class AutomaticTakeoffMonitor:
                 area = float(cv2.contourArea(contour))
                 if not total * .002 <= area <= total * .30:
                     continue
-                moments = cv2.moments(contour)
-                if moments["m00"] <= 0:
-                    continue
-                point = np.asarray((moments["m10"] / moments["m00"], moments["m01"] / moments["m00"]), np.float32)
-                relative = point - a
-                distance = abs(float(vector[0] * relative[1] - vector[1] * relative[0])) / denominator
+                # The relevant evidence is the nearest moving edge, not the
+                # centre of the athlete-shaped contour. A centroid can remain
+                # far from the foul line while the shoe crosses it.
+                points = contour.reshape(-1, 2).astype(np.float32)
+                relative = points - a
+                distances = np.abs(vector[0] * relative[:, 1] - vector[1] * relative[:, 0]) / denominator
+                distance = float(np.min(distances))
+                # If the foul line passes through the filled moving region, its
+                # boundary points can still be several pixels away. Sample the
+                # short line segment so an actual intersection scores as zero.
+                for fraction in np.linspace(0.0, 1.0, 16):
+                    line_point = a + vector * fraction
+                    if cv2.pointPolygonTest(contour, (float(line_point[0]), float(line_point[1])), False) >= 0:
+                        distance = 0.0
+                        break
                 proximity = max(proximity, math.exp(-distance / corridor))
         return motion, proximity
 
@@ -192,28 +205,19 @@ class AutomaticTakeoffMonitor:
                     self.state = MonitorState.ARMING
                     continue
                 motion, proximity = self._metrics(self._previous, sample.roi_bgr, sample.line)
-                if self.state is MonitorState.ARMED and motion >= .08:
-                    previous_gray = cv2.cvtColor(self._previous, cv2.COLOR_BGR2GRAY).astype(np.float32)
-                    current_gray = cv2.cvtColor(sample.roi_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
-                    shift, response = cv2.phaseCorrelate(previous_gray, current_gray)
-                    if response >= .38 and math.hypot(*shift) >= 3.0:
-                        now = time.perf_counter()
-                        if self.warning_callback and now - self._last_drift_warning > 8.0:
-                            self._last_drift_warning = now
-                            self.warning_callback("The camera appears to have moved. Confirm board calibration before automatic advice continues.")
-                        self.reset()
-                        continue
+                self.last_motion = motion
+                self.last_proximity = proximity
                 self._previous = sample.roi_bgr
                 now = time.perf_counter()
                 if now < self._cooldown_until:
                     self.state = MonitorState.COOLDOWN
                     continue
-                active = motion >= .012 and proximity >= .32
-                quiet = motion <= .006
+                active = motion >= .008 and proximity >= .24
+                quiet = motion <= .010
                 if self.state in {MonitorState.DISARMED, MonitorState.ARMING, MonitorState.COOLDOWN}:
                     self.state = MonitorState.ARMING
                     self._still_frames = self._still_frames + 1 if quiet else 0
-                    if self._still_frames >= 5:
+                    if self._still_frames >= 4:
                         self.state = MonitorState.ARMED
                 elif self.state is MonitorState.ARMED:
                     if active:
@@ -230,13 +234,18 @@ class AutomaticTakeoffMonitor:
                             self._peak = (score, sample.timestamp_ns)
                     elif quiet:
                         self._quiet_after_active += 1
-                    if self._active_frames >= 2 and (self._quiet_after_active >= 2 or self._active_frames >= 24):
+                    strong_single_sample = self._peak[0] >= .050
+                    if (self._active_frames >= 2 or strong_single_sample) and (self._quiet_after_active >= 2 or self._active_frames >= 18):
                         confidence = max(.0, min(1.0, self._peak[0] / .055))
                         event = TakeoffEvent(self._peak[1], confidence)
                         self._cooldown_until = now + self.cooldown_seconds
                         self.state = MonitorState.COOLDOWN
                         self._still_frames = self._active_frames = self._quiet_after_active = 0
                         self._peak = (0.0, 0)
+                        _LOGGER.info(
+                            "automatic_takeoff_event timestamp_ns=%s confidence=%.3f motion=%.4f proximity=%.3f",
+                            event.timestamp_ns, event.confidence, self.last_motion, self.last_proximity,
+                        )
                         self.callback(event)
                     elif self._active_frames + self._quiet_after_active > 32:
                         self.state = MonitorState.ARMING
