@@ -93,11 +93,14 @@
   copy.en.passwordLength = 'Use 12-128 characters, including a letter, number and symbol.';
   copy.en.passwordMismatch = 'The passwords do not match.';
   copy.en.profileRequired = 'Enter your first name and surname.';
+  copy.en.passwordRules = 'Use 12-128 characters, including a letter, number and symbol.';
   copy.cs.passwordLength = 'Pouzijte 12-128 znaku vcetne pismene, cisla a symbolu.';
   copy.cs.passwordMismatch = 'Hesla se neshoduji.';
   copy.cs.profileRequired = 'Zadejte jmeno a prijmeni.';
+  copy.cs.passwordRules = 'Pouzijte 12-128 znaku vcetne pismene, cisla a symbolu.';
   const t = (key) => copy[state.lang][key] || copy.en[key] || key;
-  const strongPassword = (value) => value.length >= 12 && value.length <= 128 && /[A-Za-z]/.test(value) && /[0-9]/.test(value) && /[^A-Za-z0-9]/.test(value);
+  const strongPassword = (value) => Array.from(value).length >= 12 && Array.from(value).length <= 128
+    && /\p{L}/u.test(value) && /\p{N}/u.test(value) && /[\p{P}\p{S}]/u.test(value);
   const routeCopy = {
     en: {
       overview: ['ACCOUNT OVERVIEW', 'Account overview.', 'Your licence, computers and access in one place.'],
@@ -228,6 +231,7 @@
       const clubName = $('#migration-club-name').value.trim(); const password = $('#migration-password').value; const confirmation = $('#migration-password-confirmation').value;
       if (!firstName || !lastName) { setStatus(t('profileRequired'), '#login-status'); return; }
       if ($('#migration-password-fields').hidden === false && password !== confirmation) { setStatus(t('passwordMismatch'), '#login-status'); return; }
+      if ($('#migration-password-fields').hidden === false && !strongPassword(password)) { setStatus(t('passwordRules'), '#login-status'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
       try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: state.setupToken, first_name: firstName, last_name: lastName, club_name: clubName, password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet je připraven. Přesměrovávám na přihlášení…' : 'Your account is ready. Returning to sign in…', '#login-status'); window.setTimeout(() => window.location.replace('/login?registered=1'), 500); }
       catch (error) { setStatus(error.message, '#login-status'); }
