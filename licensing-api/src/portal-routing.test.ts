@@ -33,7 +33,7 @@ describe("customer portal page routing", () => {
   });
 
   it("serves every dashboard category at its own protected URL", () => {
-    for (const category of ["overview", "licence", "activation-key", "activation", "devices", "billing", "help"]) {
+    for (const category of ["overview", "licence", "activation-key", "activation", "devices", "billing", "profile", "help"]) {
       const unauthenticated = category === "activation"
         ? { kind: "asset", assetPath: "/dashboard/" }
         : { kind: "redirect", location: "/login" };

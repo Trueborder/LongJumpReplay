@@ -3,7 +3,7 @@
   const { deriveDashboardEntitlement, deriveDevicePortalState } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
   const dashboardRoute = page === 'dashboard' ? (window.location.pathname.split('/').filter(Boolean)[1] || 'overview') : '';
-  const dashboardRoutes = new Set(['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help']);
+  const dashboardRoutes = new Set(['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'profile', 'help']);
   const state = { lang: document.documentElement.lang === 'cs' ? 'cs' : 'en', email: '', codeSent: false, account: null,
     keyVisible: false, keyValue: '', keyLicenceId: '', ensuredKeys: new Set(), pairing: null };
   const $ = (selector) => document.querySelector(selector);
@@ -109,6 +109,7 @@
       activation: ['PAIR A COMPUTER', 'Connect the app.', 'Approve a waiting LongJumpReplay station without sharing a password or reusable key.'],
       devices: ['COMPUTERS', 'Your computers.', 'See activation method, recent activity and the slots used by each station.'],
       billing: ['BILLING', 'Billing and invoices.', 'Manage subscription payments and keep your purchase documents together.'],
+      profile: ['PROFILE', 'Your profile.', 'Update your name, club and sign-in password.'],
       help: ['HELP & SECURITY', 'Help & security.', 'Installation, support and practical guidance for keeping access safe.']
     },
     cs: {
@@ -118,6 +119,7 @@
       activation: ['SPÁROVAT POČÍTAČ', 'Propojte aplikaci.', 'Schvalte čekající stanici LongJumpReplay bez sdílení hesla nebo opakovaně použitelného klíče.'],
       devices: ['POČÍTAČE', 'Vaše počítače.', 'Způsob aktivace, poslední aktivita a místa využitá jednotlivými stanicemi.'],
       billing: ['PLATBY', 'Platby a faktury.', 'Spravujte platby předplatného a mějte doklady o nákupu pohromadě.'],
+      profile: ['PROFIL', 'Váš profil.', 'Upravte své jméno, klub a přihlašovací heslo.'],
       help: ['POMOC A ZABEZPEČENÍ', 'Pomoc a zabezpečení.', 'Instalace, podpora a praktické rady pro bezpečný přístup.']
     }
   };
@@ -186,8 +188,11 @@
       $('#code-field').hidden = mode !== 'otp';
       $('#migration-step').hidden = true;
       $('#reset-step').hidden = true;
-      $('#login-mode-actions').hidden = mode === 'reset';
-      $('#reset-actions').hidden = mode !== 'reset';
+      $('#login-mode-actions').hidden = mode !== 'password';
+      $('#login-other-options').hidden = true;
+      $('#other-options-toggle').setAttribute('aria-expanded', 'false');
+      setText('#other-options-toggle', 'Show other options', 'Zobrazit další možnosti');
+      $('#reset-actions').hidden = mode === 'password';
       $('#change-email').hidden = true;
       $('#resend-code').hidden = true;
       $('#password').required = mode === 'password';
@@ -202,7 +207,7 @@
       state.email = email; setStatus(t('sending'), '#login-status'); setLoginBusy(true);
       try {
         await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
-        loginState.codeSent = true; $('#password-step').hidden = true; $('#code-field').hidden = false; $('#change-email').hidden = false; $('#resend-code').hidden = false; $('#login-mode-actions').hidden = true;
+        loginState.codeSent = true; $('#password-step').hidden = true; $('#code-field').hidden = false; $('#change-email').hidden = false; $('#resend-code').hidden = false; $('#login-mode-actions').hidden = true; $('#reset-actions').hidden = false;
         setText('#login-submit', 'Verify code', 'OvÄ›Å™it kÃ³d'); setStatus(t('sent'), '#login-status'); $('#code').focus();
       } catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
     };
@@ -269,6 +274,13 @@
     $('#otp-mode-link').addEventListener('click', () => setMode('otp'));
     $('#forgot-password').addEventListener('click', () => setMode('reset'));
     $('#reset-back').addEventListener('click', () => setMode('password'));
+    $('#other-options-toggle').addEventListener('click', () => {
+      const options = $('#login-other-options');
+      const open = options.hidden;
+      options.hidden = !open;
+      $('#other-options-toggle').setAttribute('aria-expanded', String(open));
+      setText('#other-options-toggle', open ? 'Hide other options' : 'Show other options', open ? 'Skrýt další možnosti' : 'Zobrazit další možnosti');
+    });
     $('#change-email').addEventListener('click', () => setMode('otp'));
     $('#resend-code').addEventListener('click', requestOtp);
     $('#code').addEventListener('input', () => $('#code').removeAttribute('aria-invalid'));
@@ -514,9 +526,10 @@
     if (!tools || !form) return;
     tools.hidden = false;
     form.dataset.configured = configured ? 'true' : 'false';
-    form.innerHTML = configured
-      ? `<label for="current-password" data-en="Current password" data-cs="SouÄasnÃ© heslo">${state.lang === 'cs' ? 'SouÄasnÃ© heslo' : 'Current password'}</label><input id="current-password" type="password" autocomplete="current-password" required><label for="enroll-password" data-en="New password" data-cs="NovÃ© heslo">${state.lang === 'cs' ? 'NovÃ© heslo' : 'New password'}</label><input id="enroll-password" type="password" minlength="12" autocomplete="new-password" required><button class="text-button" type="submit">${state.lang === 'cs' ? 'ZmÄ›nit heslo' : 'Change password'}</button>`
-      : `<label for="enroll-password" data-en="New password" data-cs="NovÃ© heslo">${state.lang === 'cs' ? 'NovÃ© heslo' : 'New password'}</label><input id="enroll-password" type="password" minlength="12" autocomplete="new-password" required><button class="text-button" type="submit">${state.lang === 'cs' ? 'VytvoÅ™it heslo' : 'Create password'}</button>`;
+    const current = configured
+      ? `<label for="current-password">${state.lang === 'cs' ? 'Současné heslo' : 'Current password'}</label><input id="current-password" type="password" autocomplete="current-password" required>`
+      : '';
+    form.innerHTML = `${current}<label for="enroll-password">${state.lang === 'cs' ? 'Nové heslo' : 'New password'}</label><input id="enroll-password" type="password" minlength="12" autocomplete="new-password" required><label for="confirm-enroll-password">${state.lang === 'cs' ? 'Potvrzení nového hesla' : 'Confirm new password'}</label><input id="confirm-enroll-password" type="password" minlength="12" autocomplete="new-password" required><p class="form-note">${state.lang === 'cs' ? '12–128 znaků včetně písmene, čísla a symbolu.' : '12–128 characters including a letter, number and symbol.'}</p><button class="button button-primary" type="submit">${state.lang === 'cs' ? (configured ? 'Změnit heslo' : 'Vytvořit heslo') : (configured ? 'Change password' : 'Create password')}</button>`;
   };
 
   const renderDashboard = (data) => {
@@ -529,6 +542,10 @@
     const nextVerification = activeDevices.map((device) => device.last_verified_at || device.activated_at || 0).filter(Boolean).sort((a, b) => a - b)[0];
 
     $('#customer-email').textContent = data.customer?.email || '—';
+    if ($('#profile-email')) $('#profile-email').value = data.customer?.email || '';
+    if ($('#profile-first-name')) $('#profile-first-name').value = data.profile?.first_name || '';
+    if ($('#profile-last-name')) $('#profile-last-name').value = data.profile?.last_name || '';
+    if ($('#profile-club-name')) $('#profile-club-name').value = data.profile?.club_name || '';
     $('#summary-licence').textContent = hasActiveLicence
       ? (primary.type === 'subscription' ? t('subscription') : t('lifetime'))
       : t('noActiveLicence');
@@ -758,19 +775,37 @@
     document.querySelectorAll('[data-open-billing]').forEach((button) => button.addEventListener('click', openBilling));
     $('#logout-button')?.addEventListener('click', signOut);
     $('#security-logout-button')?.addEventListener('click', signOut);
+    $('#profile-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const firstName = $('#profile-first-name')?.value.trim() || '';
+      const lastName = $('#profile-last-name')?.value.trim() || '';
+      const clubName = $('#profile-club-name')?.value.trim() || '';
+      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#profile-status'); return; }
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      setStatus(state.lang === 'cs' ? 'Ukládám profil…' : 'Saving profile…', '#profile-status');
+      try {
+        await api('/api/portal/profile', { method: 'POST', body: JSON.stringify({ first_name: firstName, last_name: lastName, club_name: clubName }) });
+        setStatus(state.lang === 'cs' ? 'Profil byl uložen.' : 'Profile saved.', '#profile-status');
+        await loadDashboard();
+      } catch (error) { setStatus(error.message, '#profile-status'); }
+      finally { button.disabled = false; }
+    });
     $('#password-enroll-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const newPassword = $('#enroll-password')?.value || '';
-       if (!strongPassword(newPassword)) { setStatus(t('passwordLength')); return; }
+      const confirmation = $('#confirm-enroll-password')?.value || '';
+      if (newPassword !== confirmation) { setStatus(t('passwordMismatch'), '#profile-status'); return; }
+      if (!strongPassword(newPassword)) { setStatus(t('passwordLength'), '#profile-status'); return; }
       const configured = form.dataset.configured === 'true';
       const body = configured
         ? { current_password: $('#current-password')?.value || '', new_password: newPassword }
         : { password: newPassword };
-      if (configured && body.current_password.length < 12) { setStatus(state.lang === 'cs' ? 'Zadejte souÄasnÃ© heslo.' : 'Enter your current password.'); return; }
-      setStatus(state.lang === 'cs' ? 'UklÃ¡dÃ¡mâ€¦' : 'Savingâ€¦');
-      try { await api(configured ? '/api/portal/password/change' : '/api/portal/password/enroll', { method: 'POST', body: JSON.stringify(body) }); setStatus(state.lang === 'cs' ? 'Heslo bylo uloÅ¾eno.' : 'Password saved.'); await loadDashboard(); }
-      catch (error) { setStatus(error.message); }
+      if (configured && body.current_password.length < 12) { setStatus(state.lang === 'cs' ? 'Zadejte současné heslo.' : 'Enter your current password.', '#profile-status'); return; }
+      setStatus(state.lang === 'cs' ? 'Ukládám heslo…' : 'Saving password…', '#profile-status');
+      try { await api(configured ? '/api/portal/password/change' : '/api/portal/password/enroll', { method: 'POST', body: JSON.stringify(body) }); setStatus(state.lang === 'cs' ? 'Heslo bylo uloženo.' : 'Password saved.', '#profile-status'); await loadDashboard(); }
+      catch (error) { setStatus(error.message, '#profile-status'); }
     });
     $('#device-details-close')?.addEventListener('click', () => $('#device-details-dialog').close());
     $('#activation-key-reveal')?.addEventListener('click', revealActivationKey);

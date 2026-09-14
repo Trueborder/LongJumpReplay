@@ -83,6 +83,26 @@
 .login-step-label { margin: 0 0 .55rem; color: var(--cyan); font: 500 .62rem var(--mono); letter-spacing: .1em; }
 .login-actions-secondary { display: flex; justify-content: space-between; gap: 1rem; min-height: 2.5rem; padding-top: .55rem; }
 .login-actions-secondary .text-button[hidden] { display: none; }
+.portal-login-page .login-actions-secondary[hidden],
+.portal-login-page .login-mode-actions[hidden],
+.portal-login-page .login-other-options[hidden] { display: none !important; }
+.login-mode-actions { display: grid; justify-items: center; gap: .35rem; padding-top: .35rem; }
+.login-forgot-button { order: 1; }
+.login-options-toggle {
+  order: 2;
+  min-height: 38px;
+  padding: .45rem .9rem;
+  border: 1px solid var(--account-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 .78rem var(--mono);
+  letter-spacing: .035em;
+  cursor: pointer;
+}
+.login-options-toggle:hover { border-color: color-mix(in srgb, var(--cyan) 42%, var(--account-border)); color: var(--text); background: color-mix(in srgb, var(--cyan) 6%, transparent); }
+.login-options-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.login-other-options { order: 3; display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem 1rem; padding-top: .2rem; }
 .portal-login-page .login-card input[aria-invalid="true"] { border-color: var(--coral); box-shadow: 0 0 0 4px color-mix(in srgb, var(--coral) 14%, transparent); }
 .portal-login-page .login-card .status { min-height: 2.2em; }
 .portal-login-page .login-actions-secondary { min-height: 0; padding-top: 0; }
@@ -182,6 +202,22 @@
 .password-security-form label { color: var(--muted); font: 500 .68rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .password-security-form input { min-height: 42px; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 75%, transparent); color: var(--text); font: inherit; }
 .password-security-form button { justify-self: start; margin-top: .35rem; }
+.profile-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.account-settings-card { padding: clamp(1.15rem, 3vw, 1.75rem); border: 1px solid var(--account-border); border-radius: 18px; background: var(--account-panel); }
+.settings-card-heading { margin-bottom: 1.25rem; }
+.settings-card-heading .eyebrow { margin-bottom: .45rem; }
+.settings-card-heading h3 { margin: 0; font-size: clamp(1.45rem, 2.5vw, 2rem); }
+.account-settings-form, .password-security-form { display: grid; gap: .5rem; }
+.account-settings-form label, .password-security-form label { margin-top: .35rem; color: var(--muted); font: 500 .68rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.account-settings-form input, .password-security-form input { width: 100%; min-height: 44px; box-sizing: border-box; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--bg) 75%, transparent); color: var(--text); font: inherit; }
+.account-settings-form input:focus, .password-security-form input:focus { border-color: var(--cyan); outline: 2px solid color-mix(in srgb, var(--cyan) 24%, transparent); outline-offset: 1px; }
+.account-settings-form input[readonly] { color: var(--muted); cursor: not-allowed; }
+.account-settings-form .form-note, .password-security-form .form-note { margin: -.1rem 0 .35rem; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+.account-settings-form .button, .password-security-form .button { justify-self: start; margin-top: .6rem; }
+.profile-name-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.profile-name-grid > div { display: grid; gap: .5rem; }
+.profile-status { margin-top: 1rem; }
+.account-settings-card .password-security-tools { margin: 0; padding: 0; border: 0; }
 .login-info-button:hover + .login-info-tooltip,
 .login-info-button:focus + .login-info-tooltip,
 .login-info-button:focus-visible + .login-info-tooltip {
@@ -344,7 +380,7 @@
   .dashboard-hero { display: block; }
   .dashboard-actions { justify-content: flex-start; margin-top: 1.5rem; }
   .dashboard-layout { grid-template-columns: 1fr; }
-  .dashboard-nav { position: static; grid-template-columns: repeat(6, max-content); overflow-x: auto; scrollbar-width: thin; }
+  .dashboard-nav { position: static; grid-template-columns: repeat(8, max-content); overflow-x: auto; scrollbar-width: thin; }
   .dashboard-nav p { display: none; }
 }
 @media (max-width: 650px) {
@@ -362,6 +398,7 @@
   .activation-key-card { grid-template-columns: 1fr; }
   .activation-key-actions { display: grid; }
   .pairing-card { grid-template-columns: 1fr; }
+  .profile-settings-grid, .profile-name-grid { grid-template-columns: 1fr; }
   .device-facts { grid-template-columns: 1fr; }
   .activity-list article { grid-template-columns: 1fr; }
   .table-card { margin-right: -.75rem; }

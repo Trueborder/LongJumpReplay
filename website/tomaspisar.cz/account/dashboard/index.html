@@ -59,6 +59,7 @@
         <a href="/dashboard/activation" data-dashboard-link="activation" data-en="Pair computer" data-cs="Spárovat počítač">Pair computer</a>
         <a href="/dashboard/devices" data-dashboard-link="devices" data-en="Computers" data-cs="Počítače">Computers</a>
         <a href="/dashboard/billing" data-dashboard-link="billing" data-en="Billing" data-cs="Platby">Billing</a>
+        <a href="/dashboard/profile" data-dashboard-link="profile" data-en="Profile" data-cs="Profil">Profile</a>
         <a href="/dashboard/help" data-dashboard-link="help" data-en="Help & security" data-cs="Pomoc a zabezpečení">Help & security</a>
       </aside>
 
@@ -146,6 +147,36 @@
           </details>
         </section>
 
+        <section id="profile" class="dashboard-section" data-dashboard-route="profile" aria-labelledby="profile-title">
+          <div class="category-heading"><p class="eyebrow" data-en="PROFILE" data-cs="PROFIL">PROFILE</p><h2 id="profile-title" data-en="Your account details." data-cs="Údaje vašeho účtu.">Your account details.</h2></div>
+          <p class="section-note" data-en="Keep the contact name and club associated with your LongJumpReplay account up to date." data-cs="Udržujte aktuální jméno a klub spojený s vaším účtem LongJumpReplay.">Keep the contact name and club associated with your LongJumpReplay account up to date.</p>
+          <div class="profile-settings-grid">
+            <section class="account-settings-card" aria-labelledby="personal-details-title">
+              <div class="settings-card-heading"><p class="eyebrow" data-en="PERSONAL DETAILS" data-cs="OSOBNÍ ÚDAJE">PERSONAL DETAILS</p><h3 id="personal-details-title" data-en="Name and club" data-cs="Jméno a klub">Name and club</h3></div>
+              <form id="profile-form" class="account-settings-form">
+                <label for="profile-email" data-en="Account email" data-cs="E-mail účtu">Account email</label>
+                <input id="profile-email" type="email" autocomplete="email" readonly aria-describedby="profile-email-note">
+                <p id="profile-email-note" class="form-note" data-en="Your verified sign-in email cannot be changed here." data-cs="Ověřený přihlašovací e-mail zde nelze změnit.">Your verified sign-in email cannot be changed here.</p>
+                <div class="profile-name-grid">
+                  <div><label for="profile-first-name" data-en="First name" data-cs="Jméno">First name</label><input id="profile-first-name" autocomplete="given-name" required></div>
+                  <div><label for="profile-last-name" data-en="Surname" data-cs="Příjmení">Surname</label><input id="profile-last-name" autocomplete="family-name" required></div>
+                </div>
+                <label for="profile-club-name" data-en="Club name (optional)" data-cs="Název klubu (volitelně)">Club name (optional)</label>
+                <input id="profile-club-name" autocomplete="organization">
+                <button class="button button-primary" type="submit" data-en="Save profile" data-cs="Uložit profil">Save profile</button>
+              </form>
+            </section>
+            <section class="account-settings-card" aria-labelledby="profile-password-title">
+              <div class="settings-card-heading"><p class="eyebrow" data-en="SECURITY" data-cs="ZABEZPEČENÍ">SECURITY</p><h3 id="profile-password-title" data-en="Password" data-cs="Heslo">Password</h3></div>
+              <div id="password-security-tools" class="password-security-tools" hidden>
+                <p id="password-security-copy" data-en="Change the password used for direct sign-in. Email-code sign-in remains available for recovery." data-cs="Změňte heslo používané pro přímé přihlášení. Přihlášení kódem z e-mailu zůstává dostupné pro obnovu.">Change the password used for direct sign-in. Email-code sign-in remains available for recovery.</p>
+                <form id="password-enroll-form" class="password-security-form"></form>
+              </div>
+            </section>
+          </div>
+          <p id="profile-status" class="status profile-status" role="status" aria-live="polite"></p>
+        </section>
+
         <section id="help" class="dashboard-section" data-dashboard-route="help" aria-labelledby="help-title">
           <div class="category-heading"><p class="eyebrow" data-en="HELP & SECURITY" data-cs="POMOC A ZABEZPEČENÍ">HELP & SECURITY</p><h2 id="help-title" data-en="Useful next steps." data-cs="Užitečné další kroky.">Useful next steps.</h2></div>
           <div class="guidance-list">
@@ -159,7 +190,7 @@
             </details>
             <details class="guidance-disclosure">
               <summary data-en="Account security" data-cs="Zabezpečení účtu">Account security</summary>
-              <div class="guidance-copy"><p><span data-en="Session valid until" data-cs="Relace platná do">Session valid until</span> <strong id="session-expiry">—</strong>. <span data-en="Signing out revokes it immediately." data-cs="Odhlášení ji okamžitě zneplatní.">Signing out revokes it immediately.</span></p><div id="password-security-tools" class="password-security-tools" hidden><p id="password-security-copy" data-en="Set a password for faster sign-in. Email-code sign-in remains available for recovery." data-cs="Nastavte si heslo pro rychlejší přihlášení. Přihlášení kódem z e-mailu zůstává k dispozici pro obnovu.">Set a password for faster sign-in. Email-code sign-in remains available for recovery.</p><form id="password-enroll-form" class="password-security-form"><label for="enroll-password" data-en="New password" data-cs="Nové heslo">New password</label><input id="enroll-password" type="password" minlength="12" autocomplete="new-password" required><button class="text-button" type="submit" data-en="Create password" data-cs="Vytvořit heslo">Create password</button></form></div><button id="security-logout-button" class="text-button" type="button" data-en="Sign out on this browser" data-cs="Odhlásit tento prohlížeč">Sign out on this browser</button></div>
+              <div class="guidance-copy"><p><span data-en="Session valid until" data-cs="Relace platná do">Session valid until</span> <strong id="session-expiry">—</strong>. <span data-en="Signing out revokes it immediately." data-cs="Odhlášení ji okamžitě zneplatní.">Signing out revokes it immediately.</span></p><a href="/dashboard/profile" data-en="Open profile and password settings" data-cs="Otevřít nastavení profilu a hesla">Open profile and password settings</a><br><button id="security-logout-button" class="text-button" type="button" data-en="Sign out on this browser" data-cs="Odhlásit tento prohlížeč">Sign out on this browser</button></div>
             </details>
           </div>
         </section>
@@ -176,6 +207,6 @@
   <script src="https://tomaspisar.cz/assets/js/components/site-config.js"></script>
   <script src="https://tomaspisar.cz/assets/js/components/site.js"></script>
   <script src="https://tomaspisar.cz/assets/js/account/state.js"></script>
-  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20260914-2"></script>
+  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20260914-3"></script>
 </body>
 </html>

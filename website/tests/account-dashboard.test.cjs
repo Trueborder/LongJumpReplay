@@ -10,7 +10,7 @@ const pairingHtml = fs.readFileSync(path.join(accountRoot, 'approve', 'pairing',
 const css = fs.readFileSync(path.join(assetsRoot, 'css', 'pages', 'account.css'), 'utf8');
 const script = fs.readFileSync(path.join(assetsRoot, 'js', 'account', 'account.js'), 'utf8');
 const pairingScript = fs.readFileSync(path.join(assetsRoot, 'js', 'account', 'pairing-approval.js'), 'utf8');
-const categories = ['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help'];
+const categories = ['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'profile', 'help'];
 
 test('dashboard categories have distinct deep links and routed content', () => {
   for (const category of categories) {
@@ -18,7 +18,14 @@ test('dashboard categories have distinct deep links and routed content', () => {
     assert.match(html, new RegExp(`data-dashboard-route="${category}"`));
   }
   assert.doesNotMatch(html, /class="dashboard-nav"[\s\S]*?href="#/);
-  assert.match(script, /dashboardRoutes = new Set\(\['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'help'\]\)/);
+  assert.match(script, /dashboardRoutes = new Set\(\['overview', 'licence', 'activation-key', 'activation', 'devices', 'billing', 'profile', 'help'\]\)/);
+});
+
+test('profile category edits identity and password through existing account APIs', () => {
+  assert.match(html, /id="profile-form"/);
+  assert.match(html, /id="password-enroll-form"/);
+  assert.match(script, /\/api\/portal\/profile/);
+  assert.match(script, /\/api\/portal\/password\/change/);
 });
 
 test('device controls keep actions together and use a dedicated SVG close icon', () => {

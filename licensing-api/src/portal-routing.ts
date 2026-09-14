@@ -10,6 +10,7 @@ export const DASHBOARD_ROUTES = [
   "activation",
   "devices",
   "billing",
+  "profile",
   "help",
 ] as const;
 

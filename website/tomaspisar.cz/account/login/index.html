@@ -95,12 +95,15 @@
               <label for="new-password" data-en="New password" data-cs="Nove heslo">New password</label>
               <input id="new-password" name="new-password" type="password" autocomplete="new-password" minlength="12">
             </div>
-            <div id="login-mode-actions" class="login-actions-secondary">
-              <button class="text-button" id="otp-mode-link" type="button" data-en="Use email code instead" data-cs="Pouzit kod z e-mailu">Use email code instead</button>
-              <button class="text-button" id="forgot-password" type="button" data-en="Forgot password?" data-cs="Zapomenute heslo?">Forgot password?</button>
-              <a class="text-button" href="/register" data-en="Create account" data-cs="Vytvorit ucet">Create account</a>
+            <div id="login-mode-actions" class="login-mode-actions">
+              <button class="text-button login-forgot-button" id="forgot-password" type="button" data-en="Forgot password?" data-cs="Zapomenuté heslo?">Forgot password?</button>
+              <button class="login-options-toggle" id="other-options-toggle" type="button" aria-expanded="false" aria-controls="login-other-options" data-en="Show other options" data-cs="Zobrazit další možnosti">Show other options</button>
+              <div id="login-other-options" class="login-other-options" hidden>
+                <button class="text-button" id="otp-mode-link" type="button" data-en="Use email code" data-cs="Použít kód z e-mailu">Use email code</button>
+                <a class="text-button" href="/register" data-en="Create account" data-cs="Vytvořit účet">Create account</a>
+              </div>
             </div>
-            <div id="reset-actions" class="login-actions-secondary" hidden><button class="text-button" id="reset-back" type="button" data-en="Back to sign in" data-cs="Zpet na prihlaseni">Back to sign in</button></div>
+            <div id="reset-actions" class="login-actions-secondary" hidden><button class="text-button" id="reset-back" type="button" data-en="Back to sign in" data-cs="Zpět na přihlášení">Back to sign in</button></div>
           </form>
           <p id="login-status" class="status" role="status" aria-live="polite"></p>
         </div>
@@ -113,6 +116,6 @@
   <script src="https://tomaspisar.cz/assets/js/components/site-config.js"></script>
   <script src="https://tomaspisar.cz/assets/js/components/site.js"></script>
   <script src="https://tomaspisar.cz/assets/js/account/state.js"></script>
-  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20260914-2"></script>
+  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20260914-3"></script>
 </body>
 </html>
