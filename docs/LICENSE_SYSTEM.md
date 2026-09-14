@@ -172,8 +172,9 @@ code, then first name, surname, optional club name, and a password of 12-128
 characters containing a letter, number, and symbol are required. Existing
 email-only customers complete this same setup gate before dashboard access.
 Passwords are stored as versioned PBKDF2-HMAC-SHA-256 hashes with per-account
-random salts, and are never emailed or logged. OTP remains available for
-recovery. Sessions remain opaque,
+random salts and an encoded 100,000-iteration cost supported by the Cloudflare
+Workers Web Crypto runtime; they are never emailed or logged. OTP remains
+available for recovery. Sessions remain opaque,
 server-side records in an HttpOnly cookie; password mutations also require a
 session-bound CSRF token. The portal never receives or stores card data.
 

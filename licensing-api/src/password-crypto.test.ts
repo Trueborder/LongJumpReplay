@@ -5,7 +5,7 @@ describe("portal password hashing", () => {
   it("uses a salted, versioned PBKDF2 record and verifies only the right password", async () => {
     const first = await hashPassword("a sufficiently long passphrase");
     const second = await hashPassword("a sufficiently long passphrase");
-    expect(first).toMatch(/^pbkdf2-sha256\$v1\$600000\$/);
+    expect(first).toMatch(/^pbkdf2-sha256\$v1\$100000\$/);
     expect(first).not.toBe(second);
     await expect(verifyPassword("a sufficiently long passphrase", first)).resolves.toBe(true);
     await expect(verifyPassword("a different passphrase", first)).resolves.toBe(false);

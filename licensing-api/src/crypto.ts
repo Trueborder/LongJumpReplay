@@ -14,7 +14,10 @@ import type { LicenseType } from "./config";
 const encoder = new TextEncoder();
 const PASSWORD_SCHEME = "pbkdf2-sha256";
 const PASSWORD_VERSION = "v1";
-const PASSWORD_ITERATIONS = 600_000;
+// Cloudflare Workers' Web Crypto runtime rejects PBKDF2 calls above 100,000
+// iterations. Keep the cost encoded in every record so it can be raised or
+// migrated if the runtime limit changes.
+const PASSWORD_ITERATIONS = 100_000;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_KEY_BITS = 256;
 
