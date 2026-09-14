@@ -31,6 +31,7 @@ from .adjudication import (
     parse_distance_centimetres,
     parse_wind_metres_per_second,
 )
+from .automatic_takeoff import AdvisoryStatus, AutomaticAdvisory, AutomaticTakeoffMonitor, TakeoffEvent, analyse_attempt
 from .background_tasks import BackgroundTaskController, TaskSnapshot, TaskState
 from . import VERSION_SHORT, __version__
 from .activation import authorization_permits, current_authorization
@@ -201,6 +202,12 @@ class MainWindow:
         self.performance_monitor = PerformanceMonitor(self.data_paths.exports)
         self.adjudication = AdjudicationSessionStore(self.data_paths.adjudication, writable_data_directory() / "adjudication-recovery")
         self.playback = PlaybackController(self.buffer, self.attempts)
+        self.automatic_takeoff = AutomaticTakeoffMonitor(
+            lambda event: self.event_queue.put(("automatic_takeoff_event", event)),
+            width=min(240, max(128, config.takeoff_assist.downscale_width)),
+            cooldown_seconds=config.takeoff_assist.automatic_cooldown_seconds,
+            warning_callback=lambda _message: self.event_queue.put(("automatic_takeoff_warning", "camera_moved")),
+        )
         self.athlete_timer = AthleteTimerController(config.athlete_timer.duration_seconds)
         # A new judging session always starts at the first athlete's first
         # attempt.  The persisted selection remains available for explicit
@@ -240,6 +247,8 @@ class MainWindow:
         self._startup_calibration_opened = False
         self._warning_active = False
         self._assist_warning_attempt_id: int | None = None
+        self._automatic_analysis_ids: set[int] = set()
+        self._automatic_calibration_suspect = False
         self._top_view_window: TopViewProjectionWindow | None = None
         self._top_view_loading_dialog: ProjectionProgressDialog | None = None
         self._top_view_loading_cancel: Event | None = None
@@ -310,6 +319,7 @@ class MainWindow:
 
         report("Starting background services…", 0, 4, phase="services")
         self.attempts.start()
+        self.automatic_takeoff.start()
         self.thumbnail_worker.start()
         report("Starting background services…", 1, 4, "Attempt worker started", phase="services")
         self._reconcile_adjudication_records()
@@ -1113,6 +1123,24 @@ class MainWindow:
         except tk.TclError:
             minimized = False
         live_frame, live_ts, live_index = self.capture.latest.get()
+        automatic_enabled = bool(
+            self.config.takeoff_assist.enabled
+            and self.config.takeoff_assist.automatic_monitor_enabled
+            and self._takeoff_assist_entitled
+            and self.playback.mode is PlaybackMode.LIVE
+            and not self._system_paused
+            and not suspended
+            and live_frame is not None
+            and not self._automatic_calibration_suspect
+        )
+        projection = self.config.top_view_projection
+        self.automatic_takeoff.offer(
+            live_frame, live_ts,
+            (self.config.display.board_roi_x, self.config.display.board_roi_y,
+             self.config.display.board_roi_width, self.config.display.board_roi_height),
+            projection.foul_line if len(projection.foul_line) == 2 else None,
+            enabled=automatic_enabled and len(projection.board_corners) == 4 and len(projection.foul_line) == 2,
+        ) if live_frame is not None else self.automatic_takeoff.reset()
         if not suspended and not minimized and live_frame is not None and live_index != self._last_live_index:
             self._last_live_index = live_index
             preview = self._preview_frame(live_frame)
@@ -1891,6 +1919,8 @@ class MainWindow:
             return
         if not self.attempts.set_decision(attempt_id, decision):
             return
+        sample_index = record.selected_frame_index if record.selected_frame_index is not None else attempt.freeze_frame_index
+        self._store_automatic_validation_sample(attempt_id, decision, sample_index)
         attempt = self.attempts.get_attempt(attempt_id)
         self._show_message(self._t("message.decision_marked", roster=self._attempt_roster_display(attempt), decision=self._decision_display(decision).upper()), 5)
         self._last_board_signature = None; self._last_attempts_refresh = 0; self._refresh_attempts()
@@ -2232,6 +2262,18 @@ class MainWindow:
                 detail = str(message)
                 self._set_assist_warning(int(attempt_id))
                 self._show_message(detail, 8)
+            elif event == "automatic_takeoff_event":
+                if isinstance(payload, TakeoffEvent):
+                    self._handle_automatic_takeoff_event(payload)
+            elif event == "automatic_takeoff_result":
+                attempt_id, advisory = payload
+                if isinstance(advisory, AutomaticAdvisory):
+                    self._handle_automatic_takeoff_result(int(attempt_id), advisory)
+            elif event == "automatic_takeoff_warning":
+                self._automatic_calibration_suspect = True
+                self.automatic_takeoff.reset()
+                message = self._t("assist.automatic.camera_moved") if payload == "camera_moved" else str(payload)
+                self._show_message(f"⚠ {message}", 12, NoticeSeverity.WARNING)
             elif event == "attempts_cleared":
                 self._end_busy(); self._show_message(f"Cleared {int(payload)} temporary recording(s) and the live buffer.", 5)
             elif event == "recording_thumbnail_ready":
@@ -2511,12 +2553,17 @@ class MainWindow:
         details.columnconfigure(1, weight=1)
         media_path = str(attempt.temp_video_path.resolve()) if attempt.temp_video_path else self._t("attempt_editor.no_media")
         source = record.camera_source or self.capture.stats().source_description or "—"
-        rows = (
+        rows = [
             (self._t("attempt_editor.phase"), attempt.competition_phase.title()),
             (self._t("attempt_editor.media"), f"{self._media_state_display(attempt.state)}  ·  {attempt.frame_count} frames"),
             (self._t("attempt_editor.source"), source),
             (self._t("attempt_editor.path"), media_path),
-        )
+        ]
+        if attempt.automatic_advisory:
+            clearance = ""
+            if attempt.automatic_signed_clearance_cm is not None and attempt.automatic_uncertainty_cm is not None:
+                clearance = f" · {attempt.automatic_signed_clearance_cm:+.1f} ±{attempt.automatic_uncertainty_cm:.1f} cm"
+            rows.append((self._t("attempt_editor.automatic_advice"), f"{attempt.automatic_advisory.upper()} · {attempt.automatic_advisory_confidence:.0%}{clearance}"))
         row = 0
         for label, value in rows:
             ttk.Label(details, text=label, style="ContextTitle.TLabel").grid(row=row, column=0, sticky="nw", padx=(0, 14), pady=5)
@@ -2819,6 +2866,7 @@ class MainWindow:
         projection.shoe_width_cm = calibration.shoe_width_cm
         projection.legal_side_flipped = calibration.legal_side_flipped
         projection.camera_profile = dict(calibration.camera_profile or {})
+        self._automatic_calibration_suspect = False
         self._save_config_safely()
 
     def _save_projection_foul_area(self, foul_area: tuple[tuple[float, float], ...]) -> None:
@@ -3084,6 +3132,7 @@ class MainWindow:
             self._show_message("Critical: the verdict could not be stored safely. The attempt remains open; retry the verdict.", 12)
             return
         if not self.attempts.set_decision(attempt_id, decision): return
+        self._store_automatic_validation_sample(attempt_id, decision, self.playback.attempt_frame_index)
         log_event(self._logger, "decision_changed", attempt_id=attempt_id, decision=decision.value)
         attempt = self.attempts.get_attempt(attempt_id)
         if attempt and self.config.competition.auto_save_evidence and decision in {AttemptDecision.VALID, AttemptDecision.FOUL, AttemptDecision.REVIEW}:
@@ -3450,6 +3499,175 @@ class MainWindow:
         self._update_judging_controls()
 
     # -------------------------------------------------------- Take-off Assist
+    def _store_automatic_validation_sample(self, attempt_id: int, decision: AttemptDecision,
+                                           frame_index: int) -> None:
+        """Keep an opt-in, anonymous local correction for the versioned dataset."""
+        if not self.config.takeoff_assist.automatic_collect_samples or decision not in {
+            AttemptDecision.VALID, AttemptDecision.FOUL, AttemptDecision.REVIEW,
+        }:
+            return
+        attempt = self.attempts.get_attempt(attempt_id)
+        if attempt is None or not attempt.automatic_advisory:
+            return
+        media = self.attempts.get_frame(attempt_id, frame_index)
+        if media.frame_bgr is None:
+            return
+        try:
+            directory = self.data_paths.validation_samples
+            image_path = save_bgr_png(media.frame_bgr, directory, prefix=f"attempt-{attempt_id:04d}")
+            projection = self.config.top_view_projection
+            metadata = {
+                "schema_version": 2,
+                "created_wall_time": time.time(),
+                "image": image_path.name,
+                "frame_width": int(media.frame_bgr.shape[1]),
+                "frame_height": int(media.frame_bgr.shape[0]),
+                "operator_verdict": decision.value,
+                "operator_frame_index": int(frame_index),
+                "automatic_advisory": attempt.automatic_advisory,
+                "automatic_confidence": attempt.automatic_advisory_confidence,
+                "automatic_frame_index": attempt.automatic_advisory_frame_index,
+                "automatic_signed_clearance_cm": attempt.automatic_signed_clearance_cm,
+                "automatic_uncertainty_cm": attempt.automatic_uncertainty_cm,
+                "automatic_engine": attempt.automatic_advisory_engine,
+                "roi": [
+                    self.config.display.board_roi_x, self.config.display.board_roi_y,
+                    self.config.display.board_roi_width, self.config.display.board_roi_height,
+                ],
+                "board_corners": projection.board_corners,
+                "foul_line": projection.foul_line,
+                "legal_side_flipped": projection.legal_side_flipped,
+            }
+            image_path.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._logger.warning("automatic_validation_sample_failed attempt_id=%s error=%s", attempt_id, exc)
+
+    def _handle_automatic_takeoff_event(self, event: TakeoffEvent) -> None:
+        """Pin the detected instant without interrupting the live preview."""
+        if (
+            self._closing or self._system_paused or self.playback.mode is not PlaybackMode.LIVE
+            or not self.config.takeoff_assist.automatic_monitor_enabled
+            or not self._takeoff_assist_entitled
+        ):
+            return
+        calibration = self._stored_top_view_calibration()
+        if calibration is None:
+            self._show_message(f"⚠ {self._t('assist.automatic.needs_calibration')}", 8, NoticeSeverity.WARNING)
+            return
+        assignment = self.competition.assignment_for_current(self.attempts.attempts())
+        if self.config.competition.enabled and assignment is None:
+            self._show_message(f"⚠ {self._t('assist.automatic.no_assignment')}", 8, NoticeSeverity.WARNING)
+            return
+        warning = self._capture_quality_warning() if self.config.display.show_capture_warnings else ""
+        attempt = self.attempts.create_attempt(
+            event.timestamp_ns,
+            competitor_group=assignment.group if assignment else "",
+            competitor_number=assignment.competitor_number if assignment else 0,
+            competitor_attempt_number=assignment.attempt_number if assignment else 0,
+            competition_phase=assignment.phase if assignment else "qualification",
+            quality_warning=warning,
+        )
+        if attempt is None:
+            self._show_message(f"⚠ {self._t('assist.automatic.pin_failed')}", 8, NoticeSeverity.WARNING)
+            return
+        try:
+            self._ensure_adjudication_record(attempt)
+        except DurabilityError as exc:
+            self._durability_blocked_attempt_id = attempt.attempt_id
+            log_event(self._logger, "automatic_adjudication_storage_failed", attempt_id=attempt.attempt_id, error=str(exc))
+        self._selected_action_attempt_id = attempt.attempt_id
+        self._automatic_analysis_ids.add(attempt.attempt_id)
+        self._show_message(self._t("assist.automatic.analysing", attempt=attempt.attempt_id), 5)
+        self._start_automatic_takeoff_analysis(attempt.attempt_id, event.timestamp_ns, calibration)
+
+    def _start_automatic_takeoff_analysis(self, attempt_id: int, target_timestamp_ns: int,
+                                          calibration: ProjectionCalibration) -> None:
+        config = replace(self.config.takeoff_assist)
+        roi = (
+            self.config.display.board_roi_x, self.config.display.board_roi_y,
+            self.config.display.board_roi_width, self.config.display.board_roi_height,
+        )
+
+        def worker() -> None:
+            try:
+                # A short wait includes the first frames after toe-off while the
+                # ordinary JPEG ring buffer keeps capture as the priority.
+                deadline = time.monotonic() + config.automatic_analysis_timeout_seconds
+                time.sleep(min(.38, max(.12, config.analysis_seconds_after_freeze + .08)))
+                packets = self.buffer.snapshot_between(
+                    target_timestamp_ns - int(.8e9),
+                    target_timestamp_ns + int(.4e9),
+                )
+                if len(packets) < 4:
+                    advisory = AutomaticAdvisory(
+                        AdvisoryStatus.REVIEW, 0.0, 0, None, None,
+                        "Not enough buffered frames were available for automatic advice.", 0.0,
+                    )
+                else:
+                    advisory = analyse_attempt(
+                        packets, target_timestamp_ns, roi, calibration,
+                        before_seconds=.70, after_seconds=.32,
+                        target_width=min(320, max(160, config.downscale_width)),
+                    )
+                    if time.monotonic() > deadline:
+                        advisory = replace(
+                            advisory, status=AdvisoryStatus.REVIEW,
+                            reason="Automatic analysis exceeded its time limit; judge the original replay.",
+                        )
+                    packet_index = max(0, min(len(packets) - 1, advisory.frame_index))
+                    mapped = self.attempts.frame_index_at_timestamp(attempt_id, packets[packet_index].timestamp_ns)
+                    advisory = replace(advisory, frame_index=mapped)
+                self.event_queue.put(("automatic_takeoff_result", (attempt_id, advisory)))
+            except Exception as exc:
+                advisory = AutomaticAdvisory(
+                    AdvisoryStatus.REVIEW, 0.0, 0, None, None,
+                    f"Automatic analysis failed: {exc}", 0.0,
+                )
+                self.event_queue.put(("automatic_takeoff_result", (attempt_id, advisory)))
+
+        Thread(target=worker, name=f"automatic-takeoff-{attempt_id}", daemon=True).start()
+
+    def _handle_automatic_takeoff_result(self, attempt_id: int, advisory: AutomaticAdvisory) -> None:
+        self._automatic_analysis_ids.discard(attempt_id)
+        self.attempts.set_automatic_advisory(
+            attempt_id, advisory.status.value, advisory.confidence, advisory.frame_index,
+            advisory.signed_clearance_cm, advisory.uncertainty_cm, advisory.reason,
+            advisory.engine, advisory.elapsed_ms,
+        )
+        symbols = {AdvisoryStatus.VALID: "✓", AdvisoryStatus.FOUL: "✕", AdvisoryStatus.REVIEW: "⚠"}
+        labels = {
+            AdvisoryStatus.VALID: self._t("assist.automatic.valid"),
+            AdvisoryStatus.FOUL: self._t("assist.automatic.foul"),
+            AdvisoryStatus.REVIEW: self._t("assist.automatic.review"),
+        }
+        colors = {AdvisoryStatus.VALID: self.palette["live"], AdvisoryStatus.FOUL: self.palette["danger"], AdvisoryStatus.REVIEW: self.palette["warning"]}
+        label = f"{symbols[advisory.status]} ASSIST: {labels[advisory.status]} · {advisory.confidence:.0%}"
+        self.replay_canvas.set_advisory(label, colors[advisory.status])
+        if self.live_canvas.winfo_exists():
+            self.live_canvas.set_advisory(label, colors[advisory.status])
+        severity = NoticeSeverity.SUCCESS if advisory.status is AdvisoryStatus.VALID else NoticeSeverity.WARNING
+        self._show_message(f"{label} — {advisory.reason}", 10, severity)
+        if advisory.status is AdvisoryStatus.FOUL and self.config.takeoff_assist.automatic_foul_sound:
+            self._play_foul_signal()
+        action = self.config.takeoff_assist.automatic_post_action
+        should_freeze = action == "freeze" or (action == "smart" and advisory.status is not AdvisoryStatus.VALID)
+        if should_freeze and self.playback.select_attempt(attempt_id, at_freeze=False):
+            self.playback.attempt_frame_index = advisory.frame_index
+            self._selected_action_attempt_id = attempt_id
+            self._last_replay_key = None
+            self.timeline.detail_center_ns = None
+            self._refresh_attempts()
+
+    @staticmethod
+    def _play_foul_signal() -> None:
+        def play() -> None:
+            try:
+                import winsound
+                winsound.PlaySound("SystemHand", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            except (ImportError, RuntimeError):
+                pass
+        Thread(target=play, name="foul-signal", daemon=True).start()
+
     def _set_assist_warning(self, attempt_id: int) -> None:
         """Show a persistent, compact failure state for the active frozen attempt."""
         if self.playback.mode is not PlaybackMode.ATTEMPT or self.playback.attempt_id != attempt_id:
@@ -3926,6 +4144,10 @@ class MainWindow:
             self._update_athlete_timer_display()
         self.attempts.config = new_config.attempts
         self.attempts.export_config = new_config.export
+        self.automatic_takeoff.width = min(240, max(128, new_config.takeoff_assist.downscale_width))
+        self.automatic_takeoff.cooldown_seconds = new_config.takeoff_assist.automatic_cooldown_seconds
+        if not new_config.takeoff_assist.automatic_monitor_enabled:
+            self.automatic_takeoff.reset()
         self.competition.update_config(new_config.competition)
         self.var_show_attempts.set(new_config.display.show_attempts_panel)
         self.var_show_timeline.set(new_config.display.show_timeline)
@@ -4506,6 +4728,8 @@ class MainWindow:
             try: self.hotkeys.close()
             except Exception: pass
             try: alive.extend(self.shuttle.stop(timeout=.8))
+            except Exception: pass
+            try: alive.extend(self.automatic_takeoff.stop(timeout=.8))
             except Exception: pass
             try: self.thumbnail_worker.stop(timeout=.8)
             except Exception: pass

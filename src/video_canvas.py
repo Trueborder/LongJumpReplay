@@ -48,6 +48,9 @@ class VideoCanvas(tk.Canvas):
         self._status_text = tr(self.language, "overlay.waiting_video")
         self._status_color = palette["muted"]
         self._secondary_text = ""
+        self._advisory_text = ""
+        self._advisory_color = palette["warning"]
+        self._advisory_flash_job: str | None = None
         self.guide_enabled = guide_enabled
         self.guide_x_ratio = guide_x_ratio
         self.guide_y_ratio = guide_y_ratio
@@ -100,6 +103,8 @@ class VideoCanvas(tk.Canvas):
         self._status_label = self.create_text(0, 0)
         self._help_label = self.create_text(0, 0, state="hidden")
         self._secondary_label = self.create_text(0, 0, state="hidden")
+        self._advisory_box = self.create_rectangle(0, 0, 0, 0, state="hidden")
+        self._advisory_label = self.create_text(0, 0, state="hidden")
 
     def set_language(self, language: str) -> None:
         previous_waiting = tr(self.language, "overlay.waiting_video")
@@ -125,6 +130,31 @@ class VideoCanvas(tk.Canvas):
         self._status_color = status_color
         self._secondary_text = secondary
         self.request_render()
+
+    def set_advisory(self, text: str, color: str, *, flash_ms: int = 1500) -> None:
+        """Show a persistent advisory badge and a brief result-coloured border."""
+        self._advisory_text = str(text)
+        self._advisory_color = str(color)
+        if self._advisory_flash_job:
+            try:
+                self.after_cancel(self._advisory_flash_job)
+            except tk.TclError:
+                pass
+        self.configure(highlightthickness=4, highlightbackground=self._advisory_color)
+        self._advisory_flash_job = self.after(max(100, int(flash_ms)), self._end_advisory_flash)
+        self.request_render()
+
+    def clear_advisory(self) -> None:
+        self._advisory_text = ""
+        self._end_advisory_flash()
+        self.request_render()
+
+    def _end_advisory_flash(self) -> None:
+        self._advisory_flash_job = None
+        try:
+            self.configure(highlightthickness=1, highlightbackground=self.palette["border"])
+        except tk.TclError:
+            pass
 
     def set_guide_enabled(self, enabled: bool) -> None:
         self.guide_enabled = enabled
@@ -318,6 +348,14 @@ class VideoCanvas(tk.Canvas):
         elif self._secondary_text and not self.compact:
             self.coords(self._secondary_label, w - 10, h - 9)
             self.itemconfigure(self._secondary_label, state="normal", anchor="se", text=self._secondary_text, fill=self.palette["muted"], font=("Segoe UI", 8))
+        if self._advisory_text and not self.compact:
+            width = min(330, max(155, 18 + len(self._advisory_text) * 7))
+            self.coords(self._advisory_box, w - width - pad, pad, w - pad, pad + 32)
+            self.itemconfigure(self._advisory_box, state="normal", fill=self.palette["surface"], outline=self._advisory_color, width=2)
+            self.coords(self._advisory_label, w - pad - 10, pad + 16)
+            self.itemconfigure(self._advisory_label, state="normal", anchor="e", text=self._advisory_text, fill=self._advisory_color, font=("Segoe UI Semibold", 10))
+            self.tag_raise(self._advisory_box)
+            self.tag_raise(self._advisory_label)
 
     def _canvas_to_ratio(self, x: float, y: float) -> tuple[float, float]:
         left, top, right, bottom = self._image_bounds

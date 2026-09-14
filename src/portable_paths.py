@@ -20,6 +20,7 @@ class AppDataPaths:
     evidence: Path
     adjudication: Path
     thumbnails: Path
+    validation_samples: Path
 
 
 def is_frozen() -> bool:
@@ -103,6 +104,7 @@ def app_data_paths(
         evidence=exports / evidence_directory,
         adjudication=cache.parent / "adjudication",
         thumbnails=recordings / ".thumbnails",
+        validation_samples=cache.parent / "validation-samples",
     )
 
 

@@ -1,5 +1,15 @@
 # Long Jump Replay — Project Knowledge
 
+## Automatic take-off advisory (2026-09-14)
+
+- `src/automatic_takeoff.py` owns the CPU-only automatic pipeline. A bounded 16–18 Hz, roughly 192-pixel board-ROI gate runs on a dedicated latest-frame worker and never queues work on the camera thread. It pins the detected instant through the existing RAM-buffer `AttemptManager`; it does not introduce another capture or recording pipeline.
+- A detected attempt is evaluated on at most three reduced frames plus bounded references. The existing Take-off Assist candidate search, shoe-outline estimator and calibrated nearest-contact-edge measurement are reused. Temporal agreement returns `valid`, `foul`, or the safe `review` fallback; clipped geometry can support a clear crossing but cannot support Valid.
+- Automatic advice is persisted separately from `AttemptDecision`. It never writes the official competition verdict. The video shows a symbol, persistent `ASSIST` badge and 1.5-second semantic border flash; likely Foul can play the Windows warning sound. Smart mode stays Live after likely Valid and opens the decisive replay frame for Foul or Review.
+- The feature is opt-in under Settings → Board & Take-off Assist and remains covered by the existing `takeoff_assist` entitlement. Advanced settings expose the bounded timeout, duplicate-event cooldown and opt-in anonymous local correction capture. Local samples are stored under the writable application data directory and are never uploaded.
+- Camera-shift correlation disarms automatic advice and requires the operator to confirm board calibration again. Automatic processing also disarms while capture is paused, replay is open, calibration is missing, or the licence lacks Take-off Assist.
+- `validation/manifest.example.json` is schema 2. `tools/detection_validation.py` remains compatible with schema 1 and now measures both decisive-frame error and advisory classification. Athlete media and reports with private paths remain outside Git. A release must report confident-error and Review rates by camera, light, footwear, frame rate and visibility class; Review is deliberately preferred over an unsafe confident answer.
+- The supplied 25 fps MS Video-1 AVI is useful for regression development but is not a sufficient training/validation set. With its current partial-board view and the current manual calibration, the bounded pipeline returns Review rather than inventing a shoe outline; the measured analysis itself completes in about 1.2 seconds on this development PC. More manually annotated complete-board examples are required before enabling the feature by default.
+
 ## Website organization (2026-09-13)
 
 - The authoritative public website source is `website/tomaspisar.cz`. Public pages remain at the root; product pages now live under `products/long-jump-replay/` and `products/relaylab/`.
@@ -580,7 +590,7 @@ Preserve these rules unless the product owner explicitly changes them:
 13. **All registered interface languages are supported through a deterministic English fallback.** New user-facing strings must go through `src/i18n.py`; frequently used operator controls should also be added to each locale override in `src/language_catalog.py`.
 14. **Dark mode controls must remain readable.** Always test combobox popups, selections, disabled text, and focus states.
 15. **Competition management must be completely disableable.** Judge-only mode must remain simple.
-16. **Take-off Assist may locate a candidate frame but must never decide Valid/Foul.** A human remains responsible.
+16. **Take-off Assist may show a Valid/Foul/Review advisory but must never write the official verdict.** A human remains responsible.
 17. **The athlete countdown is an operator aid only.** It must not create a result or be persisted in attempt metadata, evidence, or exports.
 18. **A stalled camera must not leave post-roll open forever.** Finalize the available partial recording after a bounded monotonic deadline and retain a quality warning.
 19. **System pause is a hard capture boundary.** It releases the camera, clears latest/live-buffer frames, blocks judging and timer starts, and creates no new attempt cache. Existing completed attempts are preserved.

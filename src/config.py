@@ -274,6 +274,12 @@ class TakeoffAssistConfig:
     seek_lead_frames: int = 0
     minimum_confidence: float = 0.18
     downscale_width: int = 240
+    automatic_monitor_enabled: bool = False
+    automatic_post_action: str = "smart"
+    automatic_foul_sound: bool = True
+    automatic_analysis_timeout_seconds: float = 5.0
+    automatic_cooldown_seconds: float = 1.5
+    automatic_collect_samples: bool = False
 
 
 @dataclass(slots=True)
@@ -464,6 +470,12 @@ class AppConfig:
             raise ValueError("takeoff_assist.quick_review_speed must be between 0.01 and 4")
         if not -1000 <= a.seek_lead_frames <= 1000:
             raise ValueError("takeoff_assist.seek_lead_frames must be between -1000 and 1000")
+        if a.automatic_post_action not in {"smart", "freeze", "live"}:
+            raise ValueError("takeoff_assist.automatic_post_action must be smart, freeze or live")
+        if not 1.0 <= a.automatic_analysis_timeout_seconds <= 15.0:
+            raise ValueError("takeoff_assist.automatic_analysis_timeout_seconds must be between 1 and 15")
+        if not .5 <= a.automatic_cooldown_seconds <= 10.0:
+            raise ValueError("takeoff_assist.automatic_cooldown_seconds must be between 0.5 and 10")
         projection = self.top_view_projection
         if not isinstance(projection.enabled, bool):
             raise ValueError("top_view_projection.enabled must be true or false")

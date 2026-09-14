@@ -1,4 +1,5 @@
 import time
+import json
 from pathlib import Path
 from queue import Queue
 
@@ -75,6 +76,24 @@ def test_selected_attempt_does_not_expire(tmp_path, jpeg_frame):
     manager.clear_selection()
     assert manager.selected_attempt() is None
     manager.stop()
+
+
+def test_automatic_advisory_is_persisted_separately_from_official_decision(tmp_path, jpeg_frame):
+    jpeg, _ = jpeg_frame
+    ring = TimeRingBuffer(2, 128)
+    ring.append(time.monotonic_ns(), jpeg, 160, 90)
+    (tmp_path / "cache").mkdir()
+    manager = AttemptManager(ring, AttemptsConfig(pre_seconds=.1, post_seconds=0), ExportConfig(), tmp_path / "cache", Queue())
+    attempt = manager.create_attempt()
+    assert attempt is not None
+    assert manager.set_automatic_advisory(attempt.attempt_id, "foul", .91, 0, -.8, .2, "edge crossed", "test-v1", 18.0)
+    saved = manager.get_attempt(attempt.attempt_id)
+    assert saved is not None
+    assert saved.automatic_advisory == "foul"
+    assert saved.decision.value == "Not decided"
+    metadata = json.loads((tmp_path / "cache" / "attempt_0001.session.json").read_text(encoding="utf-8"))
+    assert metadata["automatic_advisory"] == "foul"
+    assert metadata["decision"] == "Not decided"
 
 
 def test_in_progress_attempt_cannot_be_deleted(tmp_path, jpeg_frame):

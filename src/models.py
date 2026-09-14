@@ -120,6 +120,14 @@ class AttemptSession:
     protected: bool = False
     selected: bool = False
     adjudication_record_id: str = ""
+    automatic_advisory: str = ""
+    automatic_advisory_confidence: float = 0.0
+    automatic_advisory_frame_index: int | None = None
+    automatic_signed_clearance_cm: float | None = None
+    automatic_uncertainty_cm: float | None = None
+    automatic_advisory_reason: str = ""
+    automatic_advisory_engine: str = ""
+    automatic_analysis_ms: float = 0.0
 
     @property
     def start_timestamp_ns(self) -> int:

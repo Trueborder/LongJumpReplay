@@ -1,18 +1,23 @@
 {
-  "schema_version": 1,
-  "dataset_version": "private-lj-takeoff-v1",
+  "schema_version": 2,
+  "dataset_version": "private-lj-takeoff-v2",
   "algorithm_version": "working-tree",
   "cases": [
     {
       "id": "camera-a-valid-001",
       "clip": "D:/LongJumpReplay-validation/clips/camera-a-valid-001.mp4",
       "roi": [0.35, 0.35, 0.3, 0.45],
+      "board_corners": [[0.2, 0.2], [0.8, 0.2], [0.8, 0.9], [0.2, 0.9]],
+      "foul_line": [[0.2, 0.7], [0.8, 0.7]],
+      "legal_side_flipped": false,
       "freeze_frame": 180,
       "expected_takeoff_frame": 174,
+      "expected_advisory": "valid",
+      "visibility": "complete",
       "tolerance_frames": 1,
-      "before_seconds": 2.5,
-      "after_seconds": 0.25,
-      "target_width": 240
+      "before_seconds": 0.7,
+      "after_seconds": 0.32,
+      "target_width": 192
     }
   ]
 }

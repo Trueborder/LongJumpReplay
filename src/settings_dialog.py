@@ -1330,9 +1330,18 @@ class SettingsDialog(tk.Toplevel):
             "quick_review": tk.BooleanVar(value=a.quick_review_enabled), "quick_speed": tk.DoubleVar(value=a.quick_review_speed),
             "assist_before": tk.DoubleVar(value=a.analysis_seconds_before_freeze), "assist_after": tk.DoubleVar(value=a.analysis_seconds_after_freeze),
             "assist_confidence": tk.DoubleVar(value=a.minimum_confidence), "assist_width": tk.IntVar(value=a.downscale_width),
+            "automatic_monitor": tk.BooleanVar(value=a.automatic_monitor_enabled),
+            "automatic_post_action": tk.StringVar(value=a.automatic_post_action),
+            "automatic_sound": tk.BooleanVar(value=a.automatic_foul_sound),
+            "automatic_timeout": tk.DoubleVar(value=a.automatic_analysis_timeout_seconds),
+            "automatic_cooldown": tk.DoubleVar(value=a.automatic_cooldown_seconds),
+            "automatic_collect": tk.BooleanVar(value=a.automatic_collect_samples),
         }
         self._vars.update(vals)
         self._row(f, r, "Enable Take-off Assist", "Zapnout asistenta odrazu", vals["assist_enabled"], "check", impact="high"); r += 1
+        self._row(f, r, "Automatic take-off advice", "Automatické doporučení odrazu", vals["automatic_monitor"], "check", desc_en="Pins a likely take-off from the live buffer and shows Valid, Foul or Review advice. The judge's official result is never changed automatically.", desc_cs="Připne pravděpodobný odraz ze živého bufferu a zobrazí doporučení Platný, Přešlap nebo Kontrola. Oficiální výsledek rozhodčího se nikdy nezmění automaticky.", impact="high"); r += 1
+        self._row(f, r, "After automatic advice", "Po automatickém doporučení", vals["automatic_post_action"], "combo", ("smart", "freeze", "live"), desc_en="Smart stays live after likely Valid and freezes on Foul or Review.", desc_cs="Chytrý režim zůstane živý po pravděpodobně platném pokusu a zmrazí obraz při přešlapu nebo nutné kontrole.", impact="high"); r += 1
+        self._row(f, r, "Sound on likely Foul", "Zvuk při pravděpodobném přešlapu", vals["automatic_sound"], "check", impact="medium"); r += 1
         self._row(f, r, "Seek to candidate after Freeze", "Po zmrazení přesunout na kandidáta", vals["assist_auto_seek"], "check", desc_en="Moves the replay to the detected take-off frame when Quick Review is off.", desc_cs="Při vypnuté rychlé kontrole přesune replay na nalezený snímek odrazu.", impact="low"); r += 1
         self._row(f, r, "Enable Quick Review", "Zapnout rychlou kontrolu", vals["quick_review"], "check", desc_en="Shows a short smooth replay around the detected take-off, then stops on the candidate.", desc_cs="Zobrazí krátký plynulý replay kolem nalezeného odrazu a zastaví na kandidátovi.", impact="high"); r += 1
         self._row(f, r, "Quick Review speed", "Rychlost rychlé kontroly", vals["quick_speed"], desc_en="Controls how quickly the short review advances; it does not change camera capture.", desc_cs="Určuje rychlost krátké kontroly; nemění snímání kamery.", impact="medium"); r += 1
@@ -1340,6 +1349,10 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Analyse seconds after Freeze", "Analyzovat sekundy po zmrazení", vals["assist_after"], desc_en="Adds post-Freeze frames for delayed camera or operator timing.", desc_cs="Přidá snímky po zmrazení pro opožděnou kameru nebo reakci obsluhy.", impact="medium"); r += 1
         self._row(f, r, "Minimum confidence (0–1)", "Minimální jistota (0–1)", vals["assist_confidence"], desc_en="Candidates below this confidence remain warnings and do not move the replay.", desc_cs="Kandidáti pod touto jistotou zůstanou varováním a replay se neposune.", impact="low"); r += 1
         self._row(f, r, "Analysis width", "Šířka analýzy", vals["assist_width"], desc_en="Higher values cost more CPU. 160–240 is normally sufficient.", desc_cs="Vyšší hodnoty více zatěžují CPU. Obvykle stačí 160–240.", impact="very_high")
+        r += 1
+        self._row(f, r, "Automatic analysis timeout (s)", "Limit automatické analýzy (s)", vals["automatic_timeout"], desc_en="Falls back to Review instead of delaying the operator workflow.", desc_cs="Místo zdržení práce rozhodčího přejde na stav Kontrola.", impact="very_high"); r += 1
+        self._row(f, r, "Event cooldown (s)", "Prodleva mezi událostmi (s)", vals["automatic_cooldown"], desc_en="Prevents one jump from creating several recordings.", desc_cs="Zabrání vytvoření více záznamů z jednoho skoku.", impact="very_high"); r += 1
+        self._row(f, r, "Keep corrected validation samples locally", "Ukládat opravené validační vzorky místně", vals["automatic_collect"], "check", desc_en="Reserved for operator-approved local dataset samples. Nothing is uploaded.", desc_cs="Určeno pro místní vzorky schválené obsluhou. Nic se neodesílá.", impact="very_high")
 
     def _build_hotkeys(self, f: ttk.Frame) -> None:
         r = self._title(f, "Hotkeys", "Klávesové zkratky", "Shortcuts are captured before focused buttons, so Space always controls Freeze/Live.", "Zkratky se zachytávají před aktivními tlačítky, takže mezerník vždy ovládá Zmrazit/Živě.")
@@ -1505,6 +1518,9 @@ class SettingsDialog(tk.Toplevel):
         ta = w.takeoff_assist
         ta.enabled = bool(self._vars["assist_enabled"].get()); ta.auto_seek_after_freeze = bool(self._vars["assist_auto_seek"].get()); ta.quick_review_enabled = bool(self._vars["quick_review"].get()); ta.quick_review_speed = float(self._vars["quick_speed"].get())
         ta.analysis_seconds_before_freeze = float(self._vars["assist_before"].get()); ta.analysis_seconds_after_freeze = float(self._vars["assist_after"].get()); ta.minimum_confidence = float(self._vars["assist_confidence"].get()); ta.downscale_width = int(self._vars["assist_width"].get())
+        ta.automatic_monitor_enabled = bool(self._vars["automatic_monitor"].get()); ta.automatic_post_action = str(self._vars["automatic_post_action"].get())
+        ta.automatic_foul_sound = bool(self._vars["automatic_sound"].get()); ta.automatic_analysis_timeout_seconds = float(self._vars["automatic_timeout"].get())
+        ta.automatic_cooldown_seconds = float(self._vars["automatic_cooldown"].get()); ta.automatic_collect_samples = bool(self._vars["automatic_collect"].get())
         w.hotkeys.enabled = bool(self._vars["hotkeys_enabled"].get()); w.shuttle.enabled = bool(self._vars["shuttle_enabled"].get()); w.shuttle.direct_hid = bool(self._vars["direct_hid"].get())
         w.shuttle.button_map = {action: button for button, var in self.shuttle_vars.items() if (action := var.get()) != "none"}
         b.encoder_queue_size = int(self._vars["queue_size"].get()); b.store_every_nth_frame = int(self._vars["store_nth"].get())

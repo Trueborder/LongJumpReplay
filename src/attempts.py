@@ -329,6 +329,27 @@ class AttemptManager:
         self.event_queue.put(("takeoff_candidate", (attempt_id, attempt.takeoff_candidate_index, attempt.takeoff_confidence)))
         return True
 
+    def set_automatic_advisory(
+        self, attempt_id: int, status: str, confidence: float, frame_index: int,
+        signed_clearance_cm: float | None, uncertainty_cm: float | None,
+        reason: str, engine: str, elapsed_ms: float,
+    ) -> bool:
+        with self._lock:
+            attempt = self._find_locked(attempt_id)
+            if attempt is None or attempt.frame_count <= 0:
+                return False
+            attempt.automatic_advisory = str(status)
+            attempt.automatic_advisory_confidence = max(0.0, min(1.0, float(confidence)))
+            attempt.automatic_advisory_frame_index = max(0, min(attempt.frame_count - 1, int(frame_index)))
+            attempt.automatic_signed_clearance_cm = None if signed_clearance_cm is None else float(signed_clearance_cm)
+            attempt.automatic_uncertainty_cm = None if uncertainty_cm is None else max(0.0, float(uncertainty_cm))
+            attempt.automatic_advisory_reason = str(reason)
+            attempt.automatic_advisory_engine = str(engine)
+            attempt.automatic_analysis_ms = max(0.0, float(elapsed_ms))
+            self._write_metadata_locked(attempt)
+        self.event_queue.put(("attempt_updated", attempt_id))
+        return True
+
     def set_thumbnail_frame(self, attempt_id: int, frame_index: int) -> bool:
         """Persist the operator's preferred library thumbnail frame."""
         with self._lock:
@@ -755,6 +776,14 @@ class AttemptManager:
             "takeoff_confidence": attempt.takeoff_confidence,
             "takeoff_analysis_start_ns": attempt.takeoff_analysis_start_ns,
             "takeoff_analysis_end_ns": attempt.takeoff_analysis_end_ns,
+            "automatic_advisory": attempt.automatic_advisory,
+            "automatic_advisory_confidence": attempt.automatic_advisory_confidence,
+            "automatic_advisory_frame_index": attempt.automatic_advisory_frame_index,
+            "automatic_signed_clearance_cm": attempt.automatic_signed_clearance_cm,
+            "automatic_uncertainty_cm": attempt.automatic_uncertainty_cm,
+            "automatic_advisory_reason": attempt.automatic_advisory_reason,
+            "automatic_advisory_engine": attempt.automatic_advisory_engine,
+            "automatic_analysis_ms": attempt.automatic_analysis_ms,
             "width": attempt.width,
             "height": attempt.height,
             "media_start_timestamp_ns": attempt.media_start_timestamp_ns,
@@ -840,6 +869,14 @@ class AttemptManager:
                 takeoff_confidence=float(data.get("takeoff_confidence", 0.0)),
                 takeoff_analysis_start_ns=int(data["takeoff_analysis_start_ns"]) if data.get("takeoff_analysis_start_ns") is not None else None,
                 takeoff_analysis_end_ns=int(data["takeoff_analysis_end_ns"]) if data.get("takeoff_analysis_end_ns") is not None else None,
+                automatic_advisory=str(data.get("automatic_advisory", "")),
+                automatic_advisory_confidence=float(data.get("automatic_advisory_confidence", 0.0)),
+                automatic_advisory_frame_index=(int(data["automatic_advisory_frame_index"]) if data.get("automatic_advisory_frame_index") is not None else None),
+                automatic_signed_clearance_cm=(float(data["automatic_signed_clearance_cm"]) if data.get("automatic_signed_clearance_cm") is not None else None),
+                automatic_uncertainty_cm=(float(data["automatic_uncertainty_cm"]) if data.get("automatic_uncertainty_cm") is not None else None),
+                automatic_advisory_reason=str(data.get("automatic_advisory_reason", "")),
+                automatic_advisory_engine=str(data.get("automatic_advisory_engine", "")),
+                automatic_analysis_ms=float(data.get("automatic_analysis_ms", 0.0)),
                 width=int(data.get("width", 0)),
                 height=int(data.get("height", 0)),
                 media_start_timestamp_ns=int(data.get("media_start_timestamp_ns", 0)),
