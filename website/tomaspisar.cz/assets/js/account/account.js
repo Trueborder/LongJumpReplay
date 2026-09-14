@@ -153,7 +153,12 @@
       credentials: 'include',
       headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}), ...(options.headers || {}) }
     });
-    const data = await response.json().catch(() => ({}));
+    const raw = await response.text();
+    let data = {};
+    try {
+      const parsed = raw ? JSON.parse(raw) : {};
+      data = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch { data = { message: raw.trim() }; }
     if (!response.ok) throw new ApiError(data.message || t('genericError'), response.status, data.error || 'error');
     return data;
   };
