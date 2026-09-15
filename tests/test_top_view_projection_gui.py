@@ -6,6 +6,18 @@ from src.main_window import MainWindow
 from src.top_view_projection import TopViewProjectionWindow
 
 
+def test_projection_prefers_persisted_automatic_advisory_verdict():
+    projection = TopViewProjectionWindow.__new__(TopViewProjectionWindow)
+    projection.language = "en"
+    projection.palette = {"live": "#20b486", "danger": "#e45561", "warning": "#d6a72c"}
+    projection.automatic_advisory_status = "foul"
+    projection.automatic_advisory_label = "LIKELY FOUL"
+    projection.automatic_advisory_confidence = .87
+
+    assert projection._verdict_display("clear", .99) == ("LIKELY FOUL", "#e45561", .87)
+    assert projection._measurement_summary() == "LIKELY FOUL"
+
+
 def test_failed_shoe_detection_uses_neutral_unavailable_split_result():
     root = tk.Tk()
     root.withdraw()

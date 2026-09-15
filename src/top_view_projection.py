@@ -2262,6 +2262,9 @@ class TopViewProjectionWindow:
         on_foul_area_saved: Callable[[tuple[tuple[float, float], ...]], None] | None = None,
         start_fullscreen: bool = False,
         auto_start: bool = True,
+        automatic_advisory_status: str = "",
+        automatic_advisory_label: str = "",
+        automatic_advisory_confidence: float | None = None,
     ) -> None:
         self.master, self.palette, self.language = master, palette, language
         self.attempt_id, self.packets = attempt_id, list(packets)
@@ -2274,6 +2277,13 @@ class TopViewProjectionWindow:
         self.candidates = list(candidates or [])
         self.reference_frames = [frame for frame in (reference_frames or ()) if frame is not None]
         self._candidate_estimates = dict(candidate_estimates or {})
+        self.automatic_advisory_status = str(automatic_advisory_status).strip().lower()
+        self.automatic_advisory_label = str(automatic_advisory_label).strip()
+        self.automatic_advisory_confidence = (
+            None
+            if automatic_advisory_confidence is None
+            else max(0.0, min(1.0, float(automatic_advisory_confidence)))
+        )
         self.current_candidate = 0
         self._state = "selecting_frame"
         self._closed = False
@@ -2534,6 +2544,37 @@ class TopViewProjectionWindow:
     def _text(self, english: str, czech: str) -> str:
         return czech if self.language == "cs" else english
 
+    def _automatic_verdict_display(self) -> tuple[str, str, float] | None:
+        """Return the persisted Auto/Takeoff Assist verdict used by the main view."""
+        status = getattr(self, "automatic_advisory_status", "")
+        if status not in {"valid", "foul", "review"}:
+            return None
+        fallback_labels = {
+            "valid": self._text("LIKELY VALID", "PRAVDĚPODOBNĚ PLATNÝ"),
+            "foul": self._text("LIKELY FOUL", "PRAVDĚPODOBNĚ PŘEŠLAP"),
+            "review": self._text("REVIEW REQUIRED", "NUTNÁ KONTROLA"),
+        }
+        colours = {
+            "valid": self.palette["live"],
+            "foul": self.palette["danger"],
+            "review": self.palette["warning"],
+        }
+        label = getattr(self, "automatic_advisory_label", "") or fallback_labels[status]
+        confidence = getattr(self, "automatic_advisory_confidence", None)
+        return label, colours[status], 0.0 if confidence is None else float(confidence)
+
+    def _verdict_display(self, projection_status: str, projection_confidence: float) -> tuple[str, str, float]:
+        automatic = self._automatic_verdict_display()
+        if automatic is not None:
+            return automatic
+        label = projection_verdict_text(projection_status)
+        colour = (
+            self.palette["danger"] if projection_status == "over"
+            else self.palette["live"] if projection_status == "clear"
+            else self.palette["warning"]
+        )
+        return label, colour, max(0.0, min(1.0, float(projection_confidence)))
+
     @staticmethod
     def _display_frame(frame: np.ndarray) -> np.ndarray:
         """Return a contiguous uint8 BGR image that Tk/Pillow can display safely."""
@@ -2614,9 +2655,27 @@ class TopViewProjectionWindow:
         heading.grid(row=0, column=0, sticky="ew", pady=(0, 5))
         ttk.Label(heading, text=title, style="Title.TLabel", font=("Segoe UI Semibold", 12)).pack(side="left")
         if target == "overhead":
-            self.result_badge_var = tk.StringVar(value=self._text("WAITING", "ČEKÁ"))
-            self.result_confidence_var = tk.StringVar(value="")
-            self.result_badge = tk.Label(heading, textvariable=self.result_badge_var, padx=10, pady=2, font=("Segoe UI Semibold", 10), bg=self.palette["surface2"], fg=self.palette["muted"])
+            automatic = self._automatic_verdict_display()
+            initial_badge = automatic[0] if automatic is not None else self._text("WAITING", "ČEKÁ")
+            initial_confidence = (
+                self._text(f"Confidence {automatic[2]:.0%}", f"Spolehlivost {automatic[2]:.0%}")
+                if automatic is not None else ""
+            )
+            self.result_badge_var = tk.StringVar(value=initial_badge)
+            self.result_confidence_var = tk.StringVar(value=initial_confidence)
+            self.result_badge = tk.Label(
+                heading,
+                textvariable=self.result_badge_var,
+                padx=10,
+                pady=2,
+                font=("Segoe UI Semibold", 10),
+                bg=automatic[1] if automatic is not None else self.palette["surface2"],
+                fg=(
+                    "#ffffff" if automatic is not None and self.automatic_advisory_status in {"valid", "foul"}
+                    else "#111722" if automatic is not None
+                    else self.palette["muted"]
+                ),
+            )
             self.result_badge.pack(side="left", padx=(12, 7))
             ttk.Label(heading, textvariable=self.result_confidence_var, style="Muted.TLabel").pack(side="left")
             ttk.Label(
@@ -3533,15 +3592,15 @@ class TopViewProjectionWindow:
             self.progress_frame.grid_remove()
             if target == "overhead" and self._overhead_result is not None:
                 status = self._overhead_result.verdict_status
-                badge = "FOUL" if status == "over" else "LEGAL" if status == "clear" else "UNCERTAIN"
-                badge_cs = "PŘEŠLAP" if status == "over" else "PLATNÝ" if status == "clear" else "NEJISTÉ"
-                colour = self.palette["danger"] if status == "over" else self.palette["live"] if status == "clear" else self.palette["warning"]
-                self.result_badge_var.set(self._text(badge, badge_cs))
+                badge, colour, confidence = self._verdict_display(status, self._overhead_result.fit_confidence)
+                self.result_badge_var.set(badge)
                 self.result_confidence_var.set(self._text(
-                    f"Confidence {self._overhead_result.fit_confidence:.0%}",
-                    f"Spolehlivost {self._overhead_result.fit_confidence:.0%}",
+                    f"Confidence {confidence:.0%}",
+                    f"Spolehlivost {confidence:.0%}",
                 ))
-                self.result_badge.configure(bg=colour, fg="#111722" if status not in {"over", "clear"} else "#ffffff")
+                advisory_status = getattr(self, "automatic_advisory_status", "")
+                strong = advisory_status in {"valid", "foul"} if advisory_status else status in {"over", "clear"}
+                self.result_badge.configure(bg=colour, fg="#ffffff" if strong else "#111722")
                 self._update_split_review_result()
             elif target == "board" and self._board_result is not None and "shoe_detection_failed" in (self._analysis.diagnostics if self._analysis is not None else ()):
                 self.result_badge_var.set(self._text("SHOE NOT DETECTED", "BOTA NENALEZENA"))
@@ -3729,6 +3788,9 @@ class TopViewProjectionWindow:
             colour = "#ff6474" if status == "over" else "#70d6a5" if status == "clear" else "#f3c969"
             final_image = result.overhead_image if self.show_outlines_var.get() or result.clean_overhead_image is None else result.clean_overhead_image
             confidence = result.fit_confidence
+        automatic = self._automatic_verdict_display()
+        if automatic is not None:
+            badge, colour, confidence = automatic
         if _client_animations_enabled() and self._split_review_window is not None:
             if self._split_review_stage_var is not None:
                 self._split_review_stage_var.set(self._text("Projection ready.", "Projekce je připravena."))
@@ -3742,7 +3804,8 @@ class TopViewProjectionWindow:
         if self._split_review_detail is not None:
             self._split_review_detail.configure(
                 text=self._text("Board projection computed; shoe outline was not detected.", "Projekce prkna je vypočtená; obrys boty nebyl nalezen.")
-                if board_fallback else self._text(f"Confidence {result.fit_confidence:.0%}", f"Spolehlivost {result.fit_confidence:.0%}")
+                if board_fallback and automatic is None
+                else self._text(f"Confidence {confidence:.0%}", f"Spolehlivost {confidence:.0%}")
             )
         if self._split_review_stage_var is not None:
             self._split_review_stage_var.set(self._text("Projection ready.", "Projekce je připravena."))
@@ -4116,6 +4179,9 @@ class TopViewProjectionWindow:
             self._fullscreen_canvas.create_text(26, canvas_height - 36, text=summary, fill="#f2f6fa", anchor="w", font=("Segoe UI", 13, "bold"))
 
     def _measurement_summary(self) -> str:
+        automatic = self._automatic_verdict_display()
+        if automatic is not None:
+            return automatic[0]
         if self._overhead_result is not None:
             return projection_verdict_text(self._overhead_result.verdict_status)
         if self.calibration is None or len(self._foot_points) < 3 or self._source_frame_size[0] <= 1:

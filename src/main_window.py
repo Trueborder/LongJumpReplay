@@ -2805,6 +2805,9 @@ class MainWindow:
         else:
             self.timeline.detail_center_ns = None
         self._clear_assist_warning()
+        self.replay_canvas.clear_advisory()
+        if self.live_canvas.winfo_exists():
+            self.live_canvas.clear_advisory()
         self._selected_action_attempt_id = None
         self._board_next_assignment = None; self.competition_board.clear_focus(); self._last_board_signature = None
         if returning_from_replay:
@@ -3028,6 +3031,11 @@ class MainWindow:
             0.0,
             0.0,
         )
+        advisory_labels = {
+            AdvisoryStatus.VALID.value: self._t("assist.automatic.valid"),
+            AdvisoryStatus.FOUL.value: self._t("assist.automatic.foul"),
+            AdvisoryStatus.REVIEW.value: self._t("assist.automatic.review"),
+        }
         self._top_view_window = TopViewProjectionWindow(
             self.root, self.palette, self.config.general.language, attempt_id, packets, target_timestamp_ns,
             preview_roi, preview_calibration, preview_warning, current_signature,
@@ -3039,6 +3047,11 @@ class MainWindow:
             on_foul_area_saved=self._save_projection_foul_area,
             start_fullscreen=True,
             auto_start=False,
+            automatic_advisory_status=attempt.automatic_advisory,
+            automatic_advisory_label=advisory_labels.get(attempt.automatic_advisory, ""),
+            automatic_advisory_confidence=(
+                attempt.automatic_advisory_confidence if attempt.automatic_advisory else None
+            ),
         )
         self._top_view_window.open_pending_review()
         result_queue: Queue[tuple[str, object]] = Queue()
@@ -3671,9 +3684,9 @@ class MainWindow:
         }
         colors = {AdvisoryStatus.VALID: self.palette["live"], AdvisoryStatus.FOUL: self.palette["danger"], AdvisoryStatus.REVIEW: self.palette["warning"]}
         label = f"{symbols[advisory.status]} ASSIST: {labels[advisory.status]} · {advisory.confidence:.0%}"
-        self.replay_canvas.set_advisory(label, colors[advisory.status])
+        self.replay_canvas.set_advisory(label, colors[advisory.status], persistent_border=True, border_width=8)
         if self.live_canvas.winfo_exists():
-            self.live_canvas.set_advisory(label, colors[advisory.status])
+            self.live_canvas.set_advisory(label, colors[advisory.status], persistent_border=True, border_width=8)
         severity = NoticeSeverity.SUCCESS if advisory.status is AdvisoryStatus.VALID else NoticeSeverity.WARNING
         self._show_message(f"{label} — {advisory.reason}", 10, severity)
         if advisory.status is AdvisoryStatus.FOUL and self.config.takeoff_assist.automatic_foul_sound:

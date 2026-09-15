@@ -115,7 +115,8 @@ class VideoCanvas(tk.Canvas):
 
     def apply_palette(self, palette: dict[str, str]) -> None:
         self.palette = palette
-        self.configure(background=palette["video"], highlightbackground=palette["border"])
+        border_colour = self._advisory_color if self._advisory_text else palette["border"]
+        self.configure(background=palette["video"], highlightbackground=border_colour)
         self.request_render()
 
     def set_frame(self, frame_bgr: np.ndarray | None) -> None:
@@ -131,8 +132,16 @@ class VideoCanvas(tk.Canvas):
         self._secondary_text = secondary
         self.request_render()
 
-    def set_advisory(self, text: str, color: str, *, flash_ms: int = 1500) -> None:
-        """Show a persistent advisory badge and a brief result-coloured border."""
+    def set_advisory(
+        self,
+        text: str,
+        color: str,
+        *,
+        flash_ms: int = 1500,
+        persistent_border: bool = False,
+        border_width: int = 4,
+    ) -> None:
+        """Show an advisory badge and an optionally persistent result border."""
         self._advisory_text = str(text)
         self._advisory_color = str(color)
         if self._advisory_flash_job:
@@ -140,12 +149,22 @@ class VideoCanvas(tk.Canvas):
                 self.after_cancel(self._advisory_flash_job)
             except tk.TclError:
                 pass
-        self.configure(highlightthickness=4, highlightbackground=self._advisory_color)
-        self._advisory_flash_job = self.after(max(100, int(flash_ms)), self._end_advisory_flash)
+            self._advisory_flash_job = None
+        self.configure(
+            highlightthickness=max(1, min(16, int(border_width))),
+            highlightbackground=self._advisory_color,
+        )
+        if not persistent_border:
+            self._advisory_flash_job = self.after(max(100, int(flash_ms)), self._end_advisory_flash)
         self.request_render()
 
     def clear_advisory(self) -> None:
         self._advisory_text = ""
+        if self._advisory_flash_job:
+            try:
+                self.after_cancel(self._advisory_flash_job)
+            except tk.TclError:
+                pass
         self._end_advisory_flash()
         self.request_render()
 

@@ -65,3 +65,22 @@ def test_video_canvas_zoom_renders_only_the_visible_viewport(monkeypatch):
     assert height <= canvas.winfo_height() + 20
     assert width * height < 300_000
     root.destroy()
+
+
+def test_persistent_advisory_border_stays_until_explicitly_cleared():
+    root = tk.Tk()
+    canvas = VideoCanvas(root, DARK)
+    canvas.pack(fill="both", expand=True)
+    root.update()
+
+    canvas.set_advisory("LIKELY FOUL", DARK["danger"], persistent_border=True, border_width=8)
+    root.update()
+    assert int(canvas.cget("highlightthickness")) == 8
+    assert canvas.cget("highlightbackground") == DARK["danger"]
+    assert canvas._advisory_flash_job is None
+
+    canvas.clear_advisory()
+    root.update_idletasks()
+    assert int(canvas.cget("highlightthickness")) == 1
+    assert canvas.cget("highlightbackground") == DARK["border"]
+    root.destroy()

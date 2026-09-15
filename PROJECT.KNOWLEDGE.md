@@ -1420,3 +1420,5 @@ A change is done only when:
 
 - Automatic triggering anchors detailed analysis to the first near-line activity rather than the later motion peak, because the latter is commonly the shoe leaving or a following shadow. Takeoff Assist requires current-frame appearance evidence, and failed automatic analysis falls back to the trigger timestamp instead of frame zero.
 - Takeoff Assist accepts a shoe entering through the top edge of a camera-cropped ROI with reduced confidence, while continuing to reject side/bottom-clipped contours; automatic analysis uses only a short post-trigger window to avoid selecting the following shadow.
+
+- Top-down Projection receives the persisted automatic advisory for its attempt and uses the same localized verdict, confidence, and semantic colour as Auto/Takeoff Assist; its own projection measurement remains the fallback only when no automatic advisory exists. Automatic advisory borders on the main video are 8 px and persist until the operator returns to Live.
