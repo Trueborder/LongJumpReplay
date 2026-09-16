@@ -478,8 +478,11 @@ async function handleSubscriptionChange(env: Env, event: StripeEvent): Promise<v
     return;
   }
   if (DEAD_SUBSCRIPTION_STATUSES.has(status)) {
-    await setLicenseStatus(env.DB, license.id, "inactive", periodEnd);
-    await logEvent(env.DB, "subscription_cancelled", license.id, { status });
+    const deactivatedDevices = await setLicenseStatus(env.DB, license.id, "inactive", periodEnd);
+    await logEvent(env.DB, "subscription_cancelled", license.id, {
+      status,
+      deactivated_devices: deactivatedDevices,
+    });
     return;
   }
   await logEvent(env.DB, "stripe_sync", license.id, { status, result: "unchanged" });

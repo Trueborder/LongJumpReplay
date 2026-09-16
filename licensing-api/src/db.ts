@@ -273,21 +273,27 @@ export async function setLicenseStatus(
   licenseId: string,
   status: LicenseStatus,
   currentPeriodEnd?: number | null,
-): Promise<void> {
+): Promise<number> {
   const timestamp = now();
-  if (currentPeriodEnd === undefined) {
-    await db
-      .prepare("UPDATE licenses SET status = ?, updated_at = ?, last_stripe_sync = ? WHERE id = ?")
+  const licenseUpdate = currentPeriodEnd === undefined
+    ? db.prepare("UPDATE licenses SET status = ?, updated_at = ?, last_stripe_sync = ? WHERE id = ?")
       .bind(status, timestamp, timestamp, licenseId)
-      .run();
-    return;
-  }
-  await db
-    .prepare(
+    : db.prepare(
       "UPDATE licenses SET status = ?, current_period_end = ?, updated_at = ?, last_stripe_sync = ? WHERE id = ?",
-    )
-    .bind(status, currentPeriodEnd, timestamp, timestamp, licenseId)
-    .run();
+    ).bind(status, currentPeriodEnd, timestamp, timestamp, licenseId);
+
+  // A terminal subscription must revoke every active computer immediately.
+  // Keeping both statements in one D1 batch prevents a half-applied
+  // cancellation where the licence is inactive but a device remains usable.
+  const statements = [licenseUpdate];
+  if (status === "inactive") {
+    statements.push(
+      db.prepare(`UPDATE devices SET status = 'deactivated', deactivated_at = ?
+        WHERE license_id = ? AND status = 'active'`).bind(timestamp, licenseId),
+    );
+  }
+  const results = await db.batch(statements);
+  return status === "inactive" ? (results[1]?.meta.changes ?? 0) : 0;
 }
 
 export async function activeDeviceCount(db: D1Database, licenseId: string): Promise<number> {

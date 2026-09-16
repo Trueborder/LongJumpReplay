@@ -250,6 +250,16 @@ const subId = `sub_${Date.now()}`;
   check("subscription device activates", activated.json?.activated === true, JSON.stringify(activated.json));
   check("license type is subscription", activated.json?.license_type === "subscription");
 
+  // Fill the second subscription seat so cancellation verifies both devices.
+  await post("/api/license/request-code", { email: subEmail });
+  const secondCode = recoverCode(subEmail);
+  const secondVerified = await post("/api/license/verify-code", { email: subEmail, code: secondCode });
+  const secondActivated = await post("/api/license/activate", {
+    activation_grant: secondVerified.json.activation_grant,
+    machine_id: MACHINE_B,
+  });
+  check("second subscription device activates", secondActivated.json?.activated === true, JSON.stringify(secondActivated.json));
+
   if (!activated.json?.authorization) {
     check("subscription authorization issued", false, JSON.stringify(activated.json));
     console.log(`\n${passed} passed, ${failed} failed`);
@@ -273,6 +283,8 @@ const subId = `sub_${Date.now()}`;
 
   const afterCancel = await post("/api/license/verify", { license_id: licenseId, machine_id: MACHINE_A });
   check("cancelled subscription stops verifying", afterCancel.status === 403, `got ${afterCancel.status}`);
+  const secondAfterCancel = await post("/api/license/verify", { license_id: licenseId, machine_id: MACHINE_B });
+  check("cancellation revokes the second subscription device", secondAfterCancel.status === 403, `got ${secondAfterCancel.status}`);
 
   const unknownDevice = await post("/api/license/verify", { license_id: licenseId, machine_id: MACHINE_C });
   check("unactivated device cannot verify", unknownDevice.status === 403, `got ${unknownDevice.status}`);
