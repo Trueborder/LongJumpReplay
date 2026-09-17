@@ -849,7 +849,6 @@ class MainWindow:
         ttk.Label(top, textvariable=self.attempt_summary_var, style="Muted.TLabel").pack(side="right")
 
         self.side_notebook = ttk.Notebook(frame)
-        self.side_notebook.pack(fill="both", expand=True)
         self.recordings_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
         self.board_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
         self.performance_tab = ttk.Frame(self.side_notebook, style="Panel.TFrame", padding=(2, 4))
@@ -936,7 +935,6 @@ class MainWindow:
 
         footer = ttk.Frame(frame, style="Panel.TFrame")
         self.attempts_footer = footer
-        footer.pack(fill="x", pady=(6, 0))
         row = ttk.Frame(footer, style="Panel.TFrame"); row.pack(fill="x")
         for column in range(4):
             row.columnconfigure(column, weight=1, uniform="attempt-actions")
@@ -955,7 +953,6 @@ class MainWindow:
             frame, text=self._t("announcer.title"),
             style="SettingsSection.TLabelframe", padding=(10, 8),
         )
-        self.announcer_frame.pack(fill="x", pady=(7, 0))
         self.announcer_label = ttk.Label(
             self.announcer_frame, textvariable=self.announcer_text_var,
             style="Text.TLabel", anchor="w", justify="left",
@@ -963,6 +960,9 @@ class MainWindow:
         )
         self.announcer_label.pack(fill="x")
         self.announcer_frame.bind("<Configure>", self._resize_announcer_helper, add="+")
+        self.announcer_frame.pack(side="bottom", fill="x", pady=(7, 0))
+        footer.pack(side="bottom", fill="x", pady=(6, 0))
+        self.side_notebook.pack(fill="both", expand=True)
         return frame
 
     # ------------------------------------------------------------ hotkeys/tick
@@ -3963,7 +3963,7 @@ class MainWindow:
             self.content_pane.forget(self.attempts_panel); self._attempts_pane_added = False
         show_announcer = bool(self.config.competition.enabled and self.var_show_announcer.get())
         if show_announcer and not self.announcer_frame.winfo_manager():
-            self.announcer_frame.pack(fill="x", pady=(7, 0), after=self.attempts_footer)
+            self.announcer_frame.pack(side="bottom", fill="x", pady=(7, 0), before=self.attempts_footer)
         elif not show_announcer and self.announcer_frame.winfo_manager():
             self.announcer_frame.pack_forget()
         show_timeline = bool(self.var_show_timeline.get())

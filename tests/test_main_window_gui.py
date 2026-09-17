@@ -72,6 +72,45 @@ def test_main_window_closes_from_live_mode(tmp_path):
     assert not app.capture.is_running
 
 
+def test_announcer_helper_and_recording_actions_stay_visible(tmp_path):
+    config = AppConfig()
+    config.camera.source_type = "synthetic"
+    config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
+    config.buffer.duration_seconds, config.buffer.max_memory_mb = 2, 256
+    config.display.window_geometry = "1000x650"
+    config.display.theme = "dark"
+    config.shuttle.enabled = False
+    config.competition.enabled = True
+    config.display.show_announcer_helper = True
+    path = tmp_path / "config.json"
+    save_config(config, path)
+    root = tk.Tk()
+    app = MainWindow(root, config, path)
+    observed = {}
+
+    def inspect_and_close():
+        root.update_idletasks()
+        panel_height = app.attempts_panel.winfo_height()
+        observed["footer_mapped"] = app.attempts_footer.winfo_ismapped()
+        observed["announcer_mapped"] = app.announcer_frame.winfo_ismapped()
+        observed["footer_bottom"] = app.attempts_footer.winfo_y() + app.attempts_footer.winfo_height()
+        observed["announcer_bottom"] = app.announcer_frame.winfo_y() + app.announcer_frame.winfo_height()
+        observed["panel_height"] = panel_height
+        observed["announcer_y"] = app.announcer_frame.winfo_y()
+        observed["footer_y"] = app.attempts_footer.winfo_y()
+        app.close()
+
+    root.after(700, inspect_and_close)
+    root.after(5000, lambda: root.destroy() if root.winfo_exists() else None)
+    root.mainloop()
+    assert observed["footer_mapped"]
+    assert observed["announcer_mapped"]
+    assert observed["footer_bottom"] <= observed["panel_height"]
+    assert observed["announcer_bottom"] <= observed["panel_height"]
+    assert observed["announcer_y"] > observed["footer_y"]
+    assert not app.capture.is_running
+
+
 def test_main_window_closes_while_attempt_is_collecting(tmp_path):
     config = AppConfig()
     config.camera.source_type = 'synthetic'
