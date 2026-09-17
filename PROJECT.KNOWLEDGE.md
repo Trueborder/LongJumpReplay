@@ -1422,3 +1422,9 @@ A change is done only when:
 - Takeoff Assist accepts a shoe entering through the top edge of a camera-cropped ROI with reduced confidence, while continuing to reject side/bottom-clipped contours; automatic analysis uses only a short post-trigger window to avoid selecting the following shadow.
 
 - Top-down Projection receives the persisted automatic advisory for its attempt and uses the same localized verdict, confidence, and semantic colour as Auto/Takeoff Assist; its own projection measurement remains the fallback only when no automatic advisory exists. Automatic advisory borders on the main video are 8 px and persist until the operator returns to Live.
+
+## 2026-09-17 announcer helper
+
+- A compact, persisted Announcer Helper below the right-side notebook names the current athlete and the next pending athlete in English or Czech. It is enabled by default, can be hidden from View, and disappears outside competition mode.
+- The helper follows the existing round-major competition order, attempt overrides, finals, manually selected cells, and skipped cells without mutating rotation. Freeze preserves the athlete who just jumped until return to Live; opening historical recordings does not replace the live announcement target.
+- Announcer names use uppercase surnames with a localized numbered-athlete fallback. The final athlete and completed-competition states have explicit localized messages.

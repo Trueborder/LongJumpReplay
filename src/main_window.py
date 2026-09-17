@@ -31,6 +31,7 @@ from .adjudication import (
     parse_distance_centimetres,
     parse_wind_metres_per_second,
 )
+from .announcer_helper import announcer_athlete_name
 from .automatic_takeoff import AdvisoryStatus, AutomaticAdvisory, AutomaticTakeoffMonitor, MonitorState, TakeoffEvent, analyse_attempt
 from .background_tasks import BackgroundTaskController, TaskSnapshot, TaskState
 from . import VERSION_SHORT, __version__
@@ -262,6 +263,7 @@ class MainWindow:
         self._recovery_checked = False
         self._last_board_signature: object = None
         self._board_next_assignment: RosterAssignment | None = None
+        self._announcer_frozen_assignment: RosterAssignment | None = None
         self._last_timer_render_signature: object = None
         self._system_paused = False
         self._system_pause_transition = False
@@ -354,6 +356,7 @@ class MainWindow:
     def _build_variables(self) -> None:
         d = self.config.display
         self.var_show_attempts = tk.BooleanVar(value=d.show_attempts_panel)
+        self.var_show_announcer = tk.BooleanVar(value=d.show_announcer_helper)
         self.var_show_timeline = tk.BooleanVar(value=d.show_timeline)
         self.var_show_status = tk.BooleanVar(value=d.show_status_bar)
         self.var_show_live = tk.BooleanVar(value=d.show_live_preview)
@@ -379,6 +382,7 @@ class MainWindow:
         self.competitor_var = tk.StringVar(value=str(self.config.competition.current_competitor_by_group.get(self.config.competition.active_group, 1)))
         self.current_try_var = tk.StringVar(value="Try 1")
         self.board_target_var = tk.StringVar(value="")
+        self.announcer_text_var = tk.StringVar(value="")
         self.measurement_distance_var = tk.StringVar(value="")
         self.measurement_wind_var = tk.StringVar(value="")
         self.measurement_error_var = tk.StringVar(value="")
@@ -398,6 +402,14 @@ class MainWindow:
             width = max(160, self.board_navigation.winfo_width() - 20)
             if int(self.board_keyboard_hint.cget("wraplength") or 0) != width:
                 self.board_keyboard_hint.configure(wraplength=width)
+        except tk.TclError:
+            return
+
+    def _resize_announcer_helper(self, _event: tk.Event | None = None) -> None:
+        try:
+            width = max(180, self.announcer_frame.winfo_width() - 24)
+            if int(self.announcer_label.cget("wraplength") or 0) != width:
+                self.announcer_label.configure(wraplength=width)
         except tk.TclError:
             return
 
@@ -462,6 +474,7 @@ class MainWindow:
             self.layout_menu.add_radiobutton(label=self._t(key), variable=self.var_layout, value=value, command=self._menu_layout_changed)
         self.view_menu.add_cascade(label=self._t("menu.layout"), menu=self.layout_menu)
         self.view_menu.add_checkbutton(label=self._t("menu.attempts") + "\tA", variable=self.var_show_attempts, command=self.toggle_attempts_panel)
+        self.view_menu.add_checkbutton(label=self._t("menu.announcer_helper"), variable=self.var_show_announcer, command=self.toggle_announcer_helper)
         self.var_show_board = getattr(self, "var_show_board", tk.BooleanVar(value=self.config.competition.show_competition_board))
         self.view_menu.add_checkbutton(label=self._t("menu.board") + "\tB", variable=self.var_show_board, command=self.toggle_competition_board, state=restricted_state)
         self.view_menu.add_checkbutton(label=self._t("menu.timeline") + "\tT", variable=self.var_show_timeline, command=self.toggle_timeline)
@@ -922,6 +935,7 @@ class MainWindow:
         self.competition_board.pack(fill="both", expand=True)
 
         footer = ttk.Frame(frame, style="Panel.TFrame")
+        self.attempts_footer = footer
         footer.pack(fill="x", pady=(6, 0))
         row = ttk.Frame(footer, style="Panel.TFrame"); row.pack(fill="x")
         for column in range(4):
@@ -936,6 +950,19 @@ class MainWindow:
         self.clear_button.grid(row=0, column=3, sticky="ew", padx=(5, 0))
         for button in (self.open_attempt_button, self.export_button, self.delete_button, self.clear_button):
             button.state(["disabled"])
+
+        self.announcer_frame = ttk.LabelFrame(
+            frame, text=self._t("announcer.title"),
+            style="SettingsSection.TLabelframe", padding=(10, 8),
+        )
+        self.announcer_frame.pack(fill="x", pady=(7, 0))
+        self.announcer_label = ttk.Label(
+            self.announcer_frame, textvariable=self.announcer_text_var,
+            style="Text.TLabel", anchor="w", justify="left",
+            font=("Segoe UI Semibold", 11),
+        )
+        self.announcer_label.pack(fill="x")
+        self.announcer_frame.bind("<Configure>", self._resize_announcer_helper, add="+")
         return frame
 
     # ------------------------------------------------------------ hotkeys/tick
@@ -1817,7 +1844,37 @@ class MainWindow:
             )
         else:
             self.board_target_var.set(self._t("competition.roster_disabled"))
+        self._refresh_announcer_helper(attempts, assignment)
         self._refresh_competition_board(attempts, assignment)
+
+    def _refresh_announcer_helper(
+        self,
+        attempts: list[AttemptSession],
+        assignment: RosterAssignment | None = None,
+    ) -> None:
+        if not self.config.competition.enabled:
+            self.announcer_text_var.set("")
+            return
+        current = self._announcer_frozen_assignment or assignment
+        if current is None:
+            pending = self.competition.pending_assignments(attempts, self.competition.current_group())
+            current = pending[0] if pending else None
+        if current is None:
+            self.announcer_text_var.set(self._t("announcer.complete"))
+            return
+
+        language = self.config.general.language
+        current_context = self.adjudication.athlete_for(current.group, current.competitor_number)
+        current_name = announcer_athlete_name(current_context, language)
+        following = self.competition.following_assignment(attempts, current)
+        if following is None:
+            self.announcer_text_var.set(self._t("announcer.last", current=current_name))
+            return
+        following_context = self.adjudication.athlete_for(following.group, following.competitor_number)
+        following_name = announcer_athlete_name(following_context, language)
+        self.announcer_text_var.set(
+            self._t("announcer.ready", current=current_name, next=following_name)
+        )
 
     def _refresh_competition_board(self, attempts: list[AttemptSession], assignment: RosterAssignment | None) -> None:
         if not hasattr(self, "competition_board"):
@@ -2069,6 +2126,7 @@ class MainWindow:
         summary = self._t("attempts.summary", count=len(attempts), decided=decided) if attempts else self._t("attempts.none")
         self.attempt_summary_var.set(summary)
         self._sync_recording_selection_style()
+        self._refresh_announcer_helper(attempts, self.competition.assignment_for_current(attempts))
         self._refresh_competition_board(attempts, self.competition.assignment_for_current(attempts))
 
     @staticmethod
@@ -2752,6 +2810,8 @@ class MainWindow:
                 competitor_number=assignment.competitor_number if assignment else 0,
                 competitor_attempt_number=assignment.attempt_number if assignment else 0,
             )
+            if assignment is not None:
+                self._announcer_frozen_assignment = assignment
             if assignment is not None and self.config.competition.auto_advance_on_attempt_complete:
                 self._board_next_assignment = self.competition.next_assignment_after(self.attempts.attempts(), assignment)
             self.competition_board.clear_focus()
@@ -2810,6 +2870,7 @@ class MainWindow:
             self.live_canvas.clear_advisory()
         self._selected_action_attempt_id = None
         self._board_next_assignment = None; self.competition_board.clear_focus(); self._last_board_signature = None
+        self._announcer_frozen_assignment = None
         if returning_from_replay:
             self.athlete_timer.reset(); self._update_athlete_timer_display()
         self._refresh_current_try()
@@ -3871,6 +3932,10 @@ class MainWindow:
 
     def toggle_attempts_panel(self) -> None:
         self.config.display.show_attempts_panel = bool(self.var_show_attempts.get()); self._apply_visibility(); self._save_config_safely()
+
+    def toggle_announcer_helper(self) -> None:
+        self.config.display.show_announcer_helper = bool(self.var_show_announcer.get()); self._apply_visibility(); self._save_config_safely()
+
     def toggle_competition_board(self) -> None:
         if self._evaluation_mode:
             self.var_show_board.set(False)
@@ -3896,6 +3961,11 @@ class MainWindow:
             self.root.after(180, self._set_attempts_sash)
         elif not show_attempts and self._attempts_pane_added:
             self.content_pane.forget(self.attempts_panel); self._attempts_pane_added = False
+        show_announcer = bool(self.config.competition.enabled and self.var_show_announcer.get())
+        if show_announcer and not self.announcer_frame.winfo_manager():
+            self.announcer_frame.pack(fill="x", pady=(7, 0), after=self.attempts_footer)
+        elif not show_announcer and self.announcer_frame.winfo_manager():
+            self.announcer_frame.pack_forget()
         show_timeline = bool(self.var_show_timeline.get())
         if show_timeline and not self._timeline_pane_added:
             self.media_pane.add(self.timeline_wrap, weight=1); self._timeline_pane_added = True
@@ -4094,6 +4164,7 @@ class MainWindow:
         self.frame_group_label.configure(text=self._t("controls.frame_review"))
         self.decision_group_label.configure(text=self._t("controls.judging"))
         self.wizard_button.configure(text=self._t("button.wizard"))
+        self.announcer_frame.configure(text=self._t("announcer.title"))
         self.board_target_title_label.configure(text=self._t("board.next_target"))
         self.board_keyboard_hint.configure(text=self._t("board.keyboard_hint"))
         for key, label in (("recording", self._t("table.recording")), ("group", self._t("table.group")), ("athlete", "#"), ("try", self._t("table.attempt")), ("result", self._t("table.result")), ("distance", self._t("table.distance")), ("wind", self._t("table.wind")), ("time", self._t("table.time")), ("duration", self._t("table.duration")), ("media", self._t("table.media")), ("keep", self._t("table.keep"))):
@@ -4191,7 +4262,9 @@ class MainWindow:
         if not new_config.takeoff_assist.automatic_monitor_enabled:
             self.automatic_takeoff.reset()
         self.competition.update_config(new_config.competition)
+        self._announcer_frozen_assignment = None
         self.var_show_attempts.set(new_config.display.show_attempts_panel)
+        self.var_show_announcer.set(new_config.display.show_announcer_helper)
         self.var_show_timeline.set(new_config.display.show_timeline)
         self.var_show_status.set(new_config.display.show_status_bar)
         self.var_show_live.set(new_config.display.show_live_preview)

@@ -153,6 +153,7 @@ class DisplayConfig:
     theme: str = "system"  # system | dark | light
     layout: str = "replay_pip"  # replay_pip | side_by_side | replay_only | live_only | comparison | board_detail
     show_attempts_panel: bool = True
+    show_announcer_helper: bool = True
     show_timeline: bool = True
     show_status_bar: bool = True
     show_live_preview: bool = True

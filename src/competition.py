@@ -216,6 +216,29 @@ class CompetitionSession:
         completed_key = rotation_key(completed)
         return next((assignment for assignment in pending if rotation_key(assignment) > completed_key), pending[0])
 
+    def following_assignment(self, attempts: Iterable[AttemptSession], current: RosterAssignment) -> RosterAssignment | None:
+        """Return the next announcer target without mutating the competition session."""
+        pending = [
+            assignment
+            for assignment in self.pending_assignments(attempts, current.group)
+            if assignment != current
+        ]
+        if not pending:
+            return None
+        order = self.finalists(current.group) if self.final_started(current.group) else list(
+            range(1, self.competitor_count(current.group) + 1)
+        )
+        positions = {number: index for index, number in enumerate(order)}
+
+        def rotation_key(assignment: RosterAssignment) -> tuple[int, int]:
+            round_number = assignment.attempt_number
+            if assignment.phase == "final":
+                round_number -= self.qualification_limit(assignment.group, assignment.competitor_number)
+            return round_number, positions.get(assignment.competitor_number, -1)
+
+        current_key = rotation_key(current)
+        return next((assignment for assignment in pending if rotation_key(assignment) > current_key), pending[0])
+
     def advance(self, attempts: Iterable[AttemptSession]) -> RosterAssignment | None:
         if not self.config.enabled:
             return None
