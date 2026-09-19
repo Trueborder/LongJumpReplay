@@ -602,9 +602,44 @@ def foul_area_from_line_px(
     return tuple((float(x), float(y)) for x, y in (points[0] + normal, points[1] + normal, points[1] - normal, points[0] - normal))
 
 
-def foul_line_from_area_px(area: Sequence[Sequence[float]]) -> tuple[tuple[float, float], ...]:
+def foul_line_from_area_px(
+    area: Sequence[Sequence[float]],
+    board_points_px: Sequence[Sequence[float]] = (),
+) -> tuple[tuple[float, float], ...]:
+    """Resolve the judging boundary from four foul-strip points in any order.
+
+    The marked strip has two long edges.  When the board is available, the
+    edge nearest its centre is the physical take-off line.  Without board
+    geometry, return the centreline for backward-compatible callers.
+    """
     points = np.asarray(area, dtype=np.float32).reshape(4, 2)
-    centreline = ((points[0] + points[3]) * .5, (points[1] + points[2]) * .5)
+    if not np.isfinite(points).all():
+        raise ValueError("Foul-area points must be finite")
+    centre = points.mean(axis=0)
+    angles = np.arctan2(points[:, 1] - centre[1], points[:, 0] - centre[0])
+    ordered = points[np.argsort(angles)]
+    edge_pairs = (
+        ((ordered[0], ordered[1]), (ordered[2], ordered[3])),
+        ((ordered[1], ordered[2]), (ordered[3], ordered[0])),
+    )
+    first_edge, second_edge = max(
+        edge_pairs,
+        key=lambda pair: sum(float(np.linalg.norm(edge[1] - edge[0])) for edge in pair),
+    )
+    if len(board_points_px) == 4:
+        board_centre = np.asarray(board_points_px, dtype=np.float32).reshape(4, 2).mean(axis=0)
+        selected = min(
+            (first_edge, second_edge),
+            key=lambda edge: float(np.linalg.norm((edge[0] + edge[1]) * .5 - board_centre)),
+        )
+        return tuple((float(point[0]), float(point[1])) for point in selected)
+    direct = float(np.linalg.norm(first_edge[0] - second_edge[0]) + np.linalg.norm(first_edge[1] - second_edge[1]))
+    crossed = float(np.linalg.norm(first_edge[0] - second_edge[1]) + np.linalg.norm(first_edge[1] - second_edge[0]))
+    matched_second = second_edge if direct <= crossed else (second_edge[1], second_edge[0])
+    centreline = (
+        (first_edge[0] + matched_second[0]) * .5,
+        (first_edge[1] + matched_second[1]) * .5,
+    )
     return tuple((float(point[0]), float(point[1])) for point in centreline)
 
 
@@ -3339,7 +3374,7 @@ class TopViewProjectionWindow:
 
     def _update_calibration_from_edits(self) -> None:
         if len(self._foul_area_points) == 4:
-            self._foul_points = list(foul_line_from_area_px(self._foul_area_points))
+            self._foul_points = list(foul_line_from_area_px(self._foul_area_points, self._board_points))
         if len(self._board_points) != 4 or len(self._foul_points) != 2: return
         try:
             self.calibration = create_projection_calibration(self._board_points, self._foul_points, self._source_frame_size, self.camera_signature, self.calibration)

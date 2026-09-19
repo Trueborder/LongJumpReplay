@@ -12,7 +12,13 @@ from PIL import Image, ImageTk
 
 from .i18n import Translator
 from .theme import bind_resize_only, configure_popup
-from .top_view_projection import ProjectionCalibration, create_projection_calibration, detect_board_corners, detect_foul_line
+from .top_view_projection import (
+    ProjectionCalibration,
+    create_projection_calibration,
+    detect_board_corners,
+    detect_foul_line,
+    foul_line_from_area_px,
+)
 
 
 def foul_band_from_line(line: Sequence[Sequence[float]], frame_size: tuple[int, int], thickness_px: float = 8.0) -> tuple[tuple[float, float], ...]:
@@ -27,14 +33,16 @@ def foul_band_from_line(line: Sequence[Sequence[float]], frame_size: tuple[int, 
     return tuple((float(x), float(y)) for x, y in band)
 
 
-def foul_line_from_band(points: Sequence[Sequence[float]], frame_size: tuple[int, int]) -> tuple[tuple[float, float], ...]:
-    """Return source-pixel centreline endpoints from a normalized foul band."""
+def foul_line_from_band(
+    points: Sequence[Sequence[float]],
+    frame_size: tuple[int, int],
+    board_points_px: Sequence[Sequence[float]] = (),
+) -> tuple[tuple[float, float], ...]:
+    """Resolve the selected foul-strip boundary independently of point order."""
     width, height = frame_size
     band = np.asarray(points, dtype=np.float32).reshape(4, 2)
-    first = (band[0] + band[3]) * .5
-    second = (band[1] + band[2]) * .5
-    line = np.asarray((first, second), np.float32) * np.asarray([width, height], np.float32)
-    return tuple((float(x), float(y)) for x, y in line)
+    band_px = band * np.asarray([width, height], np.float32)
+    return foul_line_from_area_px(band_px, board_points_px)
 
 
 class BoardCalibrationWizard:
@@ -335,7 +343,11 @@ class BoardCalibrationWizard:
 
     def confirm(self) -> None:
         try:
-            foul_line = foul_line_from_band(np.asarray(self.foul_area, np.float32) / np.asarray(self.frame_size, np.float32), self.frame_size)
+            foul_line = foul_line_from_band(
+                np.asarray(self.foul_area, np.float32) / np.asarray(self.frame_size, np.float32),
+                self.frame_size,
+                self.board,
+            )
             calibration = create_projection_calibration(self.board, foul_line, self.frame_size, self.camera_signature, self.previous)
         except (ValueError, cv2.error):
             self.status_var.set(self.t("calibration.invalid"))

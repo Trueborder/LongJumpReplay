@@ -12,6 +12,20 @@ def test_editable_foul_band_preserves_the_projection_centreline():
     assert np.allclose(restored, line, atol=1e-4)
 
 
+def test_foul_strip_uses_board_facing_long_edge_regardless_of_point_order():
+    board = ((40.0, 20.0), (300.0, 20.0), (300.0, 460.0), (40.0, 460.0))
+    area = ((180.0, 30.0), (245.0, 35.0), (250.0, 450.0), (185.0, 445.0))
+    shuffled = (area[2], area[0], area[3], area[1])
+    normalized = np.asarray(shuffled, np.float32) / np.asarray((640, 480), np.float32)
+
+    restored = foul_line_from_band(normalized, (640, 480), board)
+
+    expected = np.asarray((area[0], area[3]), np.float32)
+    assert min(
+        np.max(np.abs(np.asarray(restored) - expected)),
+        np.max(np.abs(np.asarray(restored)[::-1] - expected)),
+    ) < 1e-4
+
 def test_brush_trace_snaps_to_nearby_shoe_edge():
     frame = np.full((180, 320, 3), 210, np.uint8)
     cv2.ellipse(frame, (165, 92), (82, 34), -8, 0, 360, (25, 45, 85), -1)
