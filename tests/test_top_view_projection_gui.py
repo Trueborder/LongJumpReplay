@@ -9,14 +9,14 @@ from src.main_window import MainWindow
 from src.top_view_projection import TopViewProjectionWindow
 
 
-def test_failed_shoe_detection_never_uses_board_image_as_top_down_result():
+def test_top_down_result_uses_calibrated_board_even_without_shoe_outline():
     projection = TopViewProjectionWindow.__new__(TopViewProjectionWindow)
     projection._analysis = SimpleNamespace(diagnostics=("shoe_detection_failed",))
     projection._board_result = np.full((40, 120, 3), 127, dtype=np.uint8)
     projection._overhead_result = None
 
     assert projection._projection_image("board") is projection._board_result
-    assert projection._projection_image("overhead") is None
+    assert projection._projection_image("overhead") is projection._board_result
 
 
 def test_projection_prefers_persisted_automatic_advisory_verdict():
