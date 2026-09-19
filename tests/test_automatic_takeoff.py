@@ -5,7 +5,7 @@ import time
 import numpy as np
 
 from src import automatic_takeoff as module
-from src.automatic_takeoff import AdvisoryStatus, AutomaticTakeoffMonitor, analyse_attempt
+from src.automatic_takeoff import AdvisoryStatus, AutomaticTakeoffMonitor, analyse_attempt, shoe_foul_area_overlap
 from src.models import FramePacket
 from src.takeoff_assist import TakeoffCandidate
 from src.top_view_projection import FootEstimate, ProjectionCalibration, ProjectionMeasurement
@@ -44,6 +44,36 @@ def test_temporal_consensus_can_advise_foul(monkeypatch) -> None:
     result = analyse_attempt(_packets(), 80_000_000, (.1, .1, .8, .8), _calibration())
     assert result.status is AdvisoryStatus.FOUL
     assert result.signed_clearance_cm is not None and result.signed_clearance_cm < 0
+
+
+def test_selected_foul_area_is_order_independent() -> None:
+    shoe = ((30, 40), (55, 40), (55, 60), (30, 60))
+    ordered = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    shuffled = (ordered[2], ordered[0], ordered[3], ordered[1])
+    ordered_overlap = shoe_foul_area_overlap(shoe, ordered, (100, 100))
+    shuffled_overlap = shoe_foul_area_overlap(shoe, shuffled, (100, 100))
+    assert ordered_overlap[0] > 0
+    assert shuffled_overlap == ordered_overlap
+
+
+def test_selected_foul_area_contact_advises_foul(monkeypatch) -> None:
+    _install_detection_stubs(monkeypatch, [_measurement(2.0), _measurement(2.0), _measurement(2.0)])
+    foul_area = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    result = analyse_attempt(
+        _packets(), 80_000_000, (.1, .1, .8, .8), _calibration(), foul_area=foul_area,
+    )
+    assert result.status is AdvisoryStatus.FOUL
+    assert result.engine == "foul-area-contact-v1"
+    assert "selected foul area" in result.reason
+
+
+def test_selected_foul_area_replaces_line_based_foul(monkeypatch) -> None:
+    _install_detection_stubs(monkeypatch, [_measurement(-2.0), _measurement(-2.0), _measurement(-2.0)])
+    foul_area = ((.70, .70), (.90, .70), (.90, .90), (.70, .90))
+    result = analyse_attempt(
+        _packets(), 80_000_000, (.1, .1, .8, .8), _calibration(), foul_area=foul_area,
+    )
+    assert result.status is not AdvisoryStatus.FOUL
 
 
 def test_uncertain_edge_is_review(monkeypatch) -> None:

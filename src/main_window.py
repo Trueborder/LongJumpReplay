@@ -3685,6 +3685,7 @@ class MainWindow:
             self.config.display.board_roi_x, self.config.display.board_roi_y,
             self.config.display.board_roi_width, self.config.display.board_roi_height,
         )
+        foul_area = tuple(tuple(point) for point in self.config.top_view_projection.foul_area)
 
         def worker() -> None:
             try:
@@ -3710,6 +3711,7 @@ class MainWindow:
                         # earlier approach shadow cannot become the key frame.
                         before_seconds=.30, after_seconds=.12,
                         target_width=min(320, max(160, config.downscale_width)),
+                        foul_area=foul_area,
                     )
                     if time.monotonic() > deadline:
                         advisory = replace(
@@ -3792,6 +3794,8 @@ class MainWindow:
         if not attempt: return
         d, a = self.config.display, self.config.takeoff_assist
         roi = (d.board_roi_x, d.board_roi_y, d.board_roi_width, d.board_roi_height)
+        calibration = self._stored_top_view_calibration()
+        foul_area = tuple(tuple(point) for point in self.config.top_view_projection.foul_area)
         def worker() -> None:
             try:
                 if a.analysis_seconds_after_freeze > 0:
@@ -3823,6 +3827,16 @@ class MainWindow:
                         candidate.analysis_start_ns,
                         candidate.analysis_end_ns,
                     )
+                    if calibration is not None and len(foul_area) == 4:
+                        advisory = analyse_attempt(
+                            packets, attempt.freeze_timestamp_ns, roi, calibration,
+                            before_seconds=a.analysis_seconds_before_freeze,
+                            after_seconds=a.analysis_seconds_after_freeze,
+                            target_width=a.downscale_width,
+                            foul_area=foul_area,
+                            candidate=candidate,
+                        )
+                        self.event_queue.put(("automatic_takeoff_result", (attempt_id, advisory)))
                 else:
                     self.event_queue.put(("takeoff_failed", (attempt_id, "Take-off Assist failed: no clear local motion peak was found.")))
             except Exception as exc:
