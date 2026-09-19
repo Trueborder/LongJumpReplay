@@ -14,6 +14,7 @@ import numpy as np
 
 from .exporter import decode_packet
 from .models import FramePacket
+from .motion_segmentation import foreground_motion_mask
 from .takeoff_assist import TakeoffCandidate, detect_takeoff_candidate
 from .top_view_projection import ProjectionCalibration, estimate_foot_polygon, measure_projected_foot
 
@@ -82,6 +83,51 @@ def shoe_foul_area_overlap(
     overlap, _polygon = cv2.intersectConvexConvex(shoe, area)
     overlap = max(0.0, float(overlap))
     return overlap, overlap / shoe_area
+
+
+def foul_area_intrusion(
+    frame: np.ndarray,
+    reference_frames: Sequence[np.ndarray],
+    foul_area: Sequence[Sequence[float]],
+) -> tuple[float, float]:
+    """Measure a connected non-shadow object inside the selected foul area.
+
+    This intentionally avoids reconstructing a complete shoe. At the take-off
+    instant, a sizeable connected foreground object breaking the calibrated
+    foul polygon is the direct evidence the operator needs.
+    """
+    if frame is None or frame.ndim != 3 or len(foul_area) != 4:
+        return 0.0, 0.0
+    references = [item for item in reference_frames if item is not None and item.shape == frame.shape]
+    if not references:
+        return 0.0, 0.0
+    height, width = frame.shape[:2]
+    polygon = np.asarray(
+        [(float(x) * width, float(y) * height) for x, y in foul_area],
+        np.float32,
+    ).reshape(-1, 1, 2)
+    polygon = cv2.convexHull(polygon)
+    area_mask = np.zeros((height, width), np.uint8)
+    cv2.fillConvexPoly(area_mask, np.rint(polygon).astype(np.int32), 255)
+    area_pixels = cv2.countNonZero(area_mask)
+    if area_pixels < 20:
+        return 0.0, 0.0
+    foreground, _shadow = foreground_motion_mask(frame, references, area_mask)
+    foreground_pixels = cv2.countNonZero(foreground)
+    components, _labels, stats, _centres = cv2.connectedComponentsWithStats(
+        (foreground > 0).astype(np.uint8), connectivity=8,
+    )
+    largest = int(stats[1:, cv2.CC_STAT_AREA].max()) if components > 1 else 0
+    total_ratio = foreground_pixels / float(area_pixels)
+    largest_ratio = largest / float(area_pixels)
+    if total_ratio < .012 or largest_ratio < .008:
+        return largest_ratio, 0.0
+    confidence = min(
+        .98,
+        .62 + min(.26, max(0.0, largest_ratio - .008) * 2.8)
+        + min(.10, max(0.0, total_ratio - .012) * .8),
+    )
+    return largest_ratio, confidence
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,83 +355,177 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
         min(range(len(packets)), key=lambda index: abs(packets[index].timestamp_ns - target_timestamp_ns))
         if packets else 0
     )
-    candidate = candidate or detect_takeoff_candidate(
+    detected_candidate = candidate or detect_takeoff_candidate(
         packets, target_timestamp_ns, roi, before_seconds, after_seconds, target_width,
     )
-    if candidate is None:
-        return AutomaticAdvisory(AdvisoryStatus.REVIEW, 0.0, fallback_index, None, None,
-                                 "No reliable take-off frame was found.", (time.perf_counter() - started) * 1000)
-    selected = sorted(set((candidate.frame_index, *candidate.usable_frame_indices)))
-    selected = sorted(selected, key=lambda index: (abs(index - candidate.frame_index), index))[:3]
-    reference_indices = [max(0, min(len(packets) - 1, candidate.frame_index + offset)) for offset in (-8, -6, 6, 8)]
+    anchor_index = detected_candidate.frame_index if detected_candidate is not None else fallback_index
+    if not packets:
+        return AutomaticAdvisory(AdvisoryStatus.REVIEW, 0.0, 0, None, None,
+                                 "No buffered frames were available.", (time.perf_counter() - started) * 1000)
+
+    def bounded(index: int) -> int:
+        return max(0, min(len(packets) - 1, int(index)))
+
+    if detected_candidate is not None:
+        measurement_selected = sorted({
+            bounded(detected_candidate.frame_index),
+            *(bounded(index) for index in detected_candidate.usable_frame_indices),
+        })
+        measurement_selected = sorted(
+            measurement_selected,
+            key=lambda index: (abs(index - anchor_index), index),
+        )[:3]
+        selected = sorted({
+            *measurement_selected,
+            bounded(detected_candidate.frame_index + 1),
+            bounded(detected_candidate.frame_index + 2),
+        }, key=lambda index: (abs(index - anchor_index), index))[:5]
+    else:
+        measurement_selected = []
+        selected = sorted({bounded(anchor_index + offset) for offset in (-1, 0, 1, 2, 3)})
+
     analysis_width = max(480, min(720, int(target_width) * 3))
+    reduced_cache: dict[int, np.ndarray] = {}
 
     def reduced(index: int) -> np.ndarray:
-        frame = decode_packet(packets[index])
-        scale = min(1.0, analysis_width / max(1, frame.shape[1]))
-        if scale < 1.0:
-            frame = cv2.resize(frame, (max(1, int(frame.shape[1] * scale)), max(1, int(frame.shape[0] * scale))), interpolation=cv2.INTER_AREA)
-        return frame
+        index = bounded(index)
+        cached = reduced_cache.get(index)
+        if cached is None:
+            frame = decode_packet(packets[index])
+            scale = min(1.0, analysis_width / max(1, frame.shape[1]))
+            if scale < 1.0:
+                frame = cv2.resize(
+                    frame,
+                    (max(1, int(frame.shape[1] * scale)), max(1, int(frame.shape[0] * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            cached = frame
+            reduced_cache[index] = cached
+        return cached
 
-    references = [reduced(index) for index in sorted(set(reference_indices)) if index not in selected]
+    # Use only frames well before the event as the empty-board reference. A
+    # following frame may still contain the planted shoe and would erase the
+    # very intrusion this test is meant to detect.
+    pre_reference_indices = sorted({bounded(anchor_index + offset) for offset in (-12, -10, -8, -6)})
+    pre_reference_indices = [index for index in pre_reference_indices if index not in selected and index < anchor_index]
+    intrusion_references = [reduced(index) for index in pre_reference_indices]
+    if len(foul_area) == 4 and intrusion_references:
+        intrusions: list[tuple[int, float, float]] = []
+        for index in selected:
+            ratio, confidence = foul_area_intrusion(reduced(index), intrusion_references, foul_area)
+            if confidence > 0.0:
+                intrusions.append((index, ratio, confidence))
+        if intrusions:
+            index, ratio, confidence = max(intrusions, key=lambda row: (row[2], row[1]))
+            return AutomaticAdvisory(
+                AdvisoryStatus.FOUL, confidence, index, None, None,
+                f"A connected shoe-sized object interrupts {ratio:.1%} of the selected foul area.",
+                (time.perf_counter() - started) * 1000,
+                engine="foul-area-intrusion-v2",
+            )
+
+    if detected_candidate is None:
+        return AutomaticAdvisory(
+            AdvisoryStatus.REVIEW, 0.0, fallback_index, None, None,
+            "No reliable take-off frame or foul-area intrusion was found.",
+            (time.perf_counter() - started) * 1000,
+        )
+
+    reference_indices = [bounded(detected_candidate.frame_index + offset) for offset in (-8, -6, 6, 8)]
+    references = [reduced(index) for index in sorted(set(reference_indices)) if index not in measurement_selected]
     measurements: list[tuple[int, object, bool, float, float, float]] = []
-    for index in selected:
+    for index in measurement_selected:
         frame = reduced(index)
-        estimate = estimate_foot_polygon(frame, references, roi, calibration.board_corners, calibration.foul_line, calibration)
+        estimate = estimate_foot_polygon(
+            frame, references, roi, calibration.board_corners, calibration.foul_line, calibration,
+        )
         if estimate is None:
             continue
-        measurement = measure_projected_foot(estimate.polygon_px, calibration, (frame.shape[1], frame.shape[0]), estimate.confidence)
+        measurement = measure_projected_foot(
+            estimate.polygon_px, calibration, (frame.shape[1], frame.shape[0]), estimate.confidence,
+        )
         xs = [point[0] for point in estimate.polygon_px]
         ys = [point[1] for point in estimate.polygon_px]
         x, y, rw, rh = roi
         margin = max(3.0, min(frame.shape[:2]) * .004)
-        clipped = min(xs) <= x * frame.shape[1] + margin or max(xs) >= (x + rw) * frame.shape[1] - margin or min(ys) <= y * frame.shape[0] + margin or max(ys) >= (y + rh) * frame.shape[0] - margin
+        clipped = (
+            min(xs) <= x * frame.shape[1] + margin
+            or max(xs) >= (x + rw) * frame.shape[1] - margin
+            or min(ys) <= y * frame.shape[0] + margin
+            or max(ys) >= (y + rh) * frame.shape[0] - margin
+        )
         overlap_px, overlap_ratio = shoe_foul_area_overlap(
             estimate.polygon_px, foul_area, (frame.shape[1], frame.shape[0]),
         )
         measurements.append((index, measurement, clipped, overlap_px, overlap_ratio, estimate.confidence))
     elapsed = (time.perf_counter() - started) * 1000
     if not measurements:
-        return AutomaticAdvisory(AdvisoryStatus.REVIEW, candidate.confidence, candidate.frame_index, None, None,
-                                 "The shoe outline was not reliable enough.", elapsed)
+        return AutomaticAdvisory(
+            AdvisoryStatus.REVIEW, detected_candidate.confidence, detected_candidate.frame_index,
+            None, None, "The shoe outline was not reliable enough.", elapsed,
+        )
     if len(foul_area) == 4:
-        area_over = [
-            row for row in measurements
-            if row[3] >= 4.0 and row[4] >= .002
-        ]
+        area_over = [row for row in measurements if row[3] >= 4.0 and row[4] >= .002]
         if area_over:
             index, item, _clipped, _overlap_px, overlap_ratio, shoe_confidence = max(
                 area_over, key=lambda row: (row[4], row[3]),
             )
-            confidence = min(candidate.confidence, item.confidence, shoe_confidence)
-            if confidence >= .70:
+            # Motion-peak confidence only times the event. Once the image itself
+            # contains a reliable shoe overlapping the selected area, it must
+            # not veto that direct spatial evidence.
+            contact_confidence = min(shoe_confidence, .72 + min(.24, overlap_ratio * 1.2))
+            if contact_confidence >= .62:
                 return AutomaticAdvisory(
-                    AdvisoryStatus.FOUL, confidence, index,
+                    AdvisoryStatus.FOUL, contact_confidence, index,
                     item.signed_clearance_cm, item.uncertainty_cm,
                     f"The detected shoe intersects the selected foul area ({overlap_ratio:.1%} of the shoe).",
-                    elapsed, engine="foul-area-contact-v1",
+                    elapsed, engine="foul-area-contact-v2",
                 )
             return AutomaticAdvisory(
-                AdvisoryStatus.REVIEW, confidence, index,
+                AdvisoryStatus.REVIEW, contact_confidence, index,
                 item.signed_clearance_cm, item.uncertainty_cm,
                 "Possible contact with the selected foul area was found, but shoe confidence is too low.",
-                elapsed, engine="foul-area-contact-v1",
+                elapsed, engine="foul-area-contact-v2",
             )
-    over = [] if len(foul_area) == 4 else [(index, item, clipped) for index, item, clipped, *_rest in measurements if item.signed_clearance_cm < -item.uncertainty_cm]
-    clear = [(index, item, clipped) for index, item, clipped, *_rest in measurements if item.signed_clearance_cm > item.uncertainty_cm and not clipped]
+    over = [] if len(foul_area) == 4 else [
+        (index, item, clipped)
+        for index, item, clipped, *_rest in measurements
+        if item.signed_clearance_cm < -item.uncertainty_cm
+    ]
+    clear = [
+        (index, item, clipped)
+        for index, item, clipped, *_rest in measurements
+        if item.signed_clearance_cm > item.uncertainty_cm and not clipped
+    ]
     if len(over) >= 2:
         index, item, _clipped = min(over, key=lambda row: row[1].signed_clearance_cm)
-        confidence = min(candidate.confidence, sum(row[1].confidence for row in over) / len(over))
+        confidence = min(
+            detected_candidate.confidence,
+            sum(row[1].confidence for row in over) / len(over),
+        )
         if confidence >= .72:
-            return AutomaticAdvisory(AdvisoryStatus.FOUL, confidence, index, item.signed_clearance_cm,
-                                     item.uncertainty_cm, "The sole edge crossed the calibrated foul plane in consecutive frames.", elapsed)
+            return AutomaticAdvisory(
+                AdvisoryStatus.FOUL, confidence, index, item.signed_clearance_cm,
+                item.uncertainty_cm,
+                "The sole edge crossed the calibrated foul plane in consecutive frames.", elapsed,
+            )
     if len(clear) >= 3 and len(clear) == len(measurements):
         index, item, _clipped = min(clear, key=lambda row: row[1].signed_clearance_cm)
-        confidence = min(candidate.confidence, sum(row[1].confidence for row in clear) / len(clear))
+        confidence = min(
+            detected_candidate.confidence,
+            sum(row[1].confidence for row in clear) / len(clear),
+        )
         if confidence >= .82:
-            return AutomaticAdvisory(AdvisoryStatus.VALID, confidence, index, item.signed_clearance_cm,
-                                     item.uncertainty_cm, "The complete visible sole stayed behind the calibrated foul plane.", elapsed)
+            return AutomaticAdvisory(
+                AdvisoryStatus.VALID, confidence, index, item.signed_clearance_cm,
+                item.uncertainty_cm,
+                "The complete visible sole stayed behind the calibrated foul plane.", elapsed,
+            )
     nearest = min(measurements, key=lambda row: abs(row[1].signed_clearance_cm))
-    return AutomaticAdvisory(AdvisoryStatus.REVIEW, min(candidate.confidence, nearest[1].confidence), nearest[0],
-                             nearest[1].signed_clearance_cm, nearest[1].uncertainty_cm,
-                             "The image, edge distance, or temporal agreement is not strong enough for automatic advice.", elapsed)
+    return AutomaticAdvisory(
+        AdvisoryStatus.REVIEW,
+        min(detected_candidate.confidence, nearest[1].confidence),
+        nearest[0], nearest[1].signed_clearance_cm, nearest[1].uncertainty_cm,
+        "The image, edge distance, or temporal agreement is not strong enough for automatic advice.",
+        elapsed,
+    )

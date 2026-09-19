@@ -63,8 +63,55 @@ def test_selected_foul_area_contact_advises_foul(monkeypatch) -> None:
         _packets(), 80_000_000, (.1, .1, .8, .8), _calibration(), foul_area=foul_area,
     )
     assert result.status is AdvisoryStatus.FOUL
-    assert result.engine == "foul-area-contact-v1"
+    assert result.engine == "foul-area-contact-v2"
     assert "selected foul area" in result.reason
+
+
+def test_visible_area_contact_is_not_vetoed_by_low_timing_confidence(monkeypatch) -> None:
+    _install_detection_stubs(monkeypatch, [_measurement(2.0), _measurement(2.0), _measurement(2.0)])
+    monkeypatch.setattr(
+        module,
+        "detect_takeoff_candidate",
+        lambda *_args, **_kwargs: TakeoffCandidate(2, .41, 1.0, 0, 160_000_000, (1, 2, 3)),
+    )
+    foul_area = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    result = analyse_attempt(
+        _packets(), 80_000_000, (.1, .1, .8, .8), _calibration(), foul_area=foul_area,
+    )
+    assert result.status is AdvisoryStatus.FOUL
+    assert result.confidence >= .62
+
+
+def test_foul_area_intrusion_can_classify_without_motion_peak_candidate(monkeypatch) -> None:
+    packets = _packets(20)
+    target_index = 12
+    background = np.full((100, 100, 3), 100, np.uint8)
+    contact = background.copy()
+    contact[38:64, 54:78] = (0, 220, 40)
+    monkeypatch.setattr(module, "detect_takeoff_candidate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "decode_packet",
+        lambda packet: (contact if 11 <= packet.seq <= 15 else background).copy(),
+    )
+    foul_area = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    result = analyse_attempt(
+        packets, packets[target_index].timestamp_ns, (.1, .1, .8, .8), _calibration(),
+        foul_area=foul_area,
+    )
+    assert result.status is AdvisoryStatus.FOUL
+    assert result.engine == "foul-area-intrusion-v2"
+    assert result.frame_index in range(11, 16)
+
+
+def test_foul_area_intrusion_rejects_neutral_shadow() -> None:
+    background = np.full((100, 100, 3), 180, np.uint8)
+    shadow = background.copy()
+    shadow[35:70, 50:82] = 125
+    foul_area = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    ratio, confidence = module.foul_area_intrusion(shadow, [background], foul_area)
+    assert confidence == 0.0
+    assert ratio < .008
 
 
 def test_selected_foul_area_replaces_line_based_foul(monkeypatch) -> None:
@@ -84,6 +131,7 @@ def test_uncertain_edge_is_review(monkeypatch) -> None:
 
 def test_missing_candidate_falls_back_to_target_frame(monkeypatch) -> None:
     monkeypatch.setattr(module, "detect_takeoff_candidate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "decode_packet", lambda _packet: np.zeros((100, 100, 3), np.uint8))
     packets = _packets(7)
     result = analyse_attempt(packets, packets[4].timestamp_ns, (.1, .1, .8, .8), _calibration())
     assert result.status is AdvisoryStatus.REVIEW
