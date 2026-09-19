@@ -2689,6 +2689,12 @@ class TopViewProjectionWindow:
         bind_resize_only(canvas, lambda _e, target=target: self._render_result(target))
         canvas.bind("<Button-1>", lambda event, target=target: self._open_fullscreen(target, event))
         if target == "overhead":
+            self.manual_shoe_button = ttk.Button(
+                panel,
+                text=self._text("Edit shoe outline", "Upravit obrys boty"),
+                style="Primary.TButton",
+                command=lambda: self._set_edit_layer("shoe"),
+            )
             canvas.bind("<Motion>", self._result_hover, add="+")
             canvas.bind("<Leave>", self._hide_result_magnifier)
             canvas.bind("<MouseWheel>", self._result_magnifier_wheel)
@@ -3750,8 +3756,6 @@ class TopViewProjectionWindow:
             result = None
             if current is not None:
                 result = current.overhead_image if self.show_outlines_var.get() or current.clean_overhead_image is None else current.clean_overhead_image
-            elif self._board_result is not None and "shoe_detection_failed" in (self._analysis.diagnostics if self._analysis is not None else ()):
-                result = self._board_result
             if self._split_review_reveal_image is not None:
                 result = self._split_review_reveal_image
             # Animation frames only replace the small computed raster. Avoid
@@ -3759,6 +3763,13 @@ class TopViewProjectionWindow:
             if _event is not None or not holders[0]:
                 self._fit_review_image(left_canvas, original, holders[0])
             self._fit_review_image(right_canvas, result, holders[1], self._text("Waiting for computed top-down projection...", "Čekám na vypočtenou projekci shora..."))
+            if self._shoe_detection_failed():
+                self._fit_review_image(
+                    right_canvas,
+                    None,
+                    holders[1],
+                    self._text("Shoe outline not detected. Manual outline required.", "Obrys boty nebyl rozpoznán. Je nutný ruční obrys."),
+                )
             self._split_review_photos = holders[0] + holders[1]
         self._split_review_render = render
         bind_resize_only(left_canvas, render); bind_resize_only(right_canvas, render)
@@ -3778,10 +3789,27 @@ class TopViewProjectionWindow:
         if result is None and not board_fallback:
             return
         if board_fallback:
-            final_image = self._board_result
-            badge = self._text("SHOE NOT DETECTED", "BOTA NENALEZENA")
-            colour = "#9aa8b8"
-            confidence = 0.0
+            if self._split_review_badge is not None:
+                self._split_review_badge.configure(
+                    text=self._text("SHOE NOT DETECTED", "BOTA NENALEZENA"),
+                    bg="#69737d",
+                    fg="#f2f4f6",
+                )
+            if self._split_review_detail is not None:
+                self._split_review_detail.configure(
+                    text=self._text(
+                        "A top-down view needs a shoe outline. Close this review, then choose Edit shoe outline.",
+                        "Pohled shora vyžaduje obrys boty. Zavřete toto porovnání a zvolte Upravit obrys boty.",
+                    ),
+                    fg="#c5ccd3",
+                )
+            if self._split_review_stage_var is not None:
+                self._split_review_stage_var.set(self._text("Manual shoe outline required.", "Je nutný ruční obrys boty."))
+            if self._split_review_progress is not None:
+                self._split_review_progress.pack_forget()
+            if self._split_review_render is not None:
+                self._split_review_render()
+            return
         else:
             status = result.verdict_status
             badge = projection_verdict_text(status)
@@ -3958,28 +3986,44 @@ class TopViewProjectionWindow:
                 self.manual_setup_button.configure(text=label)
                 self.manual_setup_button.pack(side="left", padx=(0, 6), before=self.confirm_frame_button)
             self._render_selection()
-        elif not self._closed and self._state == "projection_workspace" and self._board_result is not None and "shoe_detection_failed" in (self._analysis.diagnostics if self._analysis is not None else ()):
+        elif not self._closed and self._state == "projection_workspace" and self._shoe_detection_failed():
             self.window.after_idle(lambda: self._render_result("overhead"))
         return "break"
+
+    def _shoe_detection_failed(self) -> bool:
+        return "shoe_detection_failed" in (
+            self._analysis.diagnostics if self._analysis is not None else ()
+        )
+
+    def _projection_image(self, target: str) -> np.ndarray | None:
+        """Return only an image that truly represents the requested projection."""
+        if target == "board":
+            return self._board_result
+        if self._overhead_result is None:
+            return None
+        return (
+            self._overhead_result.overhead_image
+            if self.show_outlines_var.get() or self._overhead_result.clean_overhead_image is None
+            else self._overhead_result.clean_overhead_image
+        )
 
     def _render_result(self, target: str) -> None:
         canvas = self.board_canvas if target == "board" else self.overhead_canvas
         if not hasattr(canvas, "delete"): return
         canvas.delete("all")
-        shoe_fallback = "shoe_detection_failed" in (self._analysis.diagnostics if self._analysis is not None else ())
-        if target == "board":
-            image = self._board_result
-        elif self._overhead_result is not None:
-            image = self._overhead_result.overhead_image if self.show_outlines_var.get() or self._overhead_result.clean_overhead_image is None else self._overhead_result.clean_overhead_image
-        else:
-            # The visible unified workspace panel is the overhead canvas. When
-            # shoe detection failed, reuse the board projection already shown
-            # in split review instead of exposing a dead Compute control.
-            image = self._board_result if shoe_fallback else None
+        image = self._projection_image(target)
         if image is None:
             canvas.configure(cursor="arrow")
-            canvas.create_text(max(20, canvas.winfo_width()/2), max(20, canvas.winfo_height()/2), text=self._text("Press Compute to create this projection.", "Stisknutím Vypočítat vytvoříte tuto projekci."), fill=self.palette["muted"], width=max(180, canvas.winfo_width()-30))
-            button = self.board_compute_button if target == "board" else self.overhead_compute_button
+            missing_shoe = target == "overhead" and self._shoe_detection_failed()
+            message = self._text(
+                "The shoe was not detected, so a real top-down view cannot be created automatically. Trace the shoe contact edge in the original frame.",
+                "Bota nebyla rozpoznána, takže skutečný pohled shora nelze vytvořit automaticky. Obkreslete kontaktní hranu boty v původním snímku.",
+            ) if missing_shoe else self._text(
+                "Press Compute to create this projection.",
+                "Stisknutím Vypočítat vytvoříte tuto projekci.",
+            )
+            canvas.create_text(max(20, canvas.winfo_width()/2), max(20, canvas.winfo_height()/2), text=message, fill=self.palette["muted"], width=max(180, canvas.winfo_width()-30), justify="center")
+            button = self.manual_shoe_button if missing_shoe else (self.board_compute_button if target == "board" else self.overhead_compute_button)
             canvas.create_window(max(20, canvas.winfo_width()/2), max(55, canvas.winfo_height()/2 + 42), window=button, anchor="center")
             return
         if image.size == 0 or float(np.count_nonzero(image)) / float(image.size) < 0.02:
@@ -4113,13 +4157,7 @@ class TopViewProjectionWindow:
         return self._result_hover(event)
 
     def _open_fullscreen(self, target: str, _event=None) -> str:
-        shoe_fallback = "shoe_detection_failed" in (self._analysis.diagnostics if self._analysis is not None else ())
-        if target == "board":
-            image = self._board_result
-        elif self._overhead_result is not None:
-            image = self._overhead_result.overhead_image if self.show_outlines_var.get() or self._overhead_result.clean_overhead_image is None else self._overhead_result.clean_overhead_image
-        else:
-            image = self._board_result if shoe_fallback else None
+        image = self._projection_image(target)
         if image is None or self._fullscreen_window is not None:
             return "break"
         self._fullscreen_image = image.copy()
