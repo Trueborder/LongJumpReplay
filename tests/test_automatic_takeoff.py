@@ -122,8 +122,9 @@ def test_later_intrusion_does_not_replace_original_key_frame(monkeypatch) -> Non
         packets, packets[target_index].timestamp_ns, (.1, .1, .8, .8), _calibration(),
         foul_area=foul_area,
     )
-    assert result.status is AdvisoryStatus.REVIEW
+    assert result.status is AdvisoryStatus.VALID
     assert result.frame_index == target_index
+    assert result.engine == "foul-area-clear-v1"
 
 
 def test_foul_area_intrusion_rejects_neutral_shadow() -> None:
@@ -142,7 +143,30 @@ def test_selected_foul_area_replaces_line_based_foul(monkeypatch) -> None:
     result = analyse_attempt(
         _packets(), 80_000_000, (.1, .1, .8, .8), _calibration(), foul_area=foul_area,
     )
-    assert result.status is not AdvisoryStatus.FOUL
+    assert result.status is AdvisoryStatus.VALID
+    assert result.engine == "foul-area-clear-v1"
+
+
+def test_clear_selected_foul_area_is_valid_without_motion_peak_candidate(monkeypatch) -> None:
+    packets = _packets(20)
+    target_index = 12
+    background = np.full((100, 100, 3), 100, np.uint8)
+    shoe_outside = background.copy()
+    shoe_outside[38:64, 12:36] = (0, 220, 40)
+    monkeypatch.setattr(module, "detect_takeoff_candidate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "decode_packet",
+        lambda packet: (shoe_outside if packet.seq == target_index else background).copy(),
+    )
+    foul_area = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    result = analyse_attempt(
+        packets, packets[target_index].timestamp_ns, (.1, .1, .8, .8), _calibration(),
+        foul_area=foul_area,
+    )
+    assert result.status is AdvisoryStatus.VALID
+    assert result.engine == "foul-area-clear-v1"
+    assert result.frame_index == target_index
 
 
 def test_uncertain_edge_is_review(monkeypatch) -> None:

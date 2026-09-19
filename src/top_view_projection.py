@@ -2585,8 +2585,8 @@ class TopViewProjectionWindow:
         if status not in {"valid", "foul", "review"}:
             return None
         fallback_labels = {
-            "valid": self._text("LIKELY VALID", "PRAVDĚPODOBNĚ PLATNÝ"),
-            "foul": self._text("LIKELY FOUL", "PRAVDĚPODOBNĚ PŘEŠLAP"),
+            "valid": self._text("VALID", "PLATNÝ"),
+            "foul": self._text("FOUL", "PŘEŠLAP"),
             "review": self._text("REVIEW REQUIRED", "NUTNÁ KONTROLA"),
         }
         colours = {

@@ -406,7 +406,8 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
     pre_reference_indices = sorted({bounded(anchor_index + offset) for offset in (-12, -10, -8, -6)})
     pre_reference_indices = [index for index in pre_reference_indices if index != verdict_index and index < anchor_index]
     intrusion_references = [reduced(index) for index in pre_reference_indices]
-    if len(foul_area) == 4 and intrusion_references:
+    foul_area_evidence_available = len(foul_area) == 4 and bool(intrusion_references)
+    if foul_area_evidence_available:
         ratio, confidence = foul_area_intrusion(
             reduced(verdict_index), intrusion_references, foul_area,
         )
@@ -417,6 +418,14 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
                 (time.perf_counter() - started) * 1000,
                 engine="foul-area-intrusion-v3",
             )
+
+    if detected_candidate is None and foul_area_evidence_available:
+        return AutomaticAdvisory(
+            AdvisoryStatus.VALID, .88, verdict_index, None, None,
+            "The selected foul area is clear in the detected take-off frame.",
+            (time.perf_counter() - started) * 1000,
+            engine="foul-area-clear-v1",
+        )
 
     if detected_candidate is None:
         return AutomaticAdvisory(
@@ -453,6 +462,12 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
         )
         measurements.append((index, measurement, clipped, overlap_px, overlap_ratio, estimate.confidence))
     elapsed = (time.perf_counter() - started) * 1000
+    if not measurements and foul_area_evidence_available:
+        return AutomaticAdvisory(
+            AdvisoryStatus.VALID, .88, verdict_index, None, None,
+            "The selected foul area is clear in the detected take-off frame.", elapsed,
+            engine="foul-area-clear-v1",
+        )
     if not measurements:
         return AutomaticAdvisory(
             AdvisoryStatus.REVIEW, detected_candidate.confidence, detected_candidate.frame_index,
@@ -480,6 +495,12 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
                 item.signed_clearance_cm, item.uncertainty_cm,
                 "Possible contact with the selected foul area was found, but shoe confidence is too low.",
                 elapsed, engine="foul-area-contact-v2",
+            )
+        if foul_area_evidence_available:
+            return AutomaticAdvisory(
+                AdvisoryStatus.VALID, .88, verdict_index, None, None,
+                "The selected foul area is clear in the detected take-off frame.", elapsed,
+                engine="foul-area-clear-v1",
             )
     over = [] if len(foul_area) == 4 else [
         (index, item, clipped)
