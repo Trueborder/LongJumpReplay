@@ -3836,6 +3836,7 @@ class MainWindow:
                             foul_area=foul_area,
                             candidate=candidate,
                         )
+                        advisory = replace(advisory, frame_index=selected_index)
                         self.event_queue.put(("automatic_takeoff_result", (attempt_id, advisory)))
                 else:
                     self.event_queue.put(("takeoff_failed", (attempt_id, "Take-off Assist failed: no clear local motion peak was found.")))

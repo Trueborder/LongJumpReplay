@@ -80,6 +80,7 @@ def test_visible_area_contact_is_not_vetoed_by_low_timing_confidence(monkeypatch
     )
     assert result.status is AdvisoryStatus.FOUL
     assert result.confidence >= .62
+    assert result.frame_index == 2
 
 
 def test_foul_area_intrusion_can_classify_without_motion_peak_candidate(monkeypatch) -> None:
@@ -100,8 +101,29 @@ def test_foul_area_intrusion_can_classify_without_motion_peak_candidate(monkeypa
         foul_area=foul_area,
     )
     assert result.status is AdvisoryStatus.FOUL
-    assert result.engine == "foul-area-intrusion-v2"
-    assert result.frame_index in range(11, 16)
+    assert result.engine == "foul-area-intrusion-v3"
+    assert result.frame_index == target_index
+
+
+def test_later_intrusion_does_not_replace_original_key_frame(monkeypatch) -> None:
+    packets = _packets(20)
+    target_index = 12
+    background = np.full((100, 100, 3), 100, np.uint8)
+    later_contact = background.copy()
+    later_contact[38:64, 54:78] = (0, 220, 40)
+    monkeypatch.setattr(module, "detect_takeoff_candidate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "decode_packet",
+        lambda packet: (later_contact if packet.seq == 14 else background).copy(),
+    )
+    foul_area = ((.50, .30), (.80, .30), (.80, .70), (.50, .70))
+    result = analyse_attempt(
+        packets, packets[target_index].timestamp_ns, (.1, .1, .8, .8), _calibration(),
+        foul_area=foul_area,
+    )
+    assert result.status is AdvisoryStatus.REVIEW
+    assert result.frame_index == target_index
 
 
 def test_foul_area_intrusion_rejects_neutral_shadow() -> None:

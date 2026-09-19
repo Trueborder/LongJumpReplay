@@ -375,14 +375,11 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
             measurement_selected,
             key=lambda index: (abs(index - anchor_index), index),
         )[:3]
-        selected = sorted({
-            *measurement_selected,
-            bounded(detected_candidate.frame_index + 1),
-            bounded(detected_candidate.frame_index + 2),
-        }, key=lambda index: (abs(index - anchor_index), index))[:5]
     else:
         measurement_selected = []
-        selected = sorted({bounded(anchor_index + offset) for offset in (-1, 0, 1, 2, 3)})
+    # Verdict analysis must never replace the frame chosen by AUTO/ASSIST.
+    # Nearby frames may contain the leaving shoe or only its shadow.
+    verdict_index = bounded(anchor_index)
 
     analysis_width = max(480, min(720, int(target_width) * 3))
     reduced_cache: dict[int, np.ndarray] = {}
@@ -407,21 +404,18 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
     # following frame may still contain the planted shoe and would erase the
     # very intrusion this test is meant to detect.
     pre_reference_indices = sorted({bounded(anchor_index + offset) for offset in (-12, -10, -8, -6)})
-    pre_reference_indices = [index for index in pre_reference_indices if index not in selected and index < anchor_index]
+    pre_reference_indices = [index for index in pre_reference_indices if index != verdict_index and index < anchor_index]
     intrusion_references = [reduced(index) for index in pre_reference_indices]
     if len(foul_area) == 4 and intrusion_references:
-        intrusions: list[tuple[int, float, float]] = []
-        for index in selected:
-            ratio, confidence = foul_area_intrusion(reduced(index), intrusion_references, foul_area)
-            if confidence > 0.0:
-                intrusions.append((index, ratio, confidence))
-        if intrusions:
-            index, ratio, confidence = max(intrusions, key=lambda row: (row[2], row[1]))
+        ratio, confidence = foul_area_intrusion(
+            reduced(verdict_index), intrusion_references, foul_area,
+        )
+        if confidence > 0.0:
             return AutomaticAdvisory(
-                AdvisoryStatus.FOUL, confidence, index, None, None,
+                AdvisoryStatus.FOUL, confidence, verdict_index, None, None,
                 f"A connected shoe-sized object interrupts {ratio:.1%} of the selected foul area.",
                 (time.perf_counter() - started) * 1000,
-                engine="foul-area-intrusion-v2",
+                engine="foul-area-intrusion-v3",
             )
 
     if detected_candidate is None:
@@ -476,13 +470,13 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
             contact_confidence = min(shoe_confidence, .72 + min(.24, overlap_ratio * 1.2))
             if contact_confidence >= .62:
                 return AutomaticAdvisory(
-                    AdvisoryStatus.FOUL, contact_confidence, index,
+                    AdvisoryStatus.FOUL, contact_confidence, verdict_index,
                     item.signed_clearance_cm, item.uncertainty_cm,
                     f"The detected shoe intersects the selected foul area ({overlap_ratio:.1%} of the shoe).",
                     elapsed, engine="foul-area-contact-v2",
                 )
             return AutomaticAdvisory(
-                AdvisoryStatus.REVIEW, contact_confidence, index,
+                AdvisoryStatus.REVIEW, contact_confidence, verdict_index,
                 item.signed_clearance_cm, item.uncertainty_cm,
                 "Possible contact with the selected foul area was found, but shoe confidence is too low.",
                 elapsed, engine="foul-area-contact-v2",
@@ -505,7 +499,7 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
         )
         if confidence >= .72:
             return AutomaticAdvisory(
-                AdvisoryStatus.FOUL, confidence, index, item.signed_clearance_cm,
+                AdvisoryStatus.FOUL, confidence, verdict_index, item.signed_clearance_cm,
                 item.uncertainty_cm,
                 "The sole edge crossed the calibrated foul plane in consecutive frames.", elapsed,
             )
@@ -517,7 +511,7 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
         )
         if confidence >= .82:
             return AutomaticAdvisory(
-                AdvisoryStatus.VALID, confidence, index, item.signed_clearance_cm,
+                AdvisoryStatus.VALID, confidence, verdict_index, item.signed_clearance_cm,
                 item.uncertainty_cm,
                 "The complete visible sole stayed behind the calibrated foul plane.", elapsed,
             )
@@ -525,7 +519,7 @@ def analyse_attempt(packets: Sequence[FramePacket], target_timestamp_ns: int,
     return AutomaticAdvisory(
         AdvisoryStatus.REVIEW,
         min(detected_candidate.confidence, nearest[1].confidence),
-        nearest[0], nearest[1].signed_clearance_cm, nearest[1].uncertainty_cm,
+        verdict_index, nearest[1].signed_clearance_cm, nearest[1].uncertainty_cm,
         "The image, edge distance, or temporal agreement is not strong enough for automatic advice.",
         elapsed,
     )
