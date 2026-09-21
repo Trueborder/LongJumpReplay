@@ -49,6 +49,12 @@
     try { return sessionStorage.getItem('site-language') === 'cs' ? 'cs' : 'en'; } catch (_) { return 'en'; }
   };
   const text = (key) => copy[language()][key] || copy.en[key];
+  const safeError = (exception, fallback = text('failed')) => {
+    if (exception?.status === 401) return text('signIn');
+    if (exception?.status === 410 || exception?.code === 'pairing_expired') return text('expired');
+    const message = String(exception?.message || '').trim();
+    return message && message.length < 180 && !/database|sql|exception|stack trace|failed to fetch/i.test(message) ? message : fallback;
+  };
   const rememberToken = (value) => {
     try { sessionStorage.setItem(PENDING_PAIRING_KEY, JSON.stringify({ token: value, savedAt: Date.now() })); } catch (_) { /* best effort */ }
   };
@@ -174,7 +180,7 @@
         window.location.replace('/login');
         return;
       }
-      showError(exception.status === 410 ? text('expired') : exception.message || text('invalid'));
+      showError(exception.status === 410 ? text('expired') : safeError(exception, text('invalid')));
     }
   };
   approveButton.addEventListener('click', async () => {
@@ -189,13 +195,13 @@
     } catch (exception) {
       setBusy(false);
       if (exception.status === 410) showResult(text('expired'), text('expired'), 'warning');
-      else { licenceNote.textContent = exception.message || text('failed'); licenceNote.dataset.state = 'warning'; }
+      else { licenceNote.textContent = safeError(exception); licenceNote.dataset.state = 'warning'; }
     }
   });
   declineButton.addEventListener('click', async () => {
     setBusy(true);
     try { await api('/api/portal/pairing/decline', { pairing_token: token }); showResult(text('declined'), text('declined'), 'declined'); }
-    catch (exception) { setBusy(false); licenceNote.textContent = exception.message || text('failed'); licenceNote.dataset.state = 'warning'; }
+    catch (exception) { setBusy(false); licenceNote.textContent = safeError(exception); licenceNote.dataset.state = 'warning'; }
   });
   $('#pairing-close').addEventListener('click', () => {
     window.close();

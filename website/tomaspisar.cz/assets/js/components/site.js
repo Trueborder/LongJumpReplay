@@ -5,6 +5,118 @@
     x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>'
   };
 
+  /* Shared feedback primitives. Keep these deliberately small: the site's
+     evidence-desk language already supplies the visual identity, while this
+     layer supplies one predictable interaction model for every page. */
+  const feedback = (() => {
+    const icons = { success: '✓', error: '!', warning: '△', info: 'i' };
+    const language = () => document.documentElement.lang === 'cs' ? 'cs' : 'en';
+    const titles = { en: { success: 'Done', error: 'Could not complete', warning: 'Check this', info: 'Notice' }, cs: { success: 'Hotovo', error: 'Akci se nepodařilo dokončit', warning: 'Zkontrolujte to', info: 'Oznámení' } };
+    const liveRegion = () => {
+      let region = document.querySelector('[data-toast-region]');
+      if (region) return region;
+      region = document.createElement('div');
+      region.className = 'toast-region';
+      region.dataset.toastRegion = '';
+      region.setAttribute('aria-label', language() === 'cs' ? 'Oznámení' : 'Notifications');
+      document.body.append(region);
+      return region;
+    };
+    const removeToast = (toast) => {
+      if (!toast?.isConnected) return;
+      toast.classList.add('is-leaving');
+      window.setTimeout(() => toast.remove(), 180);
+    };
+    const showToast = (kind, message, options = {}) => {
+      if (!message) return null;
+      const region = liveRegion();
+      const duplicate = [...region.children].find((item) => item.dataset.kind === kind && item.querySelector('.toast-message')?.textContent === String(message));
+      if (duplicate) return duplicate;
+      const toast = document.createElement('div');
+      const title = options.title || titles[language()][kind] || titles[language()].info;
+      const closeLabel = language() === 'cs' ? 'Zavřít oznámení' : 'Close notification';
+      toast.className = `toast toast-${kind}`;
+      toast.dataset.kind = kind;
+      toast.setAttribute('role', kind === 'error' || kind === 'warning' ? 'alert' : 'status');
+      toast.setAttribute('aria-live', kind === 'error' || kind === 'warning' ? 'assertive' : 'polite');
+      toast.setAttribute('aria-atomic', 'true');
+      toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${icons[kind] || icons.info}</span><span class="toast-copy"><strong class="toast-title"></strong><span class="toast-message"></span></span><button class="toast-close" type="button">${ICONS.x}</button>`;
+      toast.querySelector('.toast-close').setAttribute('aria-label', closeLabel);
+      toast.querySelector('.toast-title').textContent = title;
+      toast.querySelector('.toast-message').textContent = message;
+      toast.querySelector('.toast-close').addEventListener('click', () => removeToast(toast));
+      region.append(toast);
+      window.requestAnimationFrame(() => toast.classList.add('is-visible'));
+      const duration = options.duration ?? (kind === 'error' ? 8500 : kind === 'warning' ? 6500 : 4800);
+      if (duration > 0) toast._dismissTimer = window.setTimeout(() => removeToast(toast), duration);
+      return toast;
+    };
+    const setInline = (target, message, kind = 'info') => {
+      const element = typeof target === 'string' ? document.querySelector(target) : target;
+      if (!element) return;
+      element.textContent = message || '';
+      element.dataset.state = message ? kind : '';
+      element.hidden = !message;
+      element.setAttribute('aria-live', kind === 'error' || kind === 'warning' ? 'assertive' : 'polite');
+      element.setAttribute('role', kind === 'error' || kind === 'warning' ? 'alert' : 'status');
+    };
+    const bindDialog = (dialog) => {
+      if (!dialog || dialog.dataset.feedbackBound === 'true') return dialog;
+      dialog.dataset.feedbackBound = 'true';
+      let previousFocus = null;
+      dialog.addEventListener('beforetoggle', (event) => { if (event.newState === 'open') previousFocus = document.activeElement; });
+      dialog.addEventListener('close', () => {
+        const focusTarget = previousFocus;
+        previousFocus = null;
+        if (focusTarget?.isConnected && typeof focusTarget.focus === 'function') window.setTimeout(() => focusTarget.focus(), 0);
+      });
+      return dialog;
+    };
+    const confirm = ({ title, description, confirmLabel = 'Confirm', cancelLabel = 'Cancel', destructive = false } = {}) => new Promise((resolve) => {
+      const dialog = document.createElement('dialog');
+      dialog.className = `feedback-modal${destructive ? ' feedback-modal-danger' : ''}`;
+      dialog.setAttribute('aria-labelledby', 'feedback-modal-title');
+      dialog.setAttribute('aria-describedby', 'feedback-modal-description');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.innerHTML = `<div class="feedback-modal-kicker">LONGJUMPREPLAY / CONFIRMATION</div><h2 id="feedback-modal-title"></h2><p id="feedback-modal-description"></p><div class="feedback-modal-actions"><button type="button" class="button button-outline" data-modal-cancel></button><button type="button" class="button ${destructive ? 'button-danger' : 'button-primary'}" data-modal-confirm></button></div>`;
+      dialog.querySelector('#feedback-modal-title').textContent = title || '';
+      dialog.querySelector('#feedback-modal-description').textContent = description || '';
+      dialog.querySelector('[data-modal-cancel]').textContent = cancelLabel;
+      dialog.querySelector('[data-modal-confirm]').textContent = confirmLabel;
+      document.body.append(dialog);
+      bindDialog(dialog);
+      const restoreFocus = document.activeElement;
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        if (dialog.open) dialog.close();
+        else dialog.remove();
+        resolve(value);
+      };
+      dialog.querySelector('[data-modal-cancel]').addEventListener('click', () => finish(false));
+      dialog.querySelector('[data-modal-confirm]').addEventListener('click', () => finish(true));
+      dialog.addEventListener('cancel', (event) => { event.preventDefault(); finish(false); });
+      dialog.addEventListener('click', (event) => { if (event.target === dialog) finish(false); });
+      dialog.addEventListener('close', () => {
+        dialog.remove();
+        if (restoreFocus?.isConnected && typeof restoreFocus.focus === 'function') window.setTimeout(() => restoreFocus.focus(), 0);
+      }, { once: true });
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+      dialog.querySelector('[data-modal-cancel]').focus();
+    });
+    document.querySelectorAll('dialog').forEach(bindDialog);
+    new MutationObserver((records) => records.forEach((record) => record.addedNodes.forEach((node) => {
+      if (node.nodeType === 1) {
+        if (node.matches?.('dialog')) bindDialog(node);
+        node.querySelectorAll?.('dialog').forEach(bindDialog);
+      }
+    }))).observe(document.documentElement, { childList: true, subtree: true });
+    return { toast: { success: (message, options) => showToast('success', message, options), error: (message, options) => showToast('error', message, options), warning: (message, options) => showToast('warning', message, options), info: (message, options) => showToast('info', message, options) }, inline: setInline, bindDialog, confirm };
+  })();
+  window.LJR_FEEDBACK = feedback;
+
   if (!document.querySelector('link[rel="icon"]')) {
     const favicon = document.createElement('link');
     favicon.rel = 'icon';

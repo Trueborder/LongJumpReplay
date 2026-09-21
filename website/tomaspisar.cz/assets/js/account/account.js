@@ -47,7 +47,7 @@
       expiredCode: 'This code has expired. Request a new one.', verified: 'Verified. Opening your account…',
       sending: 'Sending code…', checking: 'Checking code…', sent: 'A code is on the way. It is valid for 10 minutes.',
       invalidEmail: 'Enter a valid email address.', invalidCode: 'Enter the six-digit code from your email.',
-      genericError: 'Something went wrong. Please try again.', noDevices: 'No activated computers.',
+      genericError: 'We could not complete that request. Check your connection and try again.', noDevices: 'No activated computers.',
       noInvoices: 'No invoices available yet.', deactivate: 'Deactivate', deactivating: 'Deactivating…',
       deactivated: 'Computer deactivated.', statusActive: 'Active', statusInactive: 'Inactive',
       statusDeactivated: 'Deactivated', statusLicenceInactive: 'Inactive licence', lifetime: 'Lifetime licence', subscription: 'Monthly subscription',
@@ -61,6 +61,7 @@
       inactiveLicenceCopy: 'Your previous plan is inactive. Purchase again with this email address to restore access.',
       notApplicable: 'Not applicable', additionalTitle: 'Additional computers', addUpTo: 'You can add up to', usedOf: 'computers used', computer: 'Computer', purchase: 'Purchase securely with Stripe', quantity: 'Quantity', verificationReady: 'After activation', sessionExpired: 'Your session ended. Sign in again.',
       method: 'Method', lastActive: 'Last active', actions: 'Actions', details: 'Details', delete: 'Delete', emailMethod: 'Email', keyMethod: 'Key',
+      profileSaved: 'Profile saved.', passwordSaved: 'Password saved.', copied: 'Copied to clipboard.', keyRegenerated: 'New activation key is ready.', deviceDeactivated: 'Computer deactivated.', deviceDeleted: 'Computer removed.',
       pairingRequired: 'Enter the six-digit code shown by LongJumpReplay or open the QR link.', pairingFound: 'Computer found. Choose an active licence with an available slot.', pairingApproved: 'Approved. The app can finish activation now.', pairingNoCapacity: 'No active licence has an available computer slot.', pairingExpired: 'This pairing request is missing or expired.', pairingSameMachine: 'Already used by this computer', pairingAvailable: 'available slot', pairingApprove: 'Approve and activate'
     },
     cs: {
@@ -68,7 +69,7 @@
       expiredCode: 'Kód vypršel. Požádejte o nový.', verified: 'Ověřeno. Otevírám účet…',
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
       invalidEmail: 'Zadejte platnou e-mailovou adresu.', invalidCode: 'Zadejte šestimístný kód z e-mailu.',
-      genericError: 'Něco se nepodařilo. Zkuste to znovu.', noDevices: 'Žádné aktivované počítače.',
+      genericError: 'Požadavek se nepodařilo dokončit. Zkontrolujte připojení a zkuste to znovu.', noDevices: 'Žádné aktivované počítače.',
       noInvoices: 'Zatím nejsou k dispozici žádné faktury.', deactivate: 'Deaktivovat', deactivating: 'Deaktivuji…',
       deactivated: 'Počítač byl deaktivován.', statusActive: 'Aktivní', statusInactive: 'Neaktivní',
       statusDeactivated: 'Deaktivováno', statusLicenceInactive: 'Neaktivní licence', lifetime: 'Doživotní licence', subscription: 'Měsíční předplatné',
@@ -82,6 +83,7 @@
       inactiveLicenceCopy: 'Předchozí plán je neaktivní. Pro obnovení přístupu nakupte znovu se stejnou e-mailovou adresou.',
       notApplicable: 'Nevztahuje se', additionalTitle: 'Další počítače', addUpTo: 'Můžete přidat až', usedOf: 'počítače využity', computer: 'Počítač', purchase: 'Bezpečně zaplatit přes Stripe', quantity: 'Počet', verificationReady: 'Po aktivaci', sessionExpired: 'Relace skončila. Přihlaste se znovu.',
       method: 'Způsob', lastActive: 'Poslední aktivita', actions: 'Akce', details: 'Podrobnosti', delete: 'Smazat', emailMethod: 'E-mail', keyMethod: 'Klíč',
+      profileSaved: 'Profil byl uložen.', passwordSaved: 'Heslo bylo uloženo.', copied: 'Zkopírováno do schránky.', keyRegenerated: 'Nový aktivační klíč je připraven.', deviceDeactivated: 'Počítač byl deaktivován.', deviceDeleted: 'Počítač byl odstraněn.',
       pairingRequired: 'Zadejte šestimístný kód z LongJumpReplay nebo otevřete QR odkaz.', pairingFound: 'Počítač nalezen. Vyberte aktivní licenci s volným místem.', pairingApproved: 'Schváleno. Aplikace nyní dokončí aktivaci.', pairingNoCapacity: 'Žádná aktivní licence nemá volné místo pro počítač.', pairingExpired: 'Párování chybí nebo vypršelo.', pairingSameMachine: 'Tento počítač je již použit', pairingAvailable: 'volné místo', pairingApprove: 'Schválit a aktivovat'
     }
   };
@@ -146,7 +148,31 @@
   const formatDate = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium' }).format(new Date(seconds * 1000)) : '—';
   const formatDateTime = (seconds) => seconds ? new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(seconds * 1000)) : '—';
   const formatMoney = (amount, currency) => typeof amount === 'number' ? new Intl.NumberFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: (currency || 'czk').toUpperCase() }).format(amount / 100) : '—';
-  const setStatus = (message, selector = '#account-status') => { const element = $(selector); if (element) element.textContent = message || ''; };
+  const feedback = window.LJR_FEEDBACK;
+  const readableError = (value) => {
+    const error = value && typeof value === 'object' ? value : { message: value };
+    const code = String(error.code || '').toLowerCase();
+    const mapped = {
+      not_authenticated: t('sessionExpired'), expired: t('expiredCode'), code_expired: t('expiredCode'),
+      invalid_code: t('invalidCode'), license_inactive: state.lang === 'cs' ? 'Tato licence není aktivní.' : 'This licence is not active.',
+      no_capacity: state.lang === 'cs' ? 'Licence už nemá volné místo pro další počítač.' : 'This licence has no available computer slot.',
+      not_found: state.lang === 'cs' ? 'Požadované údaje nebyly nalezeny. Obnovte stránku a zkuste to znovu.' : 'The requested item was not found. Refresh the page and try again.'
+    };
+    if (mapped[code]) return mapped[code];
+    if (Number(error.status) === 401) return t('sessionExpired');
+    if (Number(error.status) === 410) return t('expiredCode');
+    if (Number(error.status) === 429) return state.lang === 'cs' ? 'Příliš mnoho pokusů. Chvíli počkejte a zkuste to znovu.' : 'Too many attempts. Wait a moment and try again.';
+    if (Number(error.status) >= 500 || /failed to fetch|network|database|sql|stripe api|exception|stack trace|undefined/i.test(String(error.message || ''))) return t('genericError');
+    const message = String(error.message || '').trim();
+    return message && message.length <= 180 ? message : t('genericError');
+  };
+  const setStatus = (value, selector = '#account-status', kind = 'info') => {
+    const element = $(selector);
+    if (!element) return;
+    const message = value ? readableError(value) : '';
+    feedback?.inline(element, message, message ? kind : 'info');
+  };
+  const notify = (kind, message, title) => feedback?.toast?.[kind]?.(message, { title });
   const cookieValue = (name) => document.cookie.split(';').map((part) => part.trim().split('=')).find(([key]) => key === name)?.slice(1).join('=') || '';
   const api = async (path, options = {}) => {
     const csrf = cookieValue('ljr-portal-csrf');
@@ -203,24 +229,24 @@
     };
     const requestOtp = async () => {
       const email = $('#email').value.trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('#email').setAttribute('aria-invalid', 'true'); setStatus(t('invalidEmail'), '#login-status', 'error'); return; }
       state.email = email; setStatus(t('sending'), '#login-status'); setLoginBusy(true);
       try {
         await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
         loginState.codeSent = true; $('#password-step').hidden = true; $('#code-field').hidden = false; $('#change-email').hidden = false; $('#resend-code').hidden = false; $('#login-mode-actions').hidden = true; $('#reset-actions').hidden = false;
         setText('#login-submit', 'Verify code', 'OvÄ›Å™it kÃ³d'); setStatus(t('sent'), '#login-status'); $('#code').focus();
-      } catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
+      } catch (error) { setStatus(error, '#login-status', 'error'); } finally { setLoginBusy(false); }
     };
     const verifyOtp = async () => {
       const code = $('#code').value.trim();
-      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
+      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status', 'error'); $('#code').setAttribute('aria-invalid', 'true'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
       try {
         const result = await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) });
         if (result.password_setup_required) return showMigration(result);
         setStatus(t('verified'), '#login-status'); redirectAfterAuth();
       }
-      catch (error) { const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired'); setStatus(expired ? t('expiredCode') : error.message, '#login-status'); $('#code').setAttribute('aria-invalid', 'true'); }
+      catch (error) { const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired'); setStatus(expired ? t('expiredCode') : error, '#login-status', 'error'); $('#code').setAttribute('aria-invalid', 'true'); }
       finally { setLoginBusy(false); }
     };
     const showMigration = (result) => {
@@ -239,37 +265,37 @@
     const completeMigration = async () => {
       const firstName = $('#migration-first-name').value.trim(); const lastName = $('#migration-last-name').value.trim();
       const clubName = $('#migration-club-name').value.trim(); const password = $('#migration-password').value; const confirmation = $('#migration-password-confirmation').value;
-      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#login-status'); return; }
-      if ($('#migration-password-fields').hidden === false && password !== confirmation) { setStatus(t('passwordMismatch'), '#login-status'); return; }
-      if ($('#migration-password-fields').hidden === false && !strongPassword(password)) { setStatus(t('passwordRules'), '#login-status'); return; }
+      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#login-status', 'error'); return; }
+      if ($('#migration-password-fields').hidden === false && password !== confirmation) { setStatus(t('passwordMismatch'), '#login-status', 'error'); return; }
+      if ($('#migration-password-fields').hidden === false && !strongPassword(password)) { setStatus(t('passwordRules'), '#login-status', 'error'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
       try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: state.setupToken, first_name: firstName, last_name: lastName, club_name: clubName, password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet je připraven. Přesměrovávám na přihlášení…' : 'Your account is ready. Returning to sign in…', '#login-status'); window.setTimeout(() => window.location.replace('/login?registered=1'), 500); }
-      catch (error) { setStatus(error.message, '#login-status'); }
+      catch (error) { setStatus(error, '#login-status', 'error'); }
       finally { setLoginBusy(false); }
     };
     const loginWithPassword = async () => {
       const email = $('#email').value.trim(); const password = $('#password').value;
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
-       if (!password) { setStatus(t('passwordLength'), '#login-status'); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('#email').setAttribute('aria-invalid', 'true'); setStatus(t('invalidEmail'), '#login-status', 'error'); return; }
+       if (!password) { setStatus(t('passwordLength'), '#login-status', 'error'); return; }
       state.email = email; setStatus(t('signingIn'), '#login-status'); setLoginBusy(true);
       try { const result = await api('/api/portal/password/login', { method: 'POST', body: JSON.stringify({ email, password }) }); setStatus(t('verified'), '#login-status'); if (result.password_setup_required) window.setTimeout(() => window.location.replace('/register?mode=migration'), 180); else redirectAfterAuth(); }
-      catch (error) { setStatus(error.message, '#login-status'); }
+      catch (error) { setStatus(error, '#login-status', 'error'); }
       finally { setLoginBusy(false); }
     };
     const requestReset = async () => {
       const email = $('#email').value.trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('#email').setAttribute('aria-invalid', 'true'); setStatus(t('invalidEmail'), '#login-status', 'error'); return; }
       state.email = email; setStatus(t('sending'), '#login-status'); setLoginBusy(true);
       try { await api('/api/portal/password/reset/request', { method: 'POST', body: JSON.stringify({ email }) }); loginState.resetSent = true; $('#reset-step').hidden = false; setText('#login-submit', 'Reset password', 'Obnovit heslo'); setStatus(t('resetSent'), '#login-status'); $('#reset-code').focus(); }
-      catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
+      catch (error) { setStatus(error, '#login-status', 'error'); } finally { setLoginBusy(false); }
     };
     const completeReset = async () => {
       const code = $('#reset-code').value.trim(); const newPassword = $('#new-password').value;
-      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
-       if (!strongPassword(newPassword)) { setStatus(t('passwordLength'), '#login-status'); return; }
+      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status', 'error'); return; }
+       if (!strongPassword(newPassword)) { setStatus(t('passwordLength'), '#login-status', 'error'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
       try { await api('/api/portal/password/reset', { method: 'POST', body: JSON.stringify({ email: state.email, code, new_password: newPassword }) }); setStatus(t('verified'), '#login-status'); redirectAfterAuth(); }
-      catch (error) { setStatus(error.message, '#login-status'); } finally { setLoginBusy(false); }
+      catch (error) { setStatus(error, '#login-status', 'error'); } finally { setLoginBusy(false); }
     };
     $('#otp-mode-link').addEventListener('click', () => setMode('otp'));
     $('#forgot-password').addEventListener('click', () => setMode('reset'));
@@ -293,74 +319,6 @@
     const form = $('#login-form');
     if (!form) return;
     return initSecureLogin(form);
-
-    const requestCode = async () => {
-      const email = $('#email').value.trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#login-status'); return; }
-      state.email = email;
-      setStatus(t('sending'), '#login-status');
-      setLoginBusy(true);
-      try {
-        await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
-        state.codeSent = true;
-        $('#email-step').hidden = true;
-        $('#code-field').hidden = false;
-        $('#change-email').hidden = false;
-        $('#resend-code').hidden = false;
-        $('#login-submit').textContent = state.lang === 'cs' ? 'Ověřit kód' : 'Verify code';
-        setStatus(t('sent'), '#login-status');
-        $('#code').focus();
-      } catch (error) { setStatus(error.message, '#login-status'); }
-      finally { setLoginBusy(false); }
-    };
-
-    const changeEmail = () => {
-      state.codeSent = false;
-      $('#email-step').hidden = false;
-      $('#code-field').hidden = true;
-      $('#change-email').hidden = true;
-      $('#resend-code').hidden = true;
-      $('#login-submit').textContent = state.lang === 'cs' ? 'PokraÄovat' : 'Continue';
-      $('#code').value = '';
-      setStatus('', '#login-status');
-      $('#email').focus();
-    };
-
-    const resendCode = () => {
-      if (!state.email) return changeEmail();
-      $('#email').value = state.email;
-      requestCode();
-    };
-
-    const verifyCode = async () => {
-      const code = $('#code').value.trim();
-      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#login-status'); return; }
-      setStatus(t('checking'), '#login-status');
-      setLoginBusy(true);
-      try {
-        await api('/api/portal/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) });
-        setStatus(t('verified'), '#login-status');
-        const pendingPairing = readPendingPairing();
-        const destination = pendingPairing
-          ? `/approve/pairing#pair=${encodeURIComponent(pendingPairing)}`
-          : '/dashboard/overview';
-        window.setTimeout(() => window.location.replace(destination), 180);
-      } catch (error) {
-        const expired = error.status === 410 || String(error.code || '').toLowerCase().includes('expired');
-        setStatus(expired ? t('expiredCode') : error.message, '#login-status');
-        $('#code').setAttribute('aria-invalid', 'true');
-      }
-      finally { setLoginBusy(false); }
-    };
-
-    $('#change-email').addEventListener('click', changeEmail);
-    $('#resend-code').addEventListener('click', resendCode);
-    $('#code').addEventListener('input', () => $('#code').removeAttribute('aria-invalid'));
-    form.addEventListener('submit', (event) => { event.preventDefault(); state.codeSent ? verifyCode() : requestCode(); });
-    api('/api/portal/account').then(() => {
-      const pendingPairing = readPendingPairing();
-      window.location.replace(pendingPairing ? `/approve/pairing#pair=${encodeURIComponent(pendingPairing)}` : '/dashboard/overview');
-    }).catch(() => $('#email').focus());
   };
 
   const renderLicenceCards = (licences) => {
@@ -419,7 +377,7 @@
       try {
         await api('/api/portal/activation-key/ensure', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
         state.ensuredKeys.add(state.keyLicenceId);
-      } catch (error) { setStatus(error.message); }
+      } catch (error) { setStatus(error, '#account-status', 'error'); }
     }
   };
 
@@ -444,7 +402,7 @@
     $('#additional-computers-purchase').addEventListener('click', async () => {
       const button = $('#additional-computers-purchase'); button.disabled = true; setStatus(t('sending'));
       try { const result = await api('/api/portal/additional-computers', { method: 'POST', body: JSON.stringify({ license_id: offer.license_id, quantity: Number(quantity.value) }) }); window.location.href = result.url; }
-      catch (error) { setStatus(error.message); button.disabled = false; await loadDashboard(); }
+      catch (error) { setStatus(error, '#account-status', 'error'); button.disabled = false; await loadDashboard(); }
     });
   };
 
@@ -483,7 +441,7 @@
   const inspectPairing = async (value) => {
     const input = String(value || $('#pairing-code')?.value || '').trim();
     const payload = /^\d{6}$/.test(input) ? { pairing_code: input } : { pairing_token: input };
-    if (!payload.pairing_code && !payload.pairing_token) { setStatus(t('pairingRequired')); return; }
+    if (!payload.pairing_code && !payload.pairing_token) { setStatus(t('pairingRequired'), '#account-status', 'error'); return; }
     const find = $('#pairing-find');
     if (find) { find.disabled = true; find.setAttribute('aria-busy', 'true'); }
     setStatus(t('sending'));
@@ -496,7 +454,7 @@
       state.pairing = null;
       $('#pairing-review')?.setAttribute('hidden', '');
       if (payload.pairing_token) clearPendingPairing();
-      setStatus(error.status === 410 ? t('pairingExpired') : error.message);
+      setStatus(error.status === 410 ? t('pairingExpired') : error, '#account-status', 'error');
     } finally {
       if (find) { find.disabled = false; find.removeAttribute('aria-busy'); }
     }
@@ -513,10 +471,11 @@
     try {
       await api('/api/portal/pairing/confirm', { method: 'POST', body: JSON.stringify({ pairing_id: state.pairing.id, license_id: licenseId }) });
       clearPendingPairing();
-      setStatus(t('pairingApproved'));
+      setStatus('', '#account-status');
+      notify('success', t('pairingApproved'), state.lang === 'cs' ? 'Počítač schválen' : 'Computer approved');
       renderPairing({ ...state.pairing });
       await loadDashboard();
-    } catch (error) { setStatus(error.message); button.disabled = false; }
+    } catch (error) { setStatus(error, '#account-status', 'error'); button.disabled = false; }
     finally { button.removeAttribute('aria-busy'); }
   };
 
@@ -582,7 +541,7 @@
     try { renderDashboard(await api('/api/portal/account')); }
     catch (error) {
       if (error.status === 401) window.location.replace('/login');
-      else { $('#dashboard-loading').hidden = true; setStatus(error.message); }
+      else { $('#dashboard-loading').hidden = true; setStatus(error, '#account-status', 'error'); }
     }
   };
 
@@ -607,27 +566,27 @@
     };
     const request = async () => {
       const email = $('#register-email').value.trim();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus(t('invalidEmail'), '#register-status'); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('#register-email').setAttribute('aria-invalid', 'true'); setStatus(t('invalidEmail'), '#register-status', 'error'); return; }
       state.email = email; setStatus(t('sending'), '#register-status'); busy(true);
       try { await api('/api/portal/register/request-code', { method: 'POST', body: JSON.stringify({ email }) }); registrationState.codeSent = true; step('code'); setStatus(t('sent'), '#register-status'); }
-      catch (error) { setStatus(error.message, '#register-status'); } finally { busy(false); }
+      catch (error) { setStatus(error, '#register-status', 'error'); } finally { busy(false); }
     };
     const verify = async () => {
       const code = $('#register-code').value.trim();
-      if (!/^\d{6}$/.test(code)) { setStatus(t('invalidCode'), '#register-status'); return; }
+      if (!/^\d{6}$/.test(code)) { $('#register-code').setAttribute('aria-invalid', 'true'); setStatus(t('invalidCode'), '#register-status', 'error'); return; }
       setStatus(t('checking'), '#register-status'); busy(true);
       try { const result = await api('/api/portal/register/verify-code', { method: 'POST', body: JSON.stringify({ email: state.email, code }) }); registrationState.setupToken = result.setup_token; registrationState.passwordRequired = result.password_required !== false; $('#register-password-fields').hidden = !registrationState.passwordRequired; $('#register-password').required = registrationState.passwordRequired; $('#register-password-confirmation').required = registrationState.passwordRequired; step('details'); setStatus('', '#register-status'); }
-      catch (error) { setStatus(error.status === 410 ? t('expiredCode') : error.message, '#register-status'); } finally { busy(false); }
+      catch (error) { setStatus(error.status === 410 ? t('expiredCode') : error, '#register-status', 'error'); } finally { busy(false); }
     };
     const complete = async () => {
       const firstName = $('#register-first-name').value.trim(); const lastName = $('#register-last-name').value.trim();
       const password = $('#register-password').value; const confirmation = $('#register-password-confirmation').value;
-      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#register-status'); return; }
-      if (registrationState.passwordRequired && password !== confirmation) { setStatus(t('passwordMismatch'), '#register-status'); return; }
-      if (registrationState.passwordRequired && !strongPassword(password)) { setStatus(t('passwordLength'), '#register-status'); return; }
+      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#register-status', 'error'); return; }
+      if (registrationState.passwordRequired && password !== confirmation) { setStatus(t('passwordMismatch'), '#register-status', 'error'); return; }
+      if (registrationState.passwordRequired && !strongPassword(password)) { setStatus(t('passwordLength'), '#register-status', 'error'); return; }
       setStatus(t('checking'), '#register-status'); busy(true);
       try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: registrationState.setupToken, first_name: firstName, last_name: lastName, club_name: $('#register-club-name').value.trim(), password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet vytvořen. Přesměrovávám na přihlášení…' : 'Account created. Returning to sign in…', '#register-status'); window.setTimeout(() => window.location.replace('/login?registered=1'), 600); }
-      catch (error) { setStatus(error.message, '#register-status'); } finally { busy(false); }
+      catch (error) { setStatus(error, '#register-status', 'error'); } finally { busy(false); }
     };
     const loadMigration = async () => {
       try {
@@ -649,22 +608,36 @@
   };
 
   const deactivate = async (deviceId) => {
-    if (!window.confirm(state.lang === 'cs' ? 'Opravdu deaktivovat tento počítač?' : 'Deactivate this computer?')) return;
+    const accepted = await feedback?.confirm?.({
+      title: state.lang === 'cs' ? 'Deaktivovat počítač?' : 'Deactivate this computer?',
+      description: state.lang === 'cs' ? 'Počítač se odpojí od licence a uvolní místo pro jinou stanici.' : 'This computer will be disconnected from the licence and its slot will be available for another station.',
+      confirmLabel: state.lang === 'cs' ? 'Deaktivovat' : 'Deactivate',
+      cancelLabel: state.lang === 'cs' ? 'Zrušit' : 'Cancel',
+      destructive: true
+    });
+    if (accepted === false) return;
     setStatus(t('deactivating'));
     try {
       await api('/api/portal/deactivate-device', { method: 'POST', body: JSON.stringify({ device_id: deviceId }) });
-      setStatus(t('deactivated'));
       await loadDashboard();
-    } catch (error) { setStatus(error.message); }
+      notify('success', t('deviceDeactivated'), state.lang === 'cs' ? 'Počítač deaktivován' : 'Computer deactivated');
+    } catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
   const deleteDevice = async (deviceId) => {
-    const prompt = state.lang === 'cs' ? 'Trvale smazat deaktivovaný počítač a jeho historii aktivity?' : 'Permanently delete this deactivated computer and its activity history?';
-    if (!window.confirm(prompt)) return;
+    const accepted = await feedback?.confirm?.({
+      title: state.lang === 'cs' ? 'Odstranit počítač?' : 'Remove this computer?',
+      description: state.lang === 'cs' ? 'Trvale se odstraní deaktivovaný počítač i jeho historie aktivity. Tuto akci nelze vrátit.' : 'The deactivated computer and its activity history will be permanently removed. This cannot be undone.',
+      confirmLabel: state.lang === 'cs' ? 'Odstranit' : 'Remove',
+      cancelLabel: state.lang === 'cs' ? 'Zrušit' : 'Cancel',
+      destructive: true
+    });
+    if (accepted === false) return;
     try {
       await api('/api/portal/delete-device', { method: 'POST', body: JSON.stringify({ device_id: deviceId }) });
       await loadDashboard();
-    } catch (error) { setStatus(error.message); }
+      notify('success', t('deviceDeleted'), state.lang === 'cs' ? 'Počítač odstraněn' : 'Computer removed');
+    } catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
   const showDeviceDetails = async (deviceId) => {
@@ -674,7 +647,7 @@
       $('#device-details-title').textContent = device.device_name || 'LongJumpReplay computer';
       $('#device-details-content').innerHTML = `<dl class="device-facts"><div><dt>${t('status')}</dt><dd>${escapeHtml(device.status)}</dd></div><div><dt>${t('method')}</dt><dd>${device.activation_method === 'key' ? t('keyMethod') : t('emailMethod')}</dd></div><div><dt>${t('activated')}</dt><dd>${formatDateTime(device.activated_at)}</dd></div><div><dt>${t('lastActive')}</dt><dd>${formatDateTime(device.last_verified_at)}</dd></div></dl><details class="advanced-details"><summary>${state.lang === 'cs' ? 'Zobrazit technické údaje a aktivitu' : 'Show technical details and activity'}</summary><dl class="device-facts"><div><dt>App version</dt><dd>${escapeHtml(device.app_version || '—')}</dd></div><div><dt>Windows</dt><dd>${escapeHtml(device.os_version || '—')}</dd></div><div><dt>Architecture</dt><dd>${escapeHtml(device.architecture || '—')}</dd></div><div><dt>Device ID</dt><dd><code>${escapeHtml(device.id)}</code></dd></div><div><dt>Machine ID</dt><dd><code>${escapeHtml(device.machine_id)}</code></dd></div><div><dt>Key generation</dt><dd>${escapeHtml(device.activation_key_generation || '—')}</dd></div></dl><div class="activity-list">${(data.activity || []).map((item) => `<article><strong>${escapeHtml(item.event_type)}</strong><span>${formatDateTime(item.created_at)}</span><code>${escapeHtml(item.ip_address || '—')}</code><span>${escapeHtml(item.country || '—')}</span></article>`).join('') || `<p class="muted">${state.lang === 'cs' ? 'Žádná historie aktivity.' : 'No activity history.'}</p>`}</div></details>`;
       $('#device-details-dialog').showModal();
-    } catch (error) { setStatus(error.message); }
+    } catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
   const fetchActivationKey = async () => {
@@ -692,7 +665,7 @@
       state.keyVisible = true; state.keyValue = data.key;
       $('#activation-key-value').textContent = data.key;
       $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Skrýt klíč' : 'Hide key';
-    } catch (error) { setStatus(error.message); }
+    } catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
   const writeClipboard = async (value) => {
@@ -724,9 +697,10 @@
         value = data.key;
       }
       await writeClipboard(value);
-      setStatus(state.lang === 'cs' ? 'Zkopírováno' : 'Copied');
+      setStatus('', '#account-status');
+      notify('success', state.lang === 'cs' ? 'Zkopírováno' : 'Copied', state.lang === 'cs' ? 'Zkopírováno do schránky' : 'Copied to clipboard');
     } catch {
-      setStatus(state.lang === 'cs' ? 'Klíč se nepodařilo zkopírovat.' : 'The key could not be copied.');
+      notify('error', state.lang === 'cs' ? 'Klíč se nepodařilo zkopírovat. Zkuste to znovu.' : 'The key could not be copied. Try again.', state.lang === 'cs' ? 'Kopírování selhalo' : 'Copy failed');
     } finally {
       button.disabled = false;
       button.removeAttribute('aria-busy');
@@ -736,17 +710,23 @@
 
   const regenerateActivationKey = async () => {
     const keyed = (state.account?.devices || []).filter((device) => device.license_id === state.keyLicenceId && device.status === 'active' && device.activation_method === 'key').length;
-    const prompt = state.lang === 'cs' ? `Vygenerovat nový klíč? Odpojí se ${keyed} počítačů aktivovaných klíčem. Počítače aktivované e-mailem zůstanou připojené.` : `Generate a new key? This disconnects ${keyed} key-activated computer(s). Email-activated computers stay connected.`;
-    if (!window.confirm(prompt)) return;
+    const accepted = await feedback?.confirm?.({
+      title: state.lang === 'cs' ? 'Vygenerovat nový klíč?' : 'Generate a new key?',
+      description: state.lang === 'cs' ? `Odpojí se ${keyed} počítačů aktivovaných tímto klíčem. Počítače aktivované e-mailem zůstanou připojené.` : `This disconnects ${keyed} key-activated computer(s). Email-activated computers stay connected.`,
+      confirmLabel: state.lang === 'cs' ? 'Vygenerovat klíč' : 'Generate key',
+      cancelLabel: state.lang === 'cs' ? 'Zrušit' : 'Cancel',
+      destructive: true
+    });
+    if (accepted === false) return;
     try {
       const data = await api('/api/portal/activation-key/regenerate', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) });
       state.keyVisible = true; state.keyValue = data.key;
       $('#activation-key-value').textContent = data.key;
       $('#activation-key-reveal').textContent = state.lang === 'cs' ? 'Skrýt klíč' : 'Hide key';
-      setStatus(state.lang === 'cs' ? `Nový klíč je připraven. Odpojeno počítačů: ${data.disconnected_devices}.` : `New key ready. Disconnected computers: ${data.disconnected_devices}.`);
+      notify('success', state.lang === 'cs' ? `Nový klíč je připraven. Odpojeno počítačů: ${data.disconnected_devices}.` : `New key ready. Disconnected computers: ${data.disconnected_devices}.`, state.lang === 'cs' ? 'Klíč obnoven' : 'Key regenerated');
       if (state.account) state.account.devices = state.account.devices.map((device) => device.license_id === state.keyLicenceId && device.activation_method === 'key' ? { ...device, status: 'deactivated' } : device);
       renderDevices(state.account.devices, new Set((state.account.licenses || []).filter((licence) => licence.status === 'active').map((licence) => licence.id)));
-    } catch (error) { setStatus(error.message); }
+    } catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
   const signOut = async () => {
@@ -757,7 +737,7 @@
   const openBilling = async () => {
     setStatus(t('sending'));
     try { const data = await api('/api/portal/billing', { method: 'POST', body: '{}' }); window.location.href = data.url; }
-    catch (error) { setStatus(error.message); }
+    catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
   const initDashboard = () => {
@@ -780,15 +760,16 @@
       const firstName = $('#profile-first-name')?.value.trim() || '';
       const lastName = $('#profile-last-name')?.value.trim() || '';
       const clubName = $('#profile-club-name')?.value.trim() || '';
-      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#profile-status'); return; }
+      if (!firstName || !lastName) { setStatus(t('profileRequired'), '#profile-status', 'error'); return; }
       const button = event.currentTarget.querySelector('button[type="submit"]');
       button.disabled = true;
       setStatus(state.lang === 'cs' ? 'Ukládám profil…' : 'Saving profile…', '#profile-status');
       try {
         await api('/api/portal/profile', { method: 'POST', body: JSON.stringify({ first_name: firstName, last_name: lastName, club_name: clubName }) });
-        setStatus(state.lang === 'cs' ? 'Profil byl uložen.' : 'Profile saved.', '#profile-status');
+        setStatus('', '#profile-status');
+        notify('success', t('profileSaved'), state.lang === 'cs' ? 'Profil uložen' : 'Profile saved');
         await loadDashboard();
-      } catch (error) { setStatus(error.message, '#profile-status'); }
+      } catch (error) { setStatus(error, '#profile-status', 'error'); }
       finally { button.disabled = false; }
     });
     $('#password-enroll-form')?.addEventListener('submit', async (event) => {
@@ -796,16 +777,16 @@
       const form = event.currentTarget;
       const newPassword = $('#enroll-password')?.value || '';
       const confirmation = $('#confirm-enroll-password')?.value || '';
-      if (newPassword !== confirmation) { setStatus(t('passwordMismatch'), '#profile-status'); return; }
-      if (!strongPassword(newPassword)) { setStatus(t('passwordLength'), '#profile-status'); return; }
+      if (newPassword !== confirmation) { setStatus(t('passwordMismatch'), '#profile-status', 'error'); return; }
+      if (!strongPassword(newPassword)) { setStatus(t('passwordLength'), '#profile-status', 'error'); return; }
       const configured = form.dataset.configured === 'true';
       const body = configured
         ? { current_password: $('#current-password')?.value || '', new_password: newPassword }
         : { password: newPassword };
-      if (configured && body.current_password.length < 12) { setStatus(state.lang === 'cs' ? 'Zadejte současné heslo.' : 'Enter your current password.', '#profile-status'); return; }
+      if (configured && body.current_password.length < 12) { setStatus(state.lang === 'cs' ? 'Zadejte současné heslo.' : 'Enter your current password.', '#profile-status', 'error'); return; }
       setStatus(state.lang === 'cs' ? 'Ukládám heslo…' : 'Saving password…', '#profile-status');
-      try { await api(configured ? '/api/portal/password/change' : '/api/portal/password/enroll', { method: 'POST', body: JSON.stringify(body) }); setStatus(state.lang === 'cs' ? 'Heslo bylo uloženo.' : 'Password saved.', '#profile-status'); await loadDashboard(); }
-      catch (error) { setStatus(error.message, '#profile-status'); }
+      try { await api(configured ? '/api/portal/password/change' : '/api/portal/password/enroll', { method: 'POST', body: JSON.stringify(body) }); setStatus('', '#profile-status'); notify('success', t('passwordSaved'), state.lang === 'cs' ? 'Heslo uloženo' : 'Password saved'); await loadDashboard(); }
+      catch (error) { setStatus(error, '#profile-status', 'error'); }
     });
     $('#device-details-close')?.addEventListener('click', () => $('#device-details-dialog').close());
     $('#activation-key-reveal')?.addEventListener('click', revealActivationKey);
@@ -817,7 +798,7 @@
       state.keyLicenceId = event.target.value; hideActivationKey();
       if (!state.ensuredKeys.has(state.keyLicenceId)) {
         try { await api('/api/portal/activation-key/ensure', { method: 'POST', body: JSON.stringify({ license_id: state.keyLicenceId }) }); state.ensuredKeys.add(state.keyLicenceId); }
-        catch (error) { setStatus(error.message); }
+        catch (error) { setStatus(error, '#account-status', 'error'); }
       }
     });
     loadDashboard().then(() => {

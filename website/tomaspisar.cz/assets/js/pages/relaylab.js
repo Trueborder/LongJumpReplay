@@ -5,6 +5,7 @@
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const feedback = window.LJR_FEEDBACK;
   const state = { swimmers: [], settings: { distance: 50, poolLength: 25, period: 'last12', dateFrom: '', dateTo: '', includeRelaySplits: false } };
   let searchTimer = 0;
   let searchController = null;
@@ -17,6 +18,7 @@
   };
   const t = (key) => (copy[document.documentElement.lang === 'cs' ? 'cs' : 'en'][key] || copy.en[key] || key);
   const announce = (message) => { let live = $('#relaylab-live'); if (!live) { live = document.createElement('p'); live.id = 'relaylab-live'; live.className = 'sr-only'; live.setAttribute('aria-live', 'polite'); $('.relaylab-page')?.prepend(live); } if (live) live.textContent = message; };
+  const setSearchFeedback = (message, kind = 'info') => feedback?.inline($('#search-feedback'), message, kind);
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const initials = (swimmer) => `${(swimmer.firstName || '?')[0]}${(swimmer.lastName || '?')[0]}`.toUpperCase();
   const displayName = (swimmer) => `${swimmer.firstName || ''} ${swimmer.lastName || ''}`.trim() || `ID ${swimmer.id}`;
@@ -35,9 +37,9 @@
     list._items = swimmers; list.hidden = false; $('#swimmer-search')?.setAttribute('aria-expanded', 'true');
   }
   async function searchSwimmers(query) {
-    searchController?.abort(); searchController = new AbortController(); setSearchLoading(true); announce(t('searching'));
+    searchController?.abort(); searchController = new AbortController(); setSearchLoading(true); setSearchFeedback('', 'info'); announce(t('searching'));
     try { const response = await fetch(`/api/swimming/search?q=${encodeURIComponent(query)}`, { signal: searchController.signal, headers: { accept: 'application/json' } }); const data = await response.json(); if (!response.ok) throw new Error(data.error?.code || 'search'); renderSuggestions(data.swimmers || []); }
-    catch (error) { if (error.name !== 'AbortError') { renderSuggestions([]); announce(t('sourceError')); } }
+    catch (error) { if (error.name !== 'AbortError') { renderSuggestions([]); setSearchFeedback(t('sourceError'), 'error'); announce(t('sourceError')); } }
     finally { setSearchLoading(false); }
   }
 
@@ -68,10 +70,10 @@
     renderSquad();
   }
   function addSwimmer(record) {
-    if (state.swimmers.some((item) => String(item.id) === String(record.id))) { announce(t('duplicate')); closeSuggestions(); return; }
-    if (state.swimmers.length >= 16) return;
+    if (state.swimmers.some((item) => String(item.id) === String(record.id))) { setSearchFeedback(t('duplicate'), 'warning'); announce(t('duplicate')); closeSuggestions(); return; }
+    if (state.swimmers.length >= 16) { setSearchFeedback(document.documentElement.lang === 'cs' ? 'Tým už obsahuje maximálně 16 plavců.' : 'A relay can contain at most 16 swimmers.', 'warning'); return; }
     const swimmer = { id: record.id, firstName: record.firstName || '', lastName: record.lastName || '', birthYear: record.birthYear || null, clubAbbrev: record.clubAbbrev || '', profileUrl: record.profileUrl || `https://vysledky.czechswimming.cz/lide/${record.id}`, performances: [], loading: true, error: '' };
-    state.swimmers.push(swimmer); renderSquad(); closeSuggestions(); $('#swimmer-search').value = ''; announce(t('added')); loadSwimmer(swimmer);
+    state.swimmers.push(swimmer); renderSquad(); closeSuggestions(); $('#swimmer-search').value = ''; setSearchFeedback('', 'info'); feedback?.toast.success(t('added'), { title: document.documentElement.lang === 'cs' ? 'Přidáno' : 'Swimmer added' }); announce(t('added')); loadSwimmer(swimmer);
   }
   function closeUnregisteredDialog() { const dialog = $('#unregistered-dialog'); if (dialog?.open) dialog.close(); else if (dialog) dialog.hidden = true; }
   function addUnregisteredSwimmer(event) {

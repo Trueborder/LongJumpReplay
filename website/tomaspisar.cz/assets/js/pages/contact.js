@@ -6,14 +6,13 @@
   const status = document.querySelector('[data-contact-status]');
   const submit = form.querySelector('button[type="submit"]');
   const widgetHost = form.querySelector('[data-contact-turnstile]');
+  const feedback = window.LJR_FEEDBACK;
   let turnstileId = null;
   let token = '';
 
   const copy = (en, cs) => document.documentElement.lang === 'cs' ? cs : en;
   const setStatus = (message, kind = '') => {
-    if (!status) return;
-    status.textContent = message;
-    status.dataset.state = kind;
+    feedback?.inline(status, message, kind || 'info');
   };
 
   const renderTurnstile = () => {
@@ -28,7 +27,7 @@
   };
 
   if (!config.turnstileSiteKey) {
-    setStatus(copy('The contact form is temporarily unavailable.', 'Kontaktní formulář je dočasně nedostupný.'), 'error');
+    setStatus(copy('The contact form is temporarily unavailable. Please email support instead.', 'Kontaktní formulář je dočasně nedostupný. Napište nám prosím e-mailem.'), 'error');
   } else if (window.turnstile?.render) {
     renderTurnstile();
   } else {
@@ -42,13 +41,13 @@
       return;
     }
     if (!config.apiUrl || !token) {
-      setStatus(copy('Please complete the security check and try again.', 'Dokončete bezpečnostní kontrolu a zkuste to znovu.'), 'error');
+      setStatus(copy('Complete the security check, then try sending the message again.', 'Dokončete bezpečnostní kontrolu a odešlete zprávu znovu.'), 'error');
       return;
     }
     const data = Object.fromEntries(new FormData(form).entries());
     data.turnstile_token = token;
     submit?.setAttribute('disabled', 'disabled');
-    setStatus(copy('Sending…', 'Odesílám…'));
+    setStatus(copy('Sending…', 'Odesílám…'), 'info');
     try {
       const response = await fetch(config.apiUrl, {
         method: 'POST',
@@ -59,9 +58,10 @@
       form.reset();
       token = '';
       if (turnstileId !== null && window.turnstile?.reset) window.turnstile.reset(turnstileId);
-      setStatus(copy('Message sent. Thank you — we will reply by email.', 'Zpráva byla odeslána. Děkujeme — odpovíme e-mailem.'), 'success');
+      setStatus('', '');
+      feedback?.toast.success(copy('Message sent. We will reply by email.', 'Zpráva byla odeslána. Odpovíme e-mailem.'), { title: copy('Message sent', 'Zpráva odeslána') });
     } catch (_) {
-      setStatus(copy('The message could not be sent. Please try again later.', 'Zprávu se nepodařilo odeslat. Zkuste to prosím později.'), 'error');
+      setStatus(copy('The message could not be sent. Check your connection and try again.', 'Zprávu se nepodařilo odeslat. Zkontrolujte připojení a zkuste to znovu.'), 'error');
       token = '';
       if (turnstileId !== null && window.turnstile?.reset) window.turnstile.reset(turnstileId);
     } finally {
