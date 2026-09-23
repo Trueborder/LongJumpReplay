@@ -26,6 +26,17 @@ test('product and legal pages use the organized public structure', () => {
   assert.equal(fs.existsSync(path.join(publicRoot, 'privacy')), false);
 });
 
+test('product page stylesheets resolve to published files', () => {
+  for (const file of htmlFiles.filter((name) => name.includes(`${path.sep}products${path.sep}`))) {
+    const html = fs.readFileSync(file, 'utf8');
+    for (const [, href] of html.matchAll(/<link\s+[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)) {
+      if (!href.startsWith('/')) continue;
+      const asset = path.join(publicRoot, href.split('?')[0].slice(1));
+      assert.ok(fs.existsSync(asset), `${path.relative(publicRoot, file)} references missing ${href}`);
+    }
+  }
+});
+
 test('legacy product routes redirect permanently and keep nested suffixes', () => {
   assert.match(worker, /function legacyRouteRedirect/);
   assert.match(worker, /\/products\/long-jump-replay/);
