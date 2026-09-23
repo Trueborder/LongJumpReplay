@@ -11,7 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="https://tomaspisar.cz/assets/icons/favicon.svg">
   <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/tokens.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/global.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/legacy.css">
   <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/components.css">
-  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/account.css">
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/account.css?v=20260923-6">
 
 </head>
 <body class="account-page portal-dashboard-page" data-portal-page="dashboard">
@@ -34,19 +34,7 @@
   </header>
 
   <main id="main" class="account-shell dashboard-shell">
-    <section class="dashboard-hero" aria-labelledby="dashboard-title">
-      <div>
-        <p class="eyebrow"><span class="eyebrow-dot"></span><span id="dashboard-route-eyebrow">LONGJUMPREPLAY / ACCOUNT</span></p>
-        <h1 id="dashboard-title">Account overview.</h1>
-        <p id="dashboard-route-description" class="dashboard-route-description">Your licence, computers and access in one place.</p>
-        <p class="dashboard-email"><span data-en="Signed in as" data-cs="Přihlášeni jako">Signed in as</span> <strong id="customer-email">—</strong></p>
-      </div>
-      <div class="hero-actions dashboard-actions">
-        <a class="button button-primary" href="https://files.tomaspisar.cz/LJR_setup.exe" data-en="Download latest app ↗" data-cs="Stáhnout nejnovější aplikaci ↗">Download latest app ↗</a>
-        <button id="billing-button" class="button button-outline" type="button" data-en="Manage billing" data-cs="Spravovat platby">Manage billing</button>
-      </div>
-    </section>
-
+    <h1 class="dashboard-accessible-title" data-en="LongJumpReplay account" data-cs="Účet LongJumpReplay">LongJumpReplay account</h1>
     <p id="account-status" class="status" role="status" aria-live="polite"></p>
     <div id="dashboard-loading" class="dashboard-loading" role="status"><span></span><span data-en="Loading your account…" data-cs="Načítám váš účet…">Loading your account…</span></div>
 
@@ -66,11 +54,24 @@
       <div class="dashboard-sections">
         <section id="overview" class="dashboard-section" data-dashboard-route="overview" aria-labelledby="overview-title">
           <div class="category-heading"><p class="eyebrow" data-en="OVERVIEW" data-cs="PŘEHLED">OVERVIEW</p><h2 id="overview-title" data-en="Account at a glance." data-cs="Účet na první pohled.">Account at a glance.</h2></div>
-          <div class="summary-grid">
-            <article class="summary-card"><span data-en="Licence" data-cs="Licence">Licence</span><strong id="summary-licence">—</strong><small id="summary-licence-note">—</small></article>
-            <article class="summary-card"><span data-en="Computer slots" data-cs="Místa pro počítače">Computer slots</span><strong id="summary-devices">—</strong><small data-en="Active / available" data-cs="Aktivní / dostupná">Active / available</small></article>
-            <article class="summary-card"><span data-en="Plan date" data-cs="Datum plánu">Plan date</span><strong id="summary-plan-date">—</strong><small id="summary-plan-note">—</small></article>
-            <article class="summary-card"><span data-en="Next online check" data-cs="Další online kontrola">Next online check</span><strong id="summary-verification">—</strong><small data-en="Per activated computer" data-cs="Pro každý aktivovaný počítač">Per activated computer</small></article>
+          <div class="overview-grid">
+            <article class="summary-card summary-card-primary" aria-labelledby="summary-licence-label">
+              <span id="summary-licence-label" data-en="Licence status" data-cs="Stav licence">Licence status</span>
+              <strong id="summary-licence">—</strong>
+              <small id="summary-licence-note">—</small>
+              <p id="overview-next-step" class="overview-next-step" aria-live="polite"></p>
+              <a id="overview-primary-link" class="button button-primary" href="/dashboard/licence" data-en="View licence" data-cs="Zobrazit licenci">View licence</a>
+            </article>
+            <div class="overview-metrics">
+              <article class="summary-card"><span data-en="Computers in use" data-cs="Používané počítače">Computers in use</span><strong id="summary-devices">—</strong><small data-en="Active / licensed slots" data-cs="Aktivní / licencovaná místa">Active / licensed slots</small><a href="/dashboard/devices" data-en="Manage computers →" data-cs="Spravovat počítače →">Manage computers →</a></article>
+              <article class="summary-card"><span data-en="Next online check" data-cs="Další online kontrola">Next online check</span><strong id="summary-verification">—</strong><small data-en="Per activated computer" data-cs="Pro každý aktivovaný počítač">Per activated computer</small></article>
+            </div>
+          </div>
+          <div class="overview-footer"><p data-en="Account data loaded from LongJumpReplay licensing" data-cs="Údaje účtu načteny z licenční služby LongJumpReplay">Account data loaded from LongJumpReplay licensing</p><time id="overview-updated" aria-label="Last updated"></time></div>
+          <div class="overview-shortcuts" aria-label="Account actions">
+            <a href="/dashboard/activation"><span data-en="Connect a computer" data-cs="Připojit počítač">Connect a computer</span><small data-en="Approve a code from the app" data-cs="Schvalte kód z aplikace">Approve a code from the app</small></a>
+            <a href="/dashboard/activation-key"><span data-en="Activation key" data-cs="Aktivační klíč">Activation key</span><small data-en="Use when email is inconvenient" data-cs="Když se nehodí e-mail">Use when email is inconvenient</small></a>
+            <a href="/dashboard/billing"><span data-en="Invoices & payments" data-cs="Faktury a platby">Invoices & payments</span><small data-en="Review purchase records" data-cs="Zobrazit doklady o nákupu">Review purchase records</small></a>
           </div>
         </section>
 
@@ -207,6 +208,6 @@
   <script src="https://tomaspisar.cz/assets/js/components/site-config.js"></script>
   <script src="https://tomaspisar.cz/assets/js/components/site.js"></script>
   <script src="https://tomaspisar.cz/assets/js/account/state.js"></script>
-  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20260914-3"></script>
+  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20260923-4"></script>
 </body>
 </html>

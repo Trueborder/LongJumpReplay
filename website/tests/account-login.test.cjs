@@ -29,14 +29,12 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(account, /\/dashboard\/overview/);
 });
 
-test('login composition keeps a centered backdrop and reduced-motion fallback', () => {
-  assert.match(login, /class="login-backdrop"/);
-  assert.match(styles, /portal-login-card-in/);
-  assert.match(styles, /portal-login-backdrop-in/);
-  assert.match(styles, /\.portal-login-page \.account-login \{ z-index: 31;/);
-  assert.match(styles, /pointer-events: auto/);
+test('login composition presents the form beside a readable account introduction', () => {
+  assert.doesNotMatch(login, /class="login-backdrop"/);
+  assert.match(styles, /\.portal-login-page \.account-login-grid \{ display: grid; grid-template-columns:/);
+  assert.match(styles, /\.portal-login-page \.login-context \{ position: static;[^}]*opacity: 1;/);
+  assert.match(styles, /\.portal-login-page \.login-card \{[\s\S]*?position: static;/);
   assert.match(styles, /#login-status:empty/);
   assert.match(styles, /\.login-actions-secondary \{ min-height: 0; padding-top: 0; \}/);
   assert.match(styles, /\.portal-login-page \.login-actions-secondary\[hidden\]/);
-  assert.match(styles, /prefers-reduced-motion: reduce/);
 });

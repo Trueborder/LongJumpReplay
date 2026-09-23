@@ -105,7 +105,7 @@
     && /\p{L}/u.test(value) && /\p{N}/u.test(value) && /[\p{P}\p{S}]/u.test(value);
   const routeCopy = {
     en: {
-      overview: ['ACCOUNT OVERVIEW', 'Account overview.', 'Your licence, computers and access in one place.'],
+      overview: ['ACCOUNT OVERVIEW', 'Your LongJumpReplay access.', 'Check your licence and choose what to do next.'],
       licence: ['LICENCE & ACCESS', 'Your licence.', 'Review plan status, competition access and available computer capacity.'],
       'activation-key': ['QUICK ACTIVATION', 'Quick activation.', 'Reveal or rotate the private key used to prepare your Windows stations.'],
       activation: ['PAIR A COMPUTER', 'Connect the app.', 'Approve a waiting LongJumpReplay station without sharing a password or reusable key.'],
@@ -115,7 +115,7 @@
       help: ['HELP & SECURITY', 'Help & security.', 'Installation, support and practical guidance for keeping access safe.']
     },
     cs: {
-      overview: ['PŘEHLED ÚČTU', 'Přehled účtu.', 'Licence, počítače a přístup na jednom místě.'],
+      overview: ['PŘEHLED ÚČTU', 'Váš přístup k LongJumpReplay.', 'Zkontrolujte licenci a vyberte další krok.'],
       licence: ['LICENCE A PŘÍSTUP', 'Vaše licence.', 'Zkontrolujte stav plánu, závodní přístup a kapacitu počítačů.'],
       'activation-key': ['RYCHLÁ AKTIVACE', 'Rychlá aktivace.', 'Zobrazte nebo obnovte soukromý klíč pro přípravu stanic Windows.'],
       activation: ['SPÁROVAT POČÍTAČ', 'Propojte aplikaci.', 'Schvalte čekající stanici LongJumpReplay bez sdílení hesla nebo opakovaně použitelného klíče.'],
@@ -127,10 +127,7 @@
   };
   const renderDashboardRoute = (hasActiveLicence) => {
     const route = dashboardRoutes.has(dashboardRoute) ? dashboardRoute : 'overview';
-    const [eyebrow, title, description] = routeCopy[state.lang][route];
-    $('#dashboard-route-eyebrow').textContent = `LONGJUMPREPLAY / ${eyebrow}`;
-    $('#dashboard-title').textContent = title;
-    $('#dashboard-route-description').textContent = description;
+    const [, title] = routeCopy[state.lang][route];
     document.title = `${title.replace(/\.$/, '')} — LongJumpReplay account`;
     document.querySelector('link[rel="canonical"]')?.setAttribute('href', `https://account.tomaspisar.cz/dashboard/${route}`);
     document.querySelectorAll('[data-dashboard-link]').forEach((link) => {
@@ -500,7 +497,6 @@
     } = deriveDashboardEntitlement(licences, devices);
     const nextVerification = activeDevices.map((device) => device.last_verified_at || device.activated_at || 0).filter(Boolean).sort((a, b) => a - b)[0];
 
-    $('#customer-email').textContent = data.customer?.email || '—';
     if ($('#profile-email')) $('#profile-email').value = data.customer?.email || '';
     if ($('#profile-first-name')) $('#profile-first-name').value = data.profile?.first_name || '';
     if ($('#profile-last-name')) $('#profile-last-name').value = data.profile?.last_name || '';
@@ -510,11 +506,28 @@
       : t('noActiveLicence');
     $('#summary-licence-note').textContent = primary ? (primary.status === 'active' ? t('statusActive') : t('statusInactive')) : (state.lang === 'cs' ? 'Připraveno k nákupu' : 'Ready when you purchase');
     $('#summary-devices').textContent = `${activeDevices.length} / ${totalSlots}`;
-    $('#summary-plan-date').textContent = primary?.current_period_end ? formatDate(primary.current_period_end) : (primary?.type === 'lifetime' ? formatDate(primary.created_at) : '—');
-    $('#summary-plan-note').textContent = primary
-      ? (primary.type === 'subscription' ? (primary.status === 'active' ? t('subscriptionNote') : t('subscriptionEnded')) : t('lifetimeNote'))
-      : t('notApplicable');
     $('#summary-verification').textContent = nextVerification ? formatDate(nextVerification + (30 * 86400)) : t('verificationReady');
+    const freeSlots = Math.max(0, totalSlots - activeDevices.length);
+    const nextStep = $('#overview-next-step');
+    const primaryLink = $('#overview-primary-link');
+    const overviewTitle = $('#overview-title');
+    if (!hasActiveLicence) {
+      overviewTitle.textContent = state.lang === 'cs' ? 'K připojení počítače potřebujete licenci.' : 'A licence is needed to connect a computer.';
+      nextStep.textContent = state.lang === 'cs' ? 'Pro aktivaci počítače potřebujete aktivní licenci.' : 'An active licence is needed to connect a computer.';
+      primaryLink.href = 'https://tomaspisar.cz/products/long-jump-replay/#buy';
+      primaryLink.textContent = state.lang === 'cs' ? 'Získat licenci ↗' : 'Get a licence ↗';
+    } else if (freeSlots > 0) {
+      overviewTitle.textContent = state.lang === 'cs' ? 'Další počítač můžete připojit.' : 'Ready to connect another computer.';
+      nextStep.textContent = state.lang === 'cs' ? `${freeSlots} ${freeSlots === 1 ? 'volné místo' : 'volná místa'} pro další počítač.` : `${freeSlots} ${freeSlots === 1 ? 'slot is' : 'slots are'} available for another computer.`;
+      primaryLink.href = '/dashboard/activation';
+      primaryLink.textContent = state.lang === 'cs' ? 'Připojit počítač' : 'Connect a computer';
+    } else {
+      overviewTitle.textContent = state.lang === 'cs' ? 'Všechna místa pro počítače jsou obsazená.' : 'All computer slots are in use.';
+      nextStep.textContent = state.lang === 'cs' ? 'Všechna místa jsou obsazená. Uvolněte místo v seznamu počítačů.' : 'All slots are in use. Free one from your computers list.';
+      primaryLink.href = '/dashboard/devices';
+      primaryLink.textContent = state.lang === 'cs' ? 'Spravovat počítače' : 'Manage computers';
+    }
+    $('#overview-updated').textContent = new Intl.DateTimeFormat(state.lang === 'cs' ? 'cs-CZ' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date());
     $('#session-expiry').textContent = formatDate(data.session_expires_at);
     renderPasswordSecurity(Boolean(data.password_configured));
 
@@ -523,7 +536,6 @@
     $('#no-licence-title').textContent = t(hasAnyLicence ? 'inactiveLicenceTitle' : 'noLicenceTitle');
     $('#no-licence-copy').textContent = t(hasAnyLicence ? 'inactiveLicenceCopy' : 'noLicenceCopy');
     $('#licence-cards').hidden = !hasAnyLicence;
-    $('#billing-button').hidden = !data.billing?.customer_portal_available;
     document.querySelectorAll('[data-open-billing]').forEach((button) => { button.hidden = !data.billing?.customer_portal_available; });
     $('#device-count').textContent = `${activeDevices.length} ${state.lang === 'cs' ? 'aktivní' : 'active'} · ${Math.max(0, totalSlots - activeDevices.length)} ${t('available')}`;
     renderLicenceCards(licences);
@@ -751,7 +763,6 @@
       const detailsButton = event.target.closest('[data-details]');
       if (detailsButton) showDeviceDetails(detailsButton.dataset.details);
     });
-    $('#billing-button')?.addEventListener('click', openBilling);
     document.querySelectorAll('[data-open-billing]').forEach((button) => button.addEventListener('click', openBilling));
     $('#logout-button')?.addEventListener('click', signOut);
     $('#security-logout-button')?.addEventListener('click', signOut);

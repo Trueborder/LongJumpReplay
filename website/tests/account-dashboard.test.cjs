@@ -48,6 +48,20 @@ test('dashboard markup does not contain duplicate ids', () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
+test('overview prioritizes licence state and gives a real next action', () => {
+  assert.doesNotMatch(html, /class="dashboard-hero"/);
+  assert.match(html, /class="dashboard-accessible-title"/);
+  assert.match(html, /class="summary-card summary-card-primary"/);
+  assert.match(html, /id="overview-next-step"/);
+  assert.match(html, /id="overview-primary-link"/);
+  assert.match(html, /id="overview-updated"/);
+  assert.doesNotMatch(html, /id="summary-plan-date"/);
+  assert.match(script, /if \(!hasActiveLicence\) \{/);
+  assert.match(script, /else if \(freeSlots > 0\) \{/);
+  assert.match(script, /primaryLink\.href = '\/dashboard\/devices'/);
+  assert.match(css, /\.overview-grid \{ display: grid;/);
+});
+
 test('dashboard keeps secondary guidance out of the primary content flow', () => {
   assert.doesNotMatch(html, /class="information-(?:grid|card)"/);
   assert.doesNotMatch(html, /Two ways to activate|Keep your slots tidy/);
