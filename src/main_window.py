@@ -50,6 +50,7 @@ from .config import (
     MAX_TIMELINE_HEIGHT,
     MIN_TIMELINE_HEIGHT,
     AppConfig,
+    normalize_guide_angle_deg,
     CompetitionConfig,
     clamp_display_panel_sizes,
     save_config,
@@ -66,6 +67,8 @@ from .playback import PlaybackController, PlaybackMode
 from .progress import ProgressState, StartupProgressEvent
 from .portable_paths import app_data_paths, writable_data_directory
 from .recording_thumbnails import RecordingThumbnailWorker
+from .roster_editor import RosterEditor
+from .session_storage import RetentionPlan, SessionStore
 from .ring_buffer import TimeRingBuffer
 from .runtime_diagnostics import RuntimeTelemetry, log_event
 from .settings_dialog import SettingsDialog
@@ -172,6 +175,7 @@ class MainWindow:
             export_directory=config.export.directory,
             evidence_directory=config.export.evidence_directory,
         )
+        self.session_store = SessionStore(self.data_paths.sessions, "LongJumpReplay Session")
         self._persistent_camera_source_type = persistent_camera_source_type
         self._selected_camera_startup_feedback = startup_camera_index is not None
         self.translator = Translator(config.general.language)
@@ -447,6 +451,7 @@ class MainWindow:
         restricted_state = "disabled" if self._evaluation_mode and not capabilities_for().permits("competition_setup") else "normal"
         self.file_menu.add_command(label=self._t("menu.wizard") + "\tCtrl+N", command=self.start_competition_wizard, state=restricted_state)
         self.file_menu.add_command(label=self._t("menu.import_roster"), command=self.import_roster, state=restricted_state)
+        self.file_menu.add_command(label=self._t("menu.edit_roster"), command=self.open_roster_editor, state=restricted_state)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.export") + "\tE", command=self.export_current_attempt)
         self.file_menu.add_command(label=self._t("menu.save_frame") + "\tP", command=self.save_current_frame)
@@ -677,6 +682,8 @@ class MainWindow:
         self.competition_strip.pack(fill="x", pady=(0, 6))
         self.wizard_button = ttk.Button(self.competition_strip, text=self._t("button.wizard"), style="Primary.TButton", command=self.start_competition_wizard)
         self.wizard_button.pack(side="left")
+        self.roster_button = ttk.Button(self.competition_strip, text=self._t("menu.edit_roster"), style="Secondary.TButton", command=self.open_roster_editor)
+        self.roster_button.pack(side="left", padx=(8, 0))
         self.competition_banner = tk.Label(
             self.competition_strip,
             textvariable=self.competition_banner_var,
@@ -1797,19 +1804,25 @@ class MainWindow:
         self.group_var.set(self._group_display(group))
         self.competitor_var.set(str(self.competition.current_competitor()))
         show_wizard = bool(c.wizard_button_visible and not self._operator_mode)
+        show_roster = bool(c.enabled and not self._operator_mode)
         show_banner = bool(c.enabled and c.show_state_banner)
         if show_wizard:
             if not self.wizard_button.winfo_manager():
                 self.wizard_button.pack(side="left")
         elif self.wizard_button.winfo_manager():
             self.wizard_button.pack_forget()
+        if show_roster:
+            if not self.roster_button.winfo_manager():
+                self.roster_button.pack(side="left", padx=(8, 0))
+        elif self.roster_button.winfo_manager():
+            self.roster_button.pack_forget()
         if show_banner:
             if not self.competition_banner.winfo_manager():
-                self.competition_banner.pack(side="left", fill="x", expand=True, padx=(8 if show_wizard else 0, 0))
+                self.competition_banner.pack(side="left", fill="x", expand=True, padx=(8 if show_wizard or show_roster else 0, 0))
             self.competition_banner.configure(bg=self.palette["surface2"], fg=self.palette["text"])
         elif self.competition_banner.winfo_manager():
             self.competition_banner.pack_forget()
-        if show_wizard or show_banner:
+        if show_wizard or show_roster or show_banner:
             if not self.competition_strip.winfo_manager():
                 self.competition_strip.pack(fill="x", before=self.content_pane, pady=(0, 6))
         elif self.competition_strip.winfo_manager():
@@ -1828,7 +1841,12 @@ class MainWindow:
             phase_round = assignment.attempt_number - self.competition.qualification_limit(assignment.group, assignment.competitor_number) if assignment.phase == "final" else assignment.attempt_number
             athlete_context = self.adjudication.athlete_for(assignment.group, assignment.competitor_number)
             identity = " · ".join(value for value in (athlete_context.bib, athlete_context.name) if value) or str(assignment.competitor_number)
-            self.competition_banner_var.set(self._t("competition.banner", group=self._group_display(assignment.group), round=phase_round, total=phase_total, athlete=identity, count=count, attempt=assignment.attempt_number))
+            self.competition_banner_var.set(self._t(
+                "competition.banner",
+                name=self.config.competition.competition_name or "Long jump",
+                group=self._group_display(assignment.group), round=phase_round, total=phase_total,
+                athlete=identity, count=count, attempt=assignment.attempt_number,
+            ))
         else:
             self.current_try_var.set(self._t("competition.roster_disabled"))
             self.competition_banner_var.set("")
@@ -3017,7 +3035,7 @@ class MainWindow:
         centre = line.mean(axis=0)
         vector = line[1] - line[0]
         d.guide_x_ratio, d.guide_y_ratio = float(centre[0]), float(centre[1])
-        d.guide_angle_deg = float(math.degrees(math.atan2(float(vector[0]), float(vector[1]))))
+        d.guide_angle_deg = normalize_guide_angle_deg(math.degrees(math.atan2(float(vector[0]), float(vector[1]))))
         self._sync_calibration_to_canvases()
         self._save_config_safely()
         self._show_message(self._t("calibration.saved"), 5)
@@ -3895,12 +3913,13 @@ class MainWindow:
         d = self.config.display
         d.guide_x_ratio = x
         if y is not None: d.guide_y_ratio = y
-        if angle is not None: d.guide_angle_deg = angle
+        if angle is not None: d.guide_angle_deg = normalize_guide_angle_deg(angle)
         self._sync_calibration_to_canvases(except_canvas=self.replay_canvas)
 
     def _calibration_changed(self, values: dict[str, float]) -> None:
         d = self.config.display
-        for key, value in values.items(): setattr(d, key, value)
+        for key, value in values.items():
+            setattr(d, key, normalize_guide_angle_deg(value) if key == "guide_angle_deg" else value)
         self._sync_calibration_to_canvases(except_canvas=self.replay_canvas)
 
     def _sync_calibration_to_canvases(self, except_canvas: VideoCanvas | None = None) -> None:
@@ -4179,6 +4198,7 @@ class MainWindow:
         self.frame_group_label.configure(text=self._t("controls.frame_review"))
         self.decision_group_label.configure(text=self._t("controls.judging"))
         self.wizard_button.configure(text=self._t("button.wizard"))
+        self.roster_button.configure(text=self._t("menu.edit_roster"))
         self.announcer_frame.configure(text=self._t("announcer.title"))
         self.board_target_title_label.configure(text=self._t("board.next_target"))
         self.board_keyboard_hint.configure(text=self._t("board.keyboard_hint"))
@@ -4335,6 +4355,8 @@ class MainWindow:
             readiness_provider=self._competition_wizard_readiness,
             on_open_settings=self.open_settings,
             on_camera_help=self.show_camera_help,
+            initial_roster=self.adjudication.roster(),
+            include_roster_on_finish=True,
         )
 
     def _competition_wizard_readiness(self) -> WizardReadiness:
@@ -4355,12 +4377,15 @@ class MainWindow:
             temporary_recording_count=len(self.attempts.attempts()),
         )
 
-    def _finish_competition_wizard(self, competition: CompetitionConfig, disposition: RecordingDisposition) -> None:
+    def _finish_competition_wizard(self, competition: CompetitionConfig, disposition: RecordingDisposition, roster: list | None = None) -> None:
         # Merge only competition choices into the latest configuration. Settings
         # may have changed camera/language values while the wizard was open.
         new_config = merge_competition_setup(self.config, competition)
         if disposition == "clear":
             self._clear_recordings_mode("all", ask=False)
+        if roster is not None:
+            enabled = {group for group, state in (("Boys", competition.boys_enabled), ("Girls", competition.girls_enabled)) if state}
+            self.adjudication.replace_roster(item for item in roster if item.group in enabled)
         self.apply_settings(new_config)
         self._last_board_signature = None
         self._refresh_competitor_selector()
@@ -4533,6 +4558,32 @@ class MainWindow:
             try: record_successful_export()
             except Exception as exc: self._show_message(f"Export completed, but trial state could not be updated: {exc}", 10)
 
+    def open_roster_editor(self) -> None:
+        """Open the simple editor for the active group's start order."""
+        if not self.config.competition.enabled:
+            self._show_message("Start a competition before editing athletes.", 5)
+            return
+        group = self.competition.current_group()
+        count = self.competition.competitor_count(group)
+        current = {item.competitor_number: item for item in self.adjudication.roster() if item.group == group}
+        athletes = [current.get(number, self.adjudication.athlete_for(group, number)) for number in range(1, count + 1)]
+        RosterEditor(self.root, self.palette, self.config.general.language, group, athletes, lambda ordered: self._save_roster_editor(group, ordered))
+
+    def _save_roster_editor(self, group: str, athletes: list) -> None:
+        if not athletes:
+            raise ValueError("Keep at least one athlete in the group.")
+        self.adjudication.replace_group_roster(group, athletes)
+        if group == "Boys":
+            self.config.competition.boys_competitors = len(athletes)
+        else:
+            self.config.competition.girls_competitors = len(athletes)
+        self.competition.update_config(self.config.competition)
+        self._last_board_signature = None
+        self._refresh_competitor_selector()
+        self._refresh_attempts()
+        self._save_session_manifest("open")
+        self._save_config_safely()
+        self._show_message("Athlete order updated." if self.config.general.language != "cs" else "Pořadí atletů bylo upraveno.", 5)
     def import_roster(self) -> None:
         """Preview and atomically commit a generic roster into the active group."""
         if not self._trial_action_allowed("competition_setup", announce=False):
@@ -4586,6 +4637,7 @@ class MainWindow:
             self.config.competition.girls_competitors = len(prepared)
         self.competition.update_config(self.config.competition)
         self._save_config_safely()
+        self._save_session_manifest("open")
         self._last_board_signature = None
         self._refresh_competitor_selector(); self._refresh_attempts()
         self._show_message(f"Imported {len(prepared)} athletes into {self._group_display(group)}.", 6)
@@ -4792,6 +4844,19 @@ class MainWindow:
     def _show_message(self, text: str, seconds: float = 5.0, severity: NoticeSeverity = NoticeSeverity.INFO) -> None:
         self.message_var.set(Notice(str(text), severity).display_text)
         self._message_until = time.perf_counter() + max(0, seconds)
+    def _save_session_manifest(self, state: str = "open") -> None:
+        store = getattr(self, "session_store", None)
+        if store is None:
+            return
+        try:
+            store.write_manifest(
+                competition=self.config.competition,
+                attempts=self.attempts.attempts(),
+                roster=self.adjudication.roster(),
+                state=state,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            self._logger.warning("session_manifest_save_failed error=%s", exc)
     def _save_config_safely(self) -> None:
         try:
             save_config(self._config_for_persistence(self.config), self.config_path)
@@ -4806,8 +4871,59 @@ class MainWindow:
         return persistent
 
     # -------------------------------------------------------------- shutdown
+    def _show_shutdown_dialog(self) -> RetentionPlan | None:
+        self._save_session_manifest("closing")
+        dialog = tk.Toplevel(self.root)
+        configure_popup(dialog, self.root)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.focus_force()
+        dialog.title("Close session" if self.config.general.language != "cs" else "Ukončit session")
+        dialog.geometry("520x440")
+        dialog.minsize(460, 380)
+        ttk.Label(dialog, text="Choose what to keep" if self.config.general.language != "cs" else "Vyberte, co zachovat", style="WizardCardTitle.TLabel").pack(anchor="w", padx=18, pady=(18, 4))
+        ttk.Label(dialog, text="The live RAM buffer is always temporary." if self.config.general.language != "cs" else "Živý RAM buffer je vždy dočasný.", style="Muted.TLabel", wraplength=470).pack(anchor="w", padx=18, pady=(0, 12))
+        choices = (
+            ("metadata", "Session data · names, roster, attempts and verdicts"),
+            ("recordings", "Completed recording videos"),
+            ("exports", "Exports and evidence"),
+            ("frames", "Selected frames and thumbnails"),
+            ("diagnostics", "Diagnostics and logs"),
+            ("temporary", "Unfinished temporary files"),
+        )
+        saved = getattr(self.config.general, "shutdown_retention", {})
+        variables: dict[str, tk.BooleanVar] = {}
+        box = ttk.Frame(dialog, style="WizardCard.TFrame", padding=12)
+        box.pack(fill="both", expand=True, padx=18)
+        for key, label in choices:
+            value = bool(saved.get(key, key not in {"diagnostics", "temporary"}))
+            variables[key] = tk.BooleanVar(dialog, value=value)
+            ttk.Checkbutton(box, text=label, variable=variables[key]).pack(anchor="w", pady=4)
+        result: dict[str, RetentionPlan | None] = {"plan": None}
+        def plan() -> RetentionPlan:
+            return RetentionPlan(**{key: bool(value.get()) for key, value in variables.items()})
+        def finish(selected: RetentionPlan) -> None:
+            result["plan"] = selected
+            self.config.general.shutdown_retention = {key: bool(value.get()) for key, value in variables.items()}
+            self._save_config_safely()
+            dialog.destroy()
+        quick = ttk.Frame(dialog)
+        quick.pack(fill="x", padx=18, pady=(12, 0))
+        ttk.Button(quick, text="Keep all session data", command=lambda: finish(RetentionPlan(metadata=True, recordings=True, exports=True, frames=True, diagnostics=True, temporary=False))).pack(side="left")
+        ttk.Button(quick, text="Delete temporary data", command=lambda: finish(RetentionPlan(metadata=True, recordings=True, exports=True, frames=True, diagnostics=False, temporary=False))).pack(side="left", padx=(8, 0))
+        footer = ttk.Frame(dialog)
+        footer.pack(fill="x", padx=18, pady=18)
+        ttk.Button(footer, text="Cancel", command=dialog.destroy).pack(side="right")
+        ttk.Button(footer, text="Keep selected and close", style="Primary.TButton", command=lambda: finish(plan())).pack(side="right", padx=(0, 8))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        self.root.wait_window(dialog)
+        return result["plan"]
     def close(self) -> None:
         if self._closing: return
+        retention = self._show_shutdown_dialog()
+        if retention is None:
+            return
+        self._shutdown_retention_plan = retention
         self._closing = True; self._cancel_scheduled_review()
         if self._top_view_loading_cancel is not None:
             self._top_view_loading_cancel.set()
@@ -4867,8 +4983,29 @@ class MainWindow:
             except Exception: pass
             try: alive.extend(self.background_tasks.stop(timeout=2.0))
             except Exception: pass
-            try: alive.extend(self.attempts.stop(timeout=8.0))
-            except Exception: pass
+            try: self.attempts.prepare_for_shutdown(bool(self._shutdown_retention_plan and self._shutdown_retention_plan.recordings))
+            except Exception as exc: self._logger.error("session_recording_prepare_failed error=%s", exc)
+            try:
+                retention = self._shutdown_retention_plan or RetentionPlan()
+                session_attempts = self.attempts.attempts()
+                self.session_store.write_manifest(
+                    competition=self.config.competition,
+                    attempts=session_attempts,
+                    roster=self.adjudication.roster(),
+                    state="closed",
+                )
+                session_recordings = [
+                    attempt.temp_video_path
+                    for attempt in session_attempts
+                    if attempt.persistent
+                    and attempt.temp_video_path
+                    and attempt.created_wall_time >= self.session_store.created_at
+                ]
+                if not retention.recordings and not retention.temporary:
+                    self.attempts.clear_all()
+                self.session_store.apply_retention(retention, external_recordings=session_recordings)
+            except Exception as exc:
+                self._logger.error("session_close_failed error=%s", exc)
             self.event_queue.put(("shutdown_done", alive))
         Thread(target=worker, name="shutdown-manager", daemon=True).start(); self.root.after(40, self._poll_shutdown)
 

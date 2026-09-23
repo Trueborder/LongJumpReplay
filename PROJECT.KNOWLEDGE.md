@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## Session retention and editable athlete order (2026-09-15)
+
+- `src/session_storage.py::SessionStore` creates an operator-facing session directory under `Desktop/LongJumpReplay Sessions/<session>_<timestamp>/` with a crash-safe `session.json` manifest and separate recordings, exports, evidence, frames, thumbnails, diagnostics, and `.incomplete` folders. The manifest is written through a temporary file and atomic replace.
+- Closing the application now asks which session categories to keep. The live RAM buffer is never treated as durable storage. Unselected session categories are moved to the recoverable `.LongJumpReplay-Trash` folder instead of being permanently deleted; empty category folders are ignored.
+- Existing configured cache/recording/export roots remain unchanged for backwards compatibility. The new session manifest records the existing attempt media paths, so legacy recordings and recovery remain visible to the current browser while the session folder provides a durable session index.
+- The competition strip and File menu contain `Edit athlete order…`, opening `src/roster_editor.py`. Operators can add, remove, and move athletes before attempts exist for the active group. The editor renumbers `competitor_number` and `start_order`, persists through `AdjudicationSessionStore.replace_group_roster`, updates competition counts, and refreshes the existing board/selectors. Once a group has adjudication records, its roster is intentionally locked to protect recorded results.
+- The editor uses the existing native Tk theme and popup centering utility. Existing CSV/XLSX/JSON roster import remains the bulk-import path; the editor is the quick manual correction path.
 ## Automatic take-off advisory (2026-09-14)
 
 - `src/automatic_takeoff.py` owns the CPU-only automatic pipeline. A bounded 16–18 Hz, roughly 192-pixel board-ROI gate runs on a dedicated latest-frame worker and never queues work on the camera thread. It pins the detected instant through the existing RAM-buffer `AttemptManager`; it does not introduce another capture or recording pipeline.
@@ -1422,6 +1429,13 @@ A change is done only when:
 - Takeoff Assist accepts a shoe entering through the top edge of a camera-cropped ROI with reduced confidence, while continuing to reject side/bottom-clipped contours; automatic analysis uses only a short post-trigger window to avoid selecting the following shadow.
 
 - Top-down Projection receives the persisted automatic advisory for its attempt and uses the same localized verdict, confidence, and semantic colour as Auto/Takeoff Assist; its own projection measurement remains the fallback only when no automatic advisory exists. Automatic advisory borders on the main video are 8 px and persist until the operator returns to Live.
+## 2026-09-15 competition identity and roster setup
+
+- `CompetitionConfig` persists `competition_name` and ISO `competition_date`. The Competition Wizard defaults a new event to today's local date and a date-based long-jump name, validates both fields for competition modes, and keeps Judge-only Replay backward compatible.
+- The wizard preloads the durable adjudication roster, preserves existing entries even when an older saved count is stale, and exposes the existing native Tk roster editor directly from each Boys/Girls group card. Operators can add, edit, remove, and reorder athletes with localized name, club, and bib fields before starting.
+- The identity page can optionally query the public online.atletika.cz calendar for the selected date (today by default), then load published long-jump categories and their athlete names/clubs in a background thread. The operator chooses the event and categories; unavailable internet, absent start lists, or upstream markup failures leave manual entry untouched.
+- Starting a competition commits the enabled groups' roster through `AdjudicationSessionStore.replace_roster` and then applies the competition configuration. The old two-argument wizard completion callback remains supported for isolated/tests callers.
+- The existing competition banner includes the saved competition name; session manifests already serialize the new fields and roster without a parallel metadata store.
 
 ## 2026-09-17 announcer helper
 

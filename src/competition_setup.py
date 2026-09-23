@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date
 from typing import Literal
 
 from .config import AppConfig, CompetitionConfig
@@ -115,6 +116,13 @@ class CompetitionSetupModel:
     def validate_step(self, step: str) -> dict[str, str]:
         c = self.competition
         errors: dict[str, str] = {}
+        if step in {"format", "review"} and c.enabled:
+            if not c.competition_name.strip():
+                errors["competition_name"] = "competition_name"
+            try:
+                date.fromisoformat(c.competition_date)
+            except ValueError:
+                errors["competition_date"] = "competition_date"
         if step in {"groups", "review"} and c.enabled:
             if not c.boys_enabled and not c.girls_enabled:
                 errors["groups"] = "group_required"

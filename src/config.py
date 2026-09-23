@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,19 @@ MIN_TIMELINE_HEIGHT = 150
 MAX_TIMELINE_HEIGHT = 500
 
 
+def normalize_guide_angle_deg(value: float) -> float:
+    """Normalize a line orientation to the supported, directionless angle range."""
+    try:
+        angle = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(angle):
+        return 0.0
+    # A guide is a line, so orientations 180 degrees apart are equivalent.
+    angle = ((angle + 90.0) % 180.0) - 90.0
+    return max(-89.9, min(89.9, angle))
+
+
 @dataclass(slots=True)
 class GeneralConfig:
     language: str = "en"
@@ -55,6 +69,7 @@ class GeneralConfig:
     language_migration_pending: bool = False
     confirm_destructive_actions: bool = True
     show_tooltips: bool = True
+    shutdown_retention: dict[str, bool] = field(default_factory=lambda: {"metadata": True, "recordings": True, "exports": True, "frames": True, "diagnostics": False, "temporary": False})
     onboarding_completed: bool = False
 
 
@@ -102,6 +117,8 @@ class AthleteTimerConfig:
 
 @dataclass(slots=True)
 class CompetitionConfig:
+    competition_name: str = ""
+    competition_date: str = ""
     enabled: bool = True
     decision_controls_enabled: bool = True
     require_decision_before_continue: bool = False
@@ -625,6 +642,8 @@ def config_from_dict(data: dict[str, Any]) -> AppConfig:
         min(config.timeline.max_detail_seconds, float(config.timeline.detail_window_seconds)),
     )
     config.hotkeys.bindings = {**DEFAULT_HOTKEYS, **config.hotkeys.bindings}
+    # Repair angles written by older calibration paths before strict validation.
+    config.display.guide_angle_deg = normalize_guide_angle_deg(config.display.guide_angle_deg)
     config.validate()
     return config
 
@@ -668,6 +687,9 @@ def _quarantine_invalid_config(path: Path) -> Path | None:
 
 
 def save_config(config: AppConfig, path: str | Path) -> None:
+    # Calibration can legitimately produce a horizontal line (90 degrees).
+    # Persist its normalized equivalent instead of blocking unrelated actions.
+    config.display.guide_angle_deg = normalize_guide_angle_deg(config.display.guide_angle_deg)
     config.validate()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

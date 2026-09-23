@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "completed_at": 1789496593.496886,
+  "report": {
+    "migrated": [
+      {
+        "source": "C:\\Users\\xpisa\\LongJumpReplay\\recordings\\recording_0002.mp4",
+        "destination": "C:\\Users\\xpisa\\LongJumpReplay\\exports\\legacy-recordings\\2026-09-15\\recording_0002.mp4",
+        "sha256": "950aea003acc02a8f309f968737419a54967ee5f361eac64bab025d0f793e00c",
+        "recovered": false
+      }
+    ],
+    "quarantined": [],
+    "backup_directory": "C:\\Users\\xpisa\\LongJumpReplay\\recordings\\.migrated-backup\\2026-09-15_20-23-13"
+  }
+}

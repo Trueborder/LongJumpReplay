@@ -1,5 +1,6 @@
 import tkinter as tk
 
+from src.adjudication import AthleteContext
 from src.competition_setup import WizardReadiness
 from src.competition_wizard import CompetitionWizard
 from src.config import AppConfig
@@ -60,3 +61,28 @@ def test_wizard_group_and_final_validation_is_inline() -> None:
     assert wizard.setup_index == 2
     assert "Finalists" in wizard.error_var.get()
     wizard._close(); root.destroy()
+
+def test_wizard_preloads_named_roster_and_returns_it_with_identity() -> None:
+    root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
+    config = AppConfig()
+    config.competition.boys_competitors = 2
+    config.competition.girls_enabled = False
+    roster = [
+        AthleteContext("a", "Boys", 1, "17", "Alice", "AC", "Boys", 2),
+        AthleteContext("b", "Boys", 2, "23", "Bob", "BC", "Boys", 1),
+    ]
+    finished = []
+    wizard = CompetitionWizard(
+        root, config, lambda *args: finished.append(args), readiness_provider=_ready,
+        initial_roster=roster, include_roster_on_finish=True,
+    )
+    assert wizard.vars["competition_date"].get()
+    assert wizard.vars["competition_name"].get()
+    assert [item.name for item in wizard.rosters["Boys"]] == ["Bob", "Alice"]
+    wizard.setup_index = 4; wizard._render(); wizard._setup_next()
+    competition, disposition, saved_roster = finished[0]
+    assert competition.competition_name
+    assert competition.competition_date
+    assert disposition == "keep"
+    assert [(item.competitor_number, item.name) for item in saved_roster] == [(1, "Bob"), (2, "Alice")]
+    root.destroy()

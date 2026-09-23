@@ -56,6 +56,16 @@ def test_four_corner_foul_area_round_trip():
     assert config.top_view_projection.foul_area == area
 
 
+def test_guide_angle_is_normalized_before_validation_and_persistence(tmp_path):
+    config = config_from_dict({"display": {"guide_angle_deg": 90.0}})
+    assert config.display.guide_angle_deg == -89.9
+
+    path = tmp_path / "angle-config.json"
+    config.display.guide_angle_deg = 270.0
+    save_config(config, path)
+    assert load_config(path).display.guide_angle_deg == -89.9
+
+
 def test_invalid_theme_rejected():
     try:
         config_from_dict({'display': {'theme': 'neon-chaos'}})

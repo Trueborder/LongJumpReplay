@@ -3,13 +3,21 @@
     "language": "en",
     "settings_view": "advanced",
     "language_migration_pending": false,
-    "confirm_destructive_actions": false,
+    "confirm_destructive_actions": true,
     "show_tooltips": true,
+    "shutdown_retention": {
+      "metadata": false,
+      "recordings": false,
+      "exports": false,
+      "frames": false,
+      "diagnostics": false,
+      "temporary": false
+    },
     "onboarding_completed": true
   },
   "camera": {
     "source_type": "file",
-    "device_index": 0,
+    "device_index": 1,
     "file_path": "C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
     "width": 1280,
     "height": 720,
@@ -25,7 +33,7 @@
     "jpeg_quality": 72,
     "encoder_queue_size": 64,
     "max_memory_mb": 1024,
-    "store_every_nth_frame": 1
+    "store_every_nth_frame": 2
   },
   "attempts": {
     "pre_seconds": 30.0,
@@ -42,6 +50,8 @@
     "duration_seconds": 60
   },
   "competition": {
+    "competition_name": "3. kolo KPD přípravky, sk. A",
+    "competition_date": "2026-09-17",
     "enabled": true,
     "decision_controls_enabled": true,
     "require_decision_before_continue": false,
@@ -49,20 +59,20 @@
     "auto_advance_on_attempt_complete": true,
     "boys_enabled": true,
     "girls_enabled": true,
-    "boys_competitors": 19,
-    "girls_competitors": 21,
+    "boys_competitors": 28,
+    "girls_competitors": 53,
     "default_attempts_per_competitor": 3,
     "attempts_overrides": {
       "Girls:5": 1
     },
     "active_group": "Boys",
     "current_competitor_by_group": {
-      "Boys": 1,
+      "Boys": 2,
       "Girls": 1
     },
-    "auto_advance_after_decision": false,
+    "auto_advance_after_decision": true,
     "auto_save_evidence": true,
-    "prompt_distance_after_valid": true,
+    "prompt_distance_after_valid": false,
     "prompt_wind_after_valid": false,
     "auto_return_live": false,
     "auto_return_delay_seconds": 1.5,
@@ -97,24 +107,25 @@
     "theme": "dark",
     "layout": "replay_pip",
     "show_attempts_panel": true,
+    "show_announcer_helper": true,
     "show_timeline": true,
     "show_status_bar": true,
     "show_live_preview": true,
     "show_decision_controls": true,
     "show_capture_warnings": true,
     "show_takeoff_assist_badge": true,
-    "attempts_panel_width": 822,
-    "timeline_height": 157,
-    "guide_enabled": false,
-    "guide_x_ratio": 0.8225806355476379,
-    "guide_y_ratio": 0.29569894075393677,
-    "guide_angle_deg": 6.091106143098891,
+    "attempts_panel_width": 776,
+    "timeline_height": 167,
+    "guide_enabled": true,
+    "guide_x_ratio": 0.7602102756500244,
+    "guide_y_ratio": 0.2744916081428528,
+    "guide_angle_deg": 0.4121533950321634,
     "guide_width_px": 10,
     "board_roi_enabled": true,
-    "board_roi_x": 0.3753226101398468,
+    "board_roi_x": 0.38540321588516235,
     "board_roi_y": 0.0,
-    "board_roi_width": 0.6246774196624756,
-    "board_roi_height": 0.6143727898597717,
+    "board_roi_width": 0.6145967841148376,
+    "board_roi_height": 0.5821147561073303,
     "board_roi_visible": true,
     "comparison_enabled": true,
     "comparison_offset_frames": 1,
@@ -150,63 +161,69 @@
     "analysis_seconds_after_freeze": 0.25,
     "seek_lead_frames": 0,
     "minimum_confidence": 0.18,
-    "downscale_width": 128
+    "downscale_width": 128,
+    "automatic_monitor_enabled": true,
+    "automatic_post_action": "smart",
+    "automatic_foul_sound": true,
+    "automatic_analysis_timeout_seconds": 5.0,
+    "automatic_cooldown_seconds": 1.5,
+    "automatic_collect_samples": false
   },
   "top_view_projection": {
     "enabled": true,
     "board_corners": [
       [
-        0.6229838728904724,
-        0.01344086043536663
+        0.6260080337524414,
+        0.0098566310480237
       ],
       [
-        0.8558467626571655,
+        0.8548386693000793,
         0.011648746207356453
       ],
       [
-        0.9994640350341797,
-        0.572670042514801
+        1.0,
+        0.5421147346496582
       ],
       [
-        0.41532260179519653,
-        0.5743727684020996
+        0.4254032075405121,
+        0.5349462628364563
       ]
     ],
     "foul_line": [
       [
-        0.7928427457809448,
-        0.017025088891386986
+        0.7620967626571655,
+        0.5367383360862732
       ],
       [
-        0.852318525314331,
-        0.5743727684020996
+        0.7583237886428833,
+        0.01224489789456129
       ]
     ],
     "foul_area": [
       [
-        0.7580645084381104,
-        0.017025088891386986
+        0.8249139189720154,
+        0.01224489789456129
       ],
       [
-        0.7641128897666931,
-        0.5743727684020996
+        0.9334677457809448,
+        0.5403226017951965
       ],
       [
-        0.940524160861969,
-        0.5743727684020996
+        0.7620967626571655,
+        0.5367383360862732
       ],
       [
-        0.8276209235191345,
-        0.017025088891386986
+        0.7583237886428833,
+        0.01224489789456129
       ]
     ],
-    "camera_signature": "file|0|DSHOW|MJPG|C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
+    "camera_signature": "file|1|DSHOW|MJPG|C:\\Users\\xpisa\\Downloads\\06.09.2026 11_43_57 (UTC+02_00).avi",
     "reference_width": 1920,
     "reference_height": 1080,
     "pad_length_cm": 120.1,
     "pad_width_cm": 34.0,
     "shoe_width_cm": 0.0,
-    "legal_side_flipped": true,
+    "legal_side_flipped": false,
     "camera_profile": {}
   },
   "export": {

@@ -21,6 +21,7 @@ class AppDataPaths:
     adjudication: Path
     thumbnails: Path
     validation_samples: Path
+    sessions: Path
 
 
 def is_frozen() -> bool:
@@ -96,6 +97,7 @@ def app_data_paths(
     cache = resolve_user_path(config_path, cache_directory)
     recordings = resolve_user_path(config_path, recordings_directory)
     exports = resolve_user_path(config_path, export_directory)
+    sessions = default_sessions_directory()
     return AppDataPaths(
         root=cache.parent,
         cache=cache,
@@ -105,7 +107,18 @@ def app_data_paths(
         adjudication=cache.parent / "adjudication",
         thumbnails=recordings / ".thumbnails",
         validation_samples=cache.parent / "validation-samples",
+        sessions=sessions,
     )
+
+
+def default_sessions_directory() -> Path:
+    """Return the operator-facing session root on the user desktop."""
+    home = Path.home()
+    for name in ("Desktop", "Plocha"):
+        candidate = home / name
+        if candidate.exists():
+            return candidate / f"{APP_NAME} Sessions"
+    return home / "Desktop" / f"{APP_NAME} Sessions"
 
 
 def crash_log_path(config_path: Path) -> Path:

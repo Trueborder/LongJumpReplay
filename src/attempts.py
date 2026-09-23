@@ -361,6 +361,34 @@ class AttemptManager:
         self.event_queue.put(("attempt_updated", attempt_id))
         return True
 
+    def prepare_for_shutdown(self, retain_recordings: bool) -> None:
+        """Finish current session recordings before the application closes.
+
+        The live RAM buffer remains temporary. When recordings are retained,
+        frozen attempts are promoted to the session recording directory and
+        active encodes are allowed to finish there.
+        """
+        encode_ids: list[int] = []
+        with self._lock:
+            for attempt in self._attempts:
+                if not retain_recordings:
+                    self._cancelled_attempt_ids.add(attempt.attempt_id)
+                    continue
+                attempt.persistent = True
+                if attempt.state is AttemptState.COLLECTING:
+                    attempt.state = AttemptState.ENCODING
+                    encode_ids.append(attempt.attempt_id)
+                elif attempt.state is AttemptState.READY and attempt.temp_video_path and attempt.temp_video_path.exists():
+                    destination = self.persistent_directory / attempt.temp_video_path.name.replace("attempt_", "recording_", 1)
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        attempt.temp_video_path.replace(destination)
+                        attempt.temp_video_path = destination
+                    except OSError:
+                        attempt.persistent = False
+                self._write_metadata_locked(attempt)
+        for attempt_id in encode_ids:
+            self._submit_encode(attempt_id)
     def clear_all(self) -> int:
         """Remove every temporary attempt, including selected records.
 

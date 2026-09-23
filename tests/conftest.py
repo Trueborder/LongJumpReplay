@@ -70,3 +70,12 @@ def jpeg_frame():
     ok, data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     assert ok
     return data.tobytes(), frame
+
+
+@pytest.fixture(autouse=True)
+def noninteractive_main_window_shutdown(monkeypatch):
+    """Keep existing GUI tests non-blocking while production close stays interactive."""
+    from src.main_window import MainWindow
+    from src.session_storage import RetentionPlan
+
+    monkeypatch.setattr(MainWindow, "_show_shutdown_dialog", lambda _self: RetentionPlan())

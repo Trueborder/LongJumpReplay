@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
+from datetime import date
 import tkinter as tk
 from tkinter import ttk
 
+from .adjudication import AthleteContext
+from .atletika_online import AtletikaEvent, AtletikaImportDialog, JumpRoster
 from .competition_setup import CompetitionSetupModel, CompetitionTemplate, RecordingDisposition, WizardReadiness
 from .config import AppConfig, CompetitionConfig
 from .i18n import Translator
+from .roster_editor import RosterEditor
 from .theme import ask_themed_yes_no, configure_popup, show_themed_info
 
 
@@ -24,6 +29,8 @@ class CompetitionWizard(tk.Toplevel):
         readiness_provider: Callable[[], WizardReadiness] | None = None,
         on_open_settings: Callable[[], tk.Toplevel | None] | None = None,
         on_camera_help: Callable[[], tk.Toplevel | None] | None = None,
+        initial_roster: list[AthleteContext] | None = None,
+        include_roster_on_finish: bool = False,
     ) -> None:
         super().__init__(parent)
         configure_popup(self, parent)
@@ -35,6 +42,7 @@ class CompetitionWizard(tk.Toplevel):
         ))
         self.on_open_settings = on_open_settings
         self.on_camera_help = on_camera_help
+        self.include_roster_on_finish = include_roster_on_finish
         self.lang = config.general.language
         self.tr = Translator(self.lang)
         self.setup_index = 0
@@ -43,6 +51,9 @@ class CompetitionWizard(tk.Toplevel):
         self.field_widgets: dict[str, tk.Widget] = {}
         self.error_var = tk.StringVar(self, value="")
         self._refresh_after: str | None = None
+        self.rosters = self._initial_rosters(initial_roster or [], config.competition)
+        self.model.competition.boys_competitors = len(self.rosters["Boys"])
+        self.model.competition.girls_competitors = len(self.rosters["Girls"])
         self._build_vars()
 
         self.title(self.tr("wizard.title"))
@@ -54,9 +65,50 @@ class CompetitionWizard(tk.Toplevel):
         self._build_shell()
         self._render()
 
+    @staticmethod
+    def _placeholder(group: str, number: int) -> AthleteContext:
+        return AthleteContext(
+            athlete_id=f"{group}:{number}", group=group, category=group,
+            competitor_number=number, start_order=number, bib=str(number),
+        )
+
+    def _initial_rosters(self, initial: list[AthleteContext], competition: CompetitionConfig) -> dict[str, list[AthleteContext]]:
+        rosters: dict[str, list[AthleteContext]] = {"Boys": [], "Girls": []}
+        for item in initial:
+            group = item.group or item.category
+            if group in rosters:
+                rosters[group].append(AthleteContext(**asdict(item)))
+        for group, count in (("Boys", competition.boys_competitors), ("Girls", competition.girls_competitors)):
+            rosters[group].sort(key=lambda athlete: (athlete.start_order or athlete.competitor_number, athlete.competitor_number))
+            target_count = max(count, len(rosters[group]))
+            while len(rosters[group]) < target_count:
+                rosters[group].append(self._placeholder(group, len(rosters[group]) + 1))
+            self._renumber_roster(group, rosters)
+        return rosters
+
+    @staticmethod
+    def _renumber_roster(group: str, rosters: dict[str, list[AthleteContext]]) -> None:
+        for number, athlete in enumerate(rosters[group], start=1):
+            athlete.group = group
+            athlete.category = athlete.category or group
+            athlete.competitor_number = number
+            athlete.start_order = number
+            athlete.athlete_id = athlete.external_id or athlete.athlete_id or f"{group}:{number}"
+
+    def _resize_roster(self, group: str, count: int) -> None:
+        roster = self.rosters[group]
+        while len(roster) < count:
+            roster.append(self._placeholder(group, len(roster) + 1))
+        del roster[count:]
+        self._renumber_roster(group, self.rosters)
+
     def _build_vars(self) -> None:
         c = self.model.competition
+        event_date = c.competition_date or date.today().isoformat()
+        event_name = c.competition_name or f"Long jump — {event_date}"
         self.vars = {
+            "competition_name": tk.StringVar(self, value=event_name),
+            "competition_date": tk.StringVar(self, value=event_date),
             "boys": tk.BooleanVar(self, value=c.boys_enabled),
             "girls": tk.BooleanVar(self, value=c.girls_enabled),
             "boys_count": tk.StringVar(self, value=str(c.boys_competitors)),
@@ -125,6 +177,24 @@ class CompetitionWizard(tk.Toplevel):
         # for an explicit readiness check.
 
     def _page_format(self, parent: ttk.Frame) -> None:
+        details = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
+        details.pack(fill="x", pady=(0, 12))
+        details.columnconfigure(1, weight=1)
+        ttk.Label(details, text=self.tr("wizard.event.name"), style="Text.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        name = ttk.Entry(details, textvariable=self.vars["competition_name"])
+        name.grid(row=0, column=1, sticky="ew")
+        self.field_widgets["competition_name"] = name
+        ttk.Label(details, text=self.tr("wizard.event.date"), style="Text.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=(10, 0))
+        event_date = ttk.Entry(details, textvariable=self.vars["competition_date"], width=16)
+        event_date.grid(row=1, column=1, sticky="w", pady=(10, 0))
+        self.field_widgets["competition_date"] = event_date
+        ttk.Button(
+            details, text=self.tr("wizard.online.button"), style="Secondary.TButton",
+            command=self._open_atletika_import,
+        ).grid(row=1, column=1, sticky="e", pady=(10, 0))
+        ttk.Label(details, text=self.tr("wizard.online.hint"), style="Muted.TLabel").grid(
+            row=2, column=1, sticky="w", pady=(7, 0),
+        )
         for row, template in enumerate(("simple", "final", "judge_only")):
             card = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
             card.pack(fill="x", pady=(0, 10))
@@ -132,6 +202,43 @@ class CompetitionWizard(tk.Toplevel):
             ttk.Label(card, text=self.tr(f"wizard.template.{template}.desc"), style="Muted.TLabel", wraplength=680, justify="left").pack(anchor="w", pady=(5, 10))
             selected = self.model.template == template
             ttk.Button(card, text=self.tr("wizard.template.selected") if selected else self.tr("wizard.template.choose"), style="Primary.TButton" if selected else "Secondary.TButton", command=lambda value=template: self._choose_template(value)).pack(anchor="e")
+
+    def _open_atletika_import(self) -> None:
+        try:
+            selected_date = date.fromisoformat(str(self.vars["competition_date"].get()).strip())
+        except ValueError:
+            self.error_var.set(self.tr("wizard.error.competition_date"))
+            self.field_widgets["competition_date"].focus_set()
+            return
+        self.grab_release()
+        dialog = AtletikaImportDialog(self, self.lang, selected_date, self._accept_atletika_import)
+        try:
+            self.wait_window(dialog)
+        finally:
+            if self.winfo_exists():
+                self.grab_set()
+
+    def _accept_atletika_import(self, event: AtletikaEvent, selected: list[JumpRoster]) -> None:
+        imported: dict[str, list[AthleteContext]] = {"Boys": [], "Girls": []}
+        identities: dict[str, set[str]] = {"Boys": set(), "Girls": set()}
+        for roster in selected:
+            for athlete in roster.athletes:
+                identity = athlete.external_id or f"{athlete.name.casefold()}|{athlete.club.casefold()}"
+                if identity in identities[roster.group]:
+                    continue
+                identities[roster.group].add(identity)
+                imported[roster.group].append(AthleteContext(**asdict(athlete)))
+        self.vars["competition_name"].set(event.name)
+        for group, athletes in imported.items():
+            if not athletes:
+                continue
+            self.rosters[group] = athletes
+            self._renumber_roster(group, self.rosters)
+            key = "boys" if group == "Boys" else "girls"
+            self.vars[key].set(True)
+            self.vars[f"{key}_count"].set(str(len(athletes)))
+        self._sync_model(quiet=True)
+        self._render()
 
     def _choose_template(self, template: CompetitionTemplate) -> None:
         self._sync_model(quiet=True)
@@ -143,7 +250,7 @@ class CompetitionWizard(tk.Toplevel):
         if not self.model.competition.enabled:
             self._judge_only_note(parent)
             return
-        for key, count_key in (("boys", "boys_count"), ("girls", "girls_count")):
+        for key, count_key, group in (("boys", "boys_count", "Boys"), ("girls", "girls_count", "Girls")):
             card = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
             card.pack(fill="x", pady=(0, 10))
             enabled = ttk.Checkbutton(card, text=self.tr(f"wizard.groups.{key}"), variable=self.vars[key], command=self._groups_changed)
@@ -153,6 +260,14 @@ class CompetitionWizard(tk.Toplevel):
             count = ttk.Spinbox(card, from_=1, to=200, textvariable=self.vars[count_key], width=8)
             count.grid(row=0, column=2)
             self.field_widgets[count_key] = count
+            ttk.Button(
+                card, text=self.tr("wizard.roster.edit"), style="Secondary.TButton",
+                command=lambda selected=group: self._open_roster_editor(selected),
+            ).grid(row=1, column=0, sticky="w", pady=(10, 0))
+            preview = self._roster_preview(group)
+            ttk.Label(card, text=preview, style="Muted.TLabel", wraplength=560, justify="left").grid(
+                row=1, column=1, columnspan=2, sticky="w", padx=(20, 0), pady=(10, 0),
+            )
         row = ttk.Frame(parent, style="Panel.TFrame")
         row.pack(fill="x", pady=(8, 0))
         ttk.Label(row, text=self.tr("wizard.groups.start"), style="Text.TLabel").pack(side="left")
@@ -167,6 +282,41 @@ class CompetitionWizard(tk.Toplevel):
         self._sync_model(quiet=True)
         self.model.normalize_dependencies()
         self.vars["active_group"].set(self.model.competition.active_group)
+
+    def _roster_preview(self, group: str) -> str:
+        named = [item.name.strip() for item in self.rosters[group] if item.name.strip()]
+        if not named:
+            return self.tr("wizard.roster.placeholder_summary", count=len(self.rosters[group]))
+        shown = ", ".join(named[:3])
+        if len(named) > 3:
+            shown += self.tr("wizard.roster.more", count=len(named) - 3)
+        return shown
+
+    def _open_roster_editor(self, group: str) -> None:
+        if not self._sync_model(quiet=True):
+            self.error_var.set(self.tr("wizard.error.number"))
+            return
+        key = "boys_count" if group == "Boys" else "girls_count"
+        self._resize_roster(group, int(str(self.vars[key].get())))
+        self.grab_release()
+        editor = RosterEditor(
+            self, {}, self.lang, group, self.rosters[group],
+            lambda athletes, selected=group: self._accept_roster(selected, athletes),
+        )
+        try:
+            self.wait_window(editor)
+        finally:
+            if self.winfo_exists():
+                self.grab_set()
+
+    def _accept_roster(self, group: str, athletes: list[AthleteContext]) -> None:
+        if not athletes:
+            raise ValueError(self.tr("wizard.error.athlete_count"))
+        self.rosters[group] = [AthleteContext(**asdict(item)) for item in athletes]
+        self._renumber_roster(group, self.rosters)
+        key = "boys_count" if group == "Boys" else "girls_count"
+        self.vars[key].set(str(len(athletes)))
+        self._render()
 
     def _page_attempts(self, parent: ttk.Frame) -> None:
         if not self.model.competition.enabled:
@@ -219,7 +369,10 @@ class CompetitionWizard(tk.Toplevel):
         summary = ttk.Frame(parent, style="WizardCard.TFrame", padding=16)
         summary.pack(fill="x")
         ttk.Label(summary, text=self.tr("wizard.review.summary"), style="WizardCardTitle.TLabel").pack(anchor="w")
-        lines = [self.tr(f"wizard.template.{self.model.template}.title")]
+        lines = [
+            self.tr("wizard.review.name", name=c.competition_name, date=c.competition_date),
+            self.tr(f"wizard.template.{self.model.template}.title"),
+        ]
         if c.enabled:
             if c.boys_enabled:
                 lines.append(self.tr("wizard.review.group", group=self.tr("wizard.groups.boys"), count=c.boys_competitors))
@@ -301,7 +454,21 @@ class CompetitionWizard(tk.Toplevel):
         ):
             return
         try:
-            self.on_finish(self.model.build_config(), "clear" if disposition == "clear" else "keep")
+            built = self.model.build_config()
+            enabled_groups = [
+                group for group, enabled in (
+                    ("Boys", built.boys_enabled), ("Girls", built.girls_enabled),
+                ) if enabled
+            ]
+            roster = [
+                AthleteContext(**asdict(item))
+                for group in enabled_groups
+                for item in self.rosters[group]
+            ]
+            if self.include_roster_on_finish:
+                self.on_finish(built, "clear" if disposition == "clear" else "keep", roster)
+            else:
+                self.on_finish(built, "clear" if disposition == "clear" else "keep")
             self._close()
         except Exception as exc:
             show_themed_info(self, self.tr("wizard.invalid.title"), str(exc))
@@ -309,10 +476,16 @@ class CompetitionWizard(tk.Toplevel):
     def _sync_model(self, *, quiet: bool = False) -> bool:
         c = self.model.competition
         try:
+            c.competition_name = str(self.vars["competition_name"].get()).strip()
+            c.competition_date = str(self.vars["competition_date"].get()).strip()
             c.boys_enabled = bool(self.vars["boys"].get())
             c.girls_enabled = bool(self.vars["girls"].get())
             c.boys_competitors = int(str(self.vars["boys_count"].get()))
             c.girls_competitors = int(str(self.vars["girls_count"].get()))
+            if 1 <= c.boys_competitors <= 200:
+                self._resize_roster("Boys", c.boys_competitors)
+            if 1 <= c.girls_competitors <= 200:
+                self._resize_roster("Girls", c.girls_competitors)
             c.active_group = str(self.vars["active_group"].get())
             c.default_attempts_per_competitor = int(str(self.vars["qualification"].get()))
             c.final_round_enabled = bool(self.vars["final"].get())

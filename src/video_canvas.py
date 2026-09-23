@@ -357,7 +357,13 @@ class VideoCanvas(tk.Canvas):
     def _draw_overlay(self, w: int, h: int) -> None:
         pad = 8 if self.compact else 10
         font_size = 8 if self.compact else 9
-        self.coords(self._status_box, pad, pad, min(w - pad, 500), pad + (24 if self.compact else 28))
+        # Keep the status badge on the left, but size it to its content instead
+        # of stretching it across the video and hiding calibrated geometry.
+        available_width = max(24, w - 2 * pad)
+        status_width = min(available_width, max(80, int(22 + len(self._status_text) * font_size * .62)))
+        if self.compact:
+            status_width = min(status_width, 260)
+        self.coords(self._status_box, pad, pad, pad + status_width, pad + (24 if self.compact else 28))
         self.itemconfigure(self._status_box, fill=self.palette["surface"], outline=self.palette["border"])
         self.coords(self._status_label, pad + 9, pad + (12 if self.compact else 14))
         self.itemconfigure(self._status_label, anchor="w", text=self._status_text, fill=self._status_color, font=("Segoe UI Semibold", font_size))
@@ -369,12 +375,31 @@ class VideoCanvas(tk.Canvas):
             self.itemconfigure(self._secondary_label, state="normal", anchor="se", text=self._secondary_text, fill=self.palette["muted"], font=("Segoe UI", 8))
         if self._advisory_text and not self.compact:
             width = min(330, max(155, 18 + len(self._advisory_text) * 7))
-            self.coords(self._advisory_box, w - width - pad, pad, w - pad, pad + 32)
+            advisory_left = pad
+            advisory_top = pad + 34
+            if advisory_top + 32 > h - pad:
+                advisory_top = max(pad, h - pad - 32)
+            advisory_right = min(w - pad, advisory_left + width)
+            self.coords(self._advisory_box, advisory_left, advisory_top, advisory_right, advisory_top + 32)
             self.itemconfigure(self._advisory_box, state="normal", fill=self.palette["surface"], outline=self._advisory_color, width=2)
-            self.coords(self._advisory_label, w - pad - 10, pad + 16)
-            self.itemconfigure(self._advisory_label, state="normal", anchor="e", text=self._advisory_text, fill=self._advisory_color, font=("Segoe UI Semibold", 10))
+            self.coords(self._advisory_label, advisory_left + 10, advisory_top + 16)
+            self.itemconfigure(self._advisory_label, state="normal", anchor="w", text=self._advisory_text, fill=self._advisory_color, font=("Segoe UI Semibold", 10))
             self.tag_raise(self._advisory_box)
             self.tag_raise(self._advisory_label)
+
+        # Keep the calibrated board/foul geometry visible when it crosses the
+        # compact status bar. The status label remains above these lines, but
+        # the bar background must not hide the measurement reference itself.
+        for geometry_item in (
+            self._guide_line,
+            self._roi_box,
+            self._projection_board_item,
+            self._projection_foul_item,
+        ):
+            try:
+                self.tag_lower(self._status_box, geometry_item)
+            except tk.TclError:
+                pass
 
     def _canvas_to_ratio(self, x: float, y: float) -> tuple[float, float]:
         left, top, right, bottom = self._image_bounds

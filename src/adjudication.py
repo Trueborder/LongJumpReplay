@@ -194,6 +194,25 @@ class AdjudicationSessionStore:
         payload = {key: asdict(value) for key, value in roster.items()}
         self._commit_event("replace_roster", {"roster": payload})
 
+    def replace_group_roster(self, group: str, athletes: Iterable[AthleteContext]) -> None:
+        """Replace one group's editable start order without touching results."""
+        group = str(group)
+        with self._lock:
+            if any(record.athlete.group == group or record.athlete.category == group for record in self._records.values()):
+                raise ValueError("The order cannot be changed after attempts have been recorded for this group.")
+            ordered: list[AthleteContext] = []
+            for number, item in enumerate(athletes, start=1):
+                copy = AthleteContext(**asdict(item))
+                copy.group = group
+                copy.category = copy.category or group
+                copy.competitor_number = number
+                copy.start_order = number
+                copy.athlete_id = copy.external_id or copy.athlete_id or f"{group}:{number}"
+                ordered.append(copy)
+            roster = {key: value for key, value in self._roster.items() if key.split(":", 1)[0] != group}
+            roster.update({self._athlete_key(group, item.competitor_number): item for item in ordered})
+            payload = {key: asdict(value) for key, value in roster.items()}
+        self._commit_event("replace_roster", {"roster": payload})
     def ensure_attempt(
         self,
         attempt: AttemptSession,

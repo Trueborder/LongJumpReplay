@@ -87,3 +87,17 @@ def test_merge_preserves_latest_technical_settings_and_resets_competition_progre
     assert merged.competition.current_competitor_by_group == {"Boys": 1, "Girls": 1}
     assert merged.competition.finalist_numbers_by_group == {"Boys": [], "Girls": []}
     assert merged.competition.final_round_started_by_group == {"Boys": False, "Girls": False}
+
+def test_competition_identity_is_validated_without_affecting_judge_only_mode() -> None:
+    model = CompetitionSetupModel(CompetitionConfig(competition_name="", competition_date="bad-date"))
+    assert model.validate_step("format") == {
+        "competition_name": "competition_name",
+        "competition_date": "competition_date",
+    }
+    model.competition.competition_name = "City Championship"
+    model.competition.competition_date = "2026-09-15"
+    assert model.validate_step("format") == {}
+    model.apply_template("judge_only")
+    model.competition.competition_name = ""
+    model.competition.competition_date = ""
+    assert model.validate_step("format") == {}
