@@ -120,15 +120,13 @@
     // not validated here, because that would need a backend this site does not
     // have. The block stays hidden when no session id is present.
     (function () {
-      try {
-        var id = new URLSearchParams(window.location.search).get('session_id');
-        if (!id || !/^[A-Za-z0-9_-]{1,120}$/.test(id)) return;
-        var row = document.querySelector('[data-order-reference]');
-        var slot = document.querySelector('[data-order-id]');
-        if (!row || !slot) return;
-        slot.textContent = id;
-        row.hidden = false;
-      } catch (e) {}
+      var id = new URLSearchParams(window.location.search).get('session_id');
+      if (!id || !/^[A-Za-z0-9_-]{1,120}$/.test(id)) return;
+      var row = document.querySelector('[data-order-reference]');
+      var slot = document.querySelector('[data-order-id]');
+      if (!row || !slot) return;
+      slot.textContent = id;
+      row.hidden = false;
     })();
   </script>
 </body>

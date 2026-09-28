@@ -25,6 +25,7 @@
 - Account pages remain under `website/tomaspisar.cz/account/` because the separate `licensing-api` Worker serves that directory as its static asset root. They consume shared CSS and JavaScript from the public site's `assets/` URL.
 - There is no fake static `api/` tree: public RelayLab adapter endpoints are handled by `website/main-site-worker.ts`, while authentication, licensing, Stripe and protected downloads remain in `licensing-api/src/`.
 - Old `/software/...` and `/privacy` URLs are permanent redirects in `website/main-site-worker.ts`; the old full-width product row was replaced by a compact contextual strip. `/welcome/` remains because it has unique post-purchase/download guidance.
+- The shared site shell now uses a shorter page-hero rhythm and a more balanced product hero; the homepage keeps its three-product chooser without repeating a second catalog callout.
 - The global website header no longer exposes a redundant Downloads link; download actions remain in product and account content. LongJumpReplay product pages use a compact rounded context strip with Overview, Licensing, and Privacy links. RelayLab does not show a one-item local menu.
 - `website/design-system/` is source documentation only and stays outside the public output. `website/wrangler.jsonc` owns the public site Worker; `licensing-api/wrangler.jsonc` owns the account Worker boundary.
 
