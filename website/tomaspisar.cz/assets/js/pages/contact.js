@@ -6,11 +6,28 @@
   const status = document.querySelector('[data-contact-status]');
   const submit = form.querySelector('button[type="submit"]');
   const widgetHost = form.querySelector('[data-contact-turnstile]');
+  const productField = form.elements.namedItem('product');
+  const messageField = form.elements.namedItem('message');
   const feedback = window.LJR_FEEDBACK;
   let turnstileId = null;
   let token = '';
 
   const copy = (en, cs) => document.documentElement.lang === 'cs' ? cs : en;
+  const updateMessageLimit = () => {
+    const product = productField?.selectedOptions?.[0]?.textContent?.trim() || '';
+    const prefix = product ? `Product: ${product}\n\n` : '';
+    if (messageField) messageField.maxLength = 5000 - prefix.length;
+  };
+  const selectProductFromLink = () => {
+    if (!productField) return;
+    const requested = new URLSearchParams(window.location.search).get('product');
+    if (requested && [...productField.options].some((option) => option.value === requested)) {
+      productField.value = requested;
+    }
+    updateMessageLimit();
+  };
+  productField?.addEventListener('change', updateMessageLimit);
+  selectProductFromLink();
   const setStatus = (message, kind = '') => {
     feedback?.inline(status, message, kind || 'info');
   };
@@ -45,6 +62,8 @@
       return;
     }
     const data = Object.fromEntries(new FormData(form).entries());
+    const product = productField?.selectedOptions?.[0]?.textContent?.trim();
+    if (product) data.message = `Product: ${product}\n\n${data.message}`;
     data.turnstile_token = token;
     submit?.setAttribute('disabled', 'disabled');
     setStatus(copy('Sending…', 'Odesílám…'), 'info');
