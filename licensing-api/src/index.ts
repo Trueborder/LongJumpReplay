@@ -96,6 +96,7 @@ import {
 } from "./stripe";
 import type { StripeEvent } from "./stripe";
 import { portalPageRoute } from "./portal-routing";
+import { economySuite } from "./economysuite";
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
@@ -331,11 +332,31 @@ function portalRedirect(request: Request, location: string): Response {
 
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
+  if (['/economysuite/app.js', '/economysuite/app.css'].includes(path)) return env.ASSETS.fetch(request);
+  const product = new URL(request.url).searchParams.get('product');
+  if (path === '/economysuite' || path.startsWith('/economysuite/')) {
+    const category = path.split('/')[2] || 'overview';
+    if (!['overview', 'statistics', 'progress', 'appearance', 'store', 'purchases', 'settings', 'pair'].includes(category) || path.split('/').filter(Boolean).length > 2) return new Response('Not found', { status: 404 });
+    const auth = await authenticatedPortal(request, env);
+    // Pairing captures a fragment before authentication; the shell is public,
+    // while every player data endpoint independently validates ownership.
+    if (!auth && !['store', 'pair'].includes(category)) return portalRedirect(request, `/login?product=economysuite&next=${encodeURIComponent(path)}`);
+    const asset = await env.ASSETS.fetch(new Request(new URL('/economysuite/', request.url), request));
+    return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
+  }
   const isPortalPage = ["/", "/login", "/login/", "/register", "/register/", "/dashboard", "/dashboard/", "/approve/pairing", "/approve/pairing/"].includes(path)
     || path.startsWith("/dashboard/");
   if (!isPortalPage) return null;
 
   const auth = await authenticatedPortal(request, env);
+  if (['/login', '/login/', '/register', '/register/'].includes(path) && product === 'economysuite') {
+    if (auth?.credential) {
+      const next = new URL(request.url).searchParams.get('next') || '';
+      return portalRedirect(request, /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair)$/.test(next) ? next : '/economysuite/overview');
+    }
+    const asset = await env.ASSETS.fetch(new Request(new URL(path.startsWith('/register') ? '/register/' : '/login/', request.url), request));
+    return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
+  }
   const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup));
   if (!route) return null;
   if (route.kind === "redirect") return portalRedirect(request, route.location);
@@ -402,6 +423,7 @@ async function handleAdditionalComputerCheckout(env: Env, event: StripeEvent): P
 }
 async function handleCheckoutCompleted(env: Env, event: StripeEvent): Promise<void> {
   const session = event.data.object;
+  if (session.metadata?.purchase_type === 'economysuite_currency') return;
   if (session.metadata?.purchase_type === "additional_computers") { await handleAdditionalComputerCheckout(env, event); return; }
   const email: string =
     session.customer_details?.email ?? session.customer_email ?? "";
@@ -719,7 +741,7 @@ export async function verifyCode(request: Request, env: Env, purpose: Verificati
     if (!customer) return fail("invalid_code", "That code is not valid. Request a new one.");
     const credential = await findPasswordCredential(env.DB, customer.id);
     const profile = await findPortalProfile(env.DB, customer.id);
-    if (!credential || !profile) {
+    if (!credential || (!profile && data.product !== 'economysuite')) {
       const setupToken = await issuePortalSetupToken(env, customer.id, customer.email, "migration");
       await logEvent(env.DB, "portal_migration_required", null, { password: Boolean(credential), profile: Boolean(profile) });
       return json({ authenticated: false, password_setup_required: true, setup_token: setupToken,
@@ -1381,7 +1403,7 @@ async function portalRegistrationRequestCode(request: Request, env: Env): Promis
   const profile = customer ? await findPortalProfile(env.DB, customer.id) : null;
   // A complete account is never given a registration code. The generic
   // response keeps the endpoint from becoming an account-enumeration oracle.
-  if (credential && profile) return registrationGeneric(env);
+  if (credential && (profile || data.product === 'economysuite')) return registrationGeneric(env);
 
   await invalidatePortalRegistrationChallenges(env.DB, email, "registration");
   const code = generateVerificationCode();
@@ -1440,7 +1462,7 @@ async function portalRegistrationVerifyCode(request: Request, env: Env): Promise
   const customer = challenge.customer_id ? await findCustomerById(env.DB, challenge.customer_id) : null;
   const credential = customer ? await findPasswordCredential(env.DB, customer.id) : null;
   const profile = customer ? await findPortalProfile(env.DB, customer.id) : null;
-  if (credential && profile) return fail("account_exists", "This email is already registered. Sign in instead.", 409);
+  if (credential && (profile || data.product === 'economysuite')) return fail("account_exists", "This email is already registered. Sign in instead.", 409);
   return json({ verified: true, setup_token: setupToken, email, password_required: !credential, profile_required: !profile });
 }
 
@@ -1451,7 +1473,8 @@ async function portalRegistrationComplete(request: Request, env: Env): Promise<R
   const setupToken = str(data.setup_token);
   if (!EMAIL_PATTERN.test(email)) return fail("invalid_input", "Your registration session is incomplete. Start again.");
   const profile = profileValues(data);
-  if (!profile) return profileInputError();
+  const playerRegistration = data.product === 'economysuite';
+  if (!profile && !playerRegistration) return profileInputError();
   const password = passwordFrom(data, "password");
   const confirmation = passwordFrom(data, "password_confirmation");
   const tokenHash = setupToken ? await sha256(setupToken) : null;
@@ -1482,7 +1505,7 @@ async function portalRegistrationComplete(request: Request, env: Env): Promise<R
       if (!(await findPasswordCredential(env.DB, customer.id))) throw new Error("password creation failed");
     }
   }
-  await savePortalProfile(env.DB, customer.id, profile.firstName, profile.lastName, profile.clubName);
+  if (profile && !playerRegistration) await savePortalProfile(env.DB, customer.id, profile.firstName, profile.lastName, profile.clubName);
   if (challenge && !(await completePortalRegistrationChallenge(env.DB, challenge.id))) return fail("setup_expired", "Your registration session is no longer valid. Start again.", 410);
   if (sessionAuth) await revokePortalSession(env.DB, sessionAuth.session.token_hash);
   await logEvent(env.DB, "portal_registration_completed", null, { result: existing ? "profile_completed" : "registered" });
@@ -1529,7 +1552,7 @@ async function portalPasswordLogin(request: Request, env: Env): Promise<Response
   const session = await newPortalSession(env, customer.id);
   await logEvent(env.DB, "portal_password_login_success", null, {});
   return jsonWithPortalSession(
-    { authenticated: true, expires_at: session.expiresAt, password_setup_required: !credential || !(await findPortalProfile(env.DB, customer.id)) },
+    { authenticated: true, expires_at: session.expiresAt, password_setup_required: data.product === 'economysuite' ? !credential : !credential || !(await findPortalProfile(env.DB, customer.id)) },
     session.token,
     session.csrf,
     settings(env).portalSessionTtlSeconds,
@@ -1890,7 +1913,15 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
-      if (url.hostname === "account.tomaspisar.cz") {
+      if (path.startsWith('/api/economysuite/')) {
+        if (request.method === 'OPTIONS') return withPortalCors(new Response(null, { status: 204 }), request, env);
+        const response = await economySuite(request, env, {
+          authenticate: (r) => authenticatedPortal(r, env),
+          mutation: async (r) => { const auth = await authenticatedPortal(r, env); return Boolean(auth && await portalPasswordMutationAllowed(r, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null)); },
+        });
+        return withPortalCors(response, request, env);
+      }
+      if (url.hostname === "account.tomaspisar.cz" && !path.startsWith('/api/')) {
         const page = await portalPage(request, env, url.pathname);
         if (page) return page;
         return env.ASSETS.fetch(request);
@@ -2025,18 +2056,18 @@ export default {
         default:
           response = fail("not_found", "Not found", 404);
       }
-      return path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
+      return (path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/")) ? withPortalCors(response, request, env) : response;
     } catch (error) {
       // Never surface internals. The message is logged, not returned.
       if (error instanceof InvalidJsonError) {
         const response = fail("invalid_input", "Send a valid JSON object and try again.");
         return path === "/api/contact" ? withContactCors(response, request)
-          : path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
+          : (path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/")) ? withPortalCors(response, request, env) : response;
       }
       console.error("unhandled", error instanceof Error ? error.message : "unknown");
       const response = fail("server_error", "Something went wrong. Please try again.", 500);
       return path === "/api/contact" ? withContactCors(response, request)
-        : path.startsWith("/api/portal/") ? withPortalCors(response, request, env) : response;
+        : (path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/")) ? withPortalCors(response, request, env) : response;
     }
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {

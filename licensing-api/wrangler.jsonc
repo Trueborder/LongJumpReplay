@@ -18,6 +18,12 @@
       "binding": "DB",
       "database_name": "longjumpreplay-licenses",
       "database_id": "afd54a54-bccb-494c-ac6d-377b00652c40"
+    },
+    {
+      "binding": "ECONOMYSUITE_DB",
+      "database_name": "economysuite-player-portal",
+      "database_id": "b0e45bf6-0490-4d6d-9bfa-50d15355c44f",
+      "migrations_dir": "economysuite-migrations"
     }
   ],
 
@@ -25,6 +31,7 @@
   // are listed in docs/LICENSE_SYSTEM.md - never put them in this file.
   "vars": {
     "ENVIRONMENT": "development",
+    "ECONOMYSUITE_PURCHASES_ENABLED": "false",
     "MAX_DEVICES": "2",
     "VERIFICATION_CODE_TTL_MINUTES": "10",
     "MAX_VERIFICATION_ATTEMPTS": "5",
@@ -54,6 +61,7 @@
       "name": "longjumpreplay-licensing-staging",
       "vars": {
         "ENVIRONMENT": "staging",
+        "ECONOMYSUITE_PURCHASES_ENABLED": "false",
         "MAX_DEVICES": "2",
         "VERIFICATION_CODE_TTL_MINUTES": "10",
         "MAX_VERIFICATION_ATTEMPTS": "5",
@@ -77,6 +85,12 @@
           "binding": "DB",
           "database_name": "longjumpreplay-licenses-staging",
           "database_id": "6e80c8e7-b1da-4f60-9f76-bb3a0505d748"
+        },
+        {
+          "binding": "ECONOMYSUITE_DB",
+          "database_name": "economysuite-player-portal-staging",
+          "database_id": "6c571619-685a-4cde-a302-10f88fa20151",
+          "migrations_dir": "economysuite-migrations"
         }
       ],
       "routes": [
@@ -89,6 +103,7 @@
     "production": {
       "vars": {
         "ENVIRONMENT": "production",
+        "ECONOMYSUITE_PURCHASES_ENABLED": "false",
         "MAX_DEVICES": "2",
         "VERIFICATION_CODE_TTL_MINUTES": "10",
         "MAX_VERIFICATION_ATTEMPTS": "5",
@@ -112,6 +127,12 @@
           "binding": "DB",
           "database_name": "longjumpreplay-licenses",
           "database_id": "afd54a54-bccb-494c-ac6d-377b00652c40"
+        },
+        {
+          "binding": "ECONOMYSUITE_DB",
+          "database_name": "economysuite-player-portal",
+          "database_id": "b0e45bf6-0490-4d6d-9bfa-50d15355c44f",
+          "migrations_dir": "economysuite-migrations"
         }
       ],
       "routes": [

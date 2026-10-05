@@ -1,0 +1,10 @@
+CREATE TABLE player_links (customer_id TEXT PRIMARY KEY, uuid TEXT NOT NULL UNIQUE, name TEXT NOT NULL, linked_at INTEGER NOT NULL, leaderboard INTEGER NOT NULL DEFAULT 0 CHECK(leaderboard IN (0,1)));
+CREATE TABLE pairing_challenges (token_hash TEXT PRIMARY KEY, uuid TEXT NOT NULL, name TEXT NOT NULL, expires_at INTEGER NOT NULL, customer_id TEXT, confirmation_hash TEXT, confirmed_at INTEGER);
+CREATE TABLE player_snapshots (uuid TEXT PRIMARY KEY, payload TEXT NOT NULL, synced_at INTEGER NOT NULL);
+CREATE TABLE store_orders (id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, uuid TEXT NOT NULL, player_name TEXT NOT NULL, price_id TEXT NOT NULL, currency_type TEXT NOT NULL CHECK(currency_type IN ('coins','tokens')), currency_amount INTEGER NOT NULL, price_minor INTEGER NOT NULL, session_id TEXT UNIQUE, payment_intent TEXT UNIQUE, dispute_id TEXT, paid INTEGER NOT NULL DEFAULT 0, target_amount INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0, delivered_revision INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT 'checkout', receipt_url TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE INDEX orders_customer ON store_orders(customer_id,created_at);
+CREATE TABLE bridge_operations (id TEXT PRIMARY KEY, uuid TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, order_id TEXT, revision INTEGER, state TEXT NOT NULL DEFAULT 'pending', result TEXT, created_at INTEGER NOT NULL, completed_at INTEGER);
+CREATE INDEX operations_pending ON bridge_operations(state,created_at);
+CREATE TABLE webhook_events (id TEXT PRIMARY KEY, processed_at INTEGER NOT NULL);
+CREATE TABLE bridge_nonces (nonce TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
+CREATE TABLE bridge_status (server TEXT PRIMARY KEY, last_seen INTEGER NOT NULL);

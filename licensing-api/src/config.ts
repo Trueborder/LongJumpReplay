@@ -7,6 +7,11 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  ECONOMYSUITE_DB?: D1Database;
+  ECONOMYSUITE_BRIDGE_SECRET?: string;
+  ECONOMYSUITE_WEBHOOK_SECRET?: string;
+  ECONOMYSUITE_STRIPE_KEY?: string;
+  ECONOMYSUITE_PURCHASES_ENABLED?: string;
 
   ENVIRONMENT: string;
   MAX_DEVICES: string;
