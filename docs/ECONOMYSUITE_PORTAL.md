@@ -68,7 +68,9 @@ The plugin applies cumulative target revisions in SQLite transactions, records o
 
 ## Sandbox and validation
 
-The isolated claimable sandbox is `acct_1UNHD7RZVoxIJv8F`, created by the Stripe CLI proof-of-work flow on 2026-10-05 for `info@tomaspisar.cz`. Claim it before 2026-10-12; its claim URL is in the ignored local Stripe TOML. Review/rotate its test credentials when claiming it. No live packages were created.
+The isolated sandbox is `acct_1UNHD7RZVoxIJv8F`, created by the Stripe CLI proof-of-work flow on 2026-10-05 for `info@tomaspisar.cz` and claimed on 2026-10-06. Review/rotate its test credentials after claiming it.
+
+The live catalog was published on 2026-10-06 with one-time CZK prices reduced by 60% from the initially approved tiers: 1,000 coins / 10 tokens at 19.60 CZK, 5,000 coins / 50 tokens at 79.60 CZK, and 10,000 coins / 100 tokens at 139.60 CZK.
 
 `scripts/rehearse-economysuite.mjs` uses only the named staging databases and refuses live Stripe keys. It creates a temporary test account, performs both pairing confirmations, temporarily publishes one sandbox package, creates/pays an actual sandbox Checkout Session using Stripe's test token, delivers signed events, tests partial/full refunds, then removes its D1 fixtures and returns the product to unpublished. The payment-page steps follow the [official Stripe CLI fixture](https://github.com/stripe/stripe-cli/blob/master/pkg/fixtures/triggers/checkout.session.completed.json).
 
@@ -83,8 +85,8 @@ npx.cmd wrangler deploy --env staging
 
 Worker tests exercise real local D1, registration without a player real-name profile, the unchanged LongJumpReplay setup gate, ownership/CSRF, two-step pairing, replay rejection, privacy filtering, payment signatures, duplicate events, refunds and disputes. Plugin database tests cover retry/old-revision behavior, rollback, cosmetic ownership, immediate paid tokens and debt settlement. See `C:/Users/xpisa/PROJECTS/EconomySuite/WEBSITE_PORTAL.md` for the remaining Paper runtime checks.
 
-The full plugin suite has four existing failures, reproduced in a detached original checkout: two OrdersDatabaseTest registry initialization failures, one active-token expectation and one tournament-config expectation. The website suite also has an existing stale contact test expecting a direct email link removed in the original source. These are distinct from the passing portal tests. No browser surface is connected in this session, so authenticated visual/mobile verification remains required.
+The full plugin suite has four existing failures, reproduced in a detached original checkout: two OrdersDatabaseTest registry initialization failures, one active-token expectation and one tournament-config expectation. The website suite also has an existing stale contact test expecting a direct email link removed in the original source. These are distinct from the passing portal tests. Authenticated visual/mobile verification still requires real player accounts.
 
-Verified on 2026-10-05: 39 Worker tests and typecheck passed; the real staging sandbox rehearsal passed pairing, paid Checkout, signed duplicate webhook delivery, and partial/full refunds. Fixtures were removed and all six products restored to unpublished. Both staging and production purchase switches are off. Plugin portal database tests pass; actual Paper and authenticated browser checks remain pending.
+Verified on 2026-10-06: 39 Worker tests and typecheck passed; the real staging sandbox rehearsal passed pairing, paid Checkout, signed duplicate webhook delivery, and partial/full refunds. The hosted Paper 1.21.11 server loaded EconomySuite 2.28.0 with Vault, reached `Done`, and shut down cleanly after exaroton's empty-server timeout. The production catalog returns all six live packages and the production purchase switch is on; staging remains off. Real-player pairing and authenticated mobile checks remain operational smoke tests.
 
 The EconomySuite API uses Stripe 2026-09-30.endive. The live webhook was created with 2026-08-26.dahlia event payloads; handlers validate/retrieve objects through the current API. Latest-order checkout mapping is recoverable after interruptions, and already-disputed charges are reconciled even if the dispute event arrived before the checkout event.

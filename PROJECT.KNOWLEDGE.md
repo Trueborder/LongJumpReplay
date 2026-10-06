@@ -21,8 +21,8 @@
 
 - Shared account login selects Pantheon using `?product=economysuite`; its separate dashboard is `/economysuite/*`. Player registration requires email/password without a real-name profile; `/dashboard/*` retains LongJumpReplay setup and licensing behavior.
 - EconomySuite routes are isolated in `licensing-api/src/economysuite.ts`, assets in `website/tomaspisar.cz/account/economysuite`, and `ECONOMYSUITE_DB` uses separate production/staging D1 databases. The Pantheon plugin uses an optional outbound signed bridge and two-step `/web link` / `/web confirm` pairing.
-- Stripe catalog metadata governs coin/token packages, and a separate signed webhook handles currency deliveries, refunds and disputes. The LJR checkout handler explicitly ignores EconomySuite sessions. Live purchases are disabled until server configuration and runtime verification are complete.
-- See `docs/ECONOMYSUITE_PORTAL.md` for exact database IDs, secrets, deployment, sandbox rehearsal and operator requirements. Automated tests and a real staging sandbox payment/refund rehearsal pass; visual authentication/mobile checks and Paper runtime verification are still pending.
+- Stripe catalog metadata governs coin/token packages, and a separate signed webhook handles currency deliveries, refunds and disputes. The LJR checkout handler explicitly ignores EconomySuite sessions. Live purchases were enabled on 2026-10-06 after the catalog, staging rehearsal, and hosted Paper startup/shutdown checks passed.
+- See `docs/ECONOMYSUITE_PORTAL.md` for exact database IDs, secrets, live package prices, deployment, sandbox rehearsal and operator requirements. Automated tests, a real staging sandbox payment/refund rehearsal, and hosted Paper 1.21.11 runtime validation pass; real-player pairing and authenticated mobile checks remain operational smoke tests.
 
 ## Website organization (2026-09-13)
 

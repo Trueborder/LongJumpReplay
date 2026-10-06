@@ -103,7 +103,7 @@
     "production": {
       "vars": {
         "ENVIRONMENT": "production",
-        "ECONOMYSUITE_PURCHASES_ENABLED": "false",
+        "ECONOMYSUITE_PURCHASES_ENABLED": "true",
         "MAX_DEVICES": "2",
         "VERIFICATION_CODE_TTL_MINUTES": "10",
         "MAX_VERIFICATION_ATTEMPTS": "5",
