@@ -10,10 +10,19 @@ test('all legal routes render and link to the legal index', () => {
   for (const route of legal) {
     const file = route === 'index' ? path.join(root, 'legal', 'index.html') : path.join(root, 'legal', route, 'index.html');
     const html = fs.readFileSync(file, 'utf8');
+    assert.match(html, /<body class="legal-page">/);
     assert.match(html, /<main id="main">/);
     if (route !== 'index') assert.match(html, /href="\/legal\/"/);
     if (route !== 'privacy') assert.match(html, /href="\/legal\/privacy\/"/);
   }
+});
+
+test('legal pages use the compact document layout and LongJumpReplay terms cover core licensing topics', () => {
+  const css = fs.readFileSync(path.join(root, 'assets', 'css', 'components.css'), 'utf8');
+  assert.match(css, /\.legal-page \.prose/);
+  assert.match(css, /\.legal-page \.page-hero/);
+  const eula = fs.readFileSync(path.join(root, 'legal', 'longjumpreplay-eula', 'index.html'), 'utf8');
+  for (const phrase of ['Aktivace a zařízení', 'Zkušební režim', 'Aktualizace a podpora', 'Záznamy, soukromí a třetí strany', 'Nákup a reklamace']) assert.match(eula, new RegExp(phrase));
 });
 
 test('privacy notice covers EconomySuite data, processors, transfers, retention, rights and automation', () => {

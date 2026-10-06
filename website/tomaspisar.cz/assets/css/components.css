@@ -4,6 +4,56 @@
 @media (max-width:900px){.site-header{position:sticky}.menu-toggle{display:block;order:3}.header-actions .button-outline{display:none}.main-nav{position:absolute;top:72px;left:0;right:0;display:grid;gap:0;margin:0;padding:.7rem 1.25rem;border-bottom:1px solid var(--line);background:var(--bg);transform:translateY(-150%);transition:transform .2s}.menu-open .main-nav{transform:translateY(0)}.main-nav a{padding:1rem 0;border-bottom:1px solid var(--line)}.main-nav a:last-child{border:0}.product-card,.download-panel,.split{grid-template-columns:1fr}.contact-grid{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:650px){.section-shell{width:min(100% - 1.5rem,1220px)}.brand small{display:none}.header-actions{gap:.35rem}.hero{grid-template-columns:1fr;min-height:0;padding-top:4.5rem}.hero-visual{min-height:390px}.hero-facts{gap:1rem;flex-wrap:wrap;margin-top:2.5rem}.signal-strip{grid-template-columns:repeat(2,1fr)}.signal-strip div{min-height:58px;padding:.8rem}.card-grid,.feature-list,.workflow,.contact-grid,.screenshot-grid{grid-template-columns:1fr}.workflow-step{border-right:0;border-bottom:1px solid var(--line)}.workflow-step:last-child{border-bottom:0}.download-panel{padding:1.3rem}.download-panel .button-row{align-items:stretch}.download-panel .button{width:100%}.site-footer{display:grid;gap:.6rem}.page-hero{padding-top:4rem}}
 
+/* Legal documents use a reading layout, not the display scale of the landing pages. */
+.legal-page .page-hero {
+  padding: clamp(2.4rem, 6vw, 5.5rem) 0 clamp(2rem, 4vw, 3.5rem);
+}
+
+.legal-page .page-hero h1 {
+  max-width: 17ch;
+  font-size: clamp(2.8rem, 6.4vw, 6.4rem);
+  line-height: .96;
+  letter-spacing: -.045em;
+}
+
+.legal-page .page-hero p { max-width: 760px; }
+
+.legal-page .content-section {
+  padding: clamp(2rem, 5vw, 4rem) 0 clamp(4rem, 8vw, 7rem);
+}
+
+.legal-page .prose {
+  max-width: 900px;
+  padding: clamp(1.25rem, 3vw, 2.6rem);
+  border: 1px solid var(--apple-border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 18px 46px rgba(23, 42, 47, .08);
+}
+
+.legal-page .prose h2 {
+  margin: clamp(1.8rem, 4vw, 3rem) 0 .7rem;
+  font-size: clamp(1.5rem, 2.8vw, 2.45rem);
+  line-height: 1.05;
+  letter-spacing: -.025em;
+}
+
+.legal-page .prose h2:first-child { margin-top: 0; }
+.legal-page .prose p,
+.legal-page .prose li { max-width: 76ch; font-size: 1rem; line-height: 1.75; }
+.legal-page .prose ul { padding-left: 1.35rem; }
+.legal-page .prose a { text-decoration-thickness: 1px; text-underline-offset: .18em; }
+.legal-page .notice { margin-top: 2rem; }
+.legal-page .site-card h3 { font-size: clamp(1.45rem, 2.8vw, 2.35rem); line-height: 1.05; }
+.legal-page .card-grid { align-items: stretch; }
+.legal-page .site-card { border-radius: 20px; box-shadow: 0 12px 30px rgba(23, 42, 47, .07); }
+
+@media (max-width: 650px) {
+  .legal-page .page-hero { padding-top: 2.4rem; }
+  .legal-page .page-hero h1 { font-size: clamp(2.45rem, 13vw, 4.2rem); }
+  .legal-page .prose { padding: 1.2rem; border-radius: 18px; }
+}
+
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 .screenshot-grid figure:first-child{grid-column:1/-1}.screenshot-grid img{height:auto;aspect-ratio:auto;object-fit:contain}
 .about-steps{grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.about-steps li{align-items:flex-start;padding:1.5rem;border:1px solid var(--line);background:var(--surface)}.about-steps li::before{padding-top:.2rem}.about-steps strong{display:block;margin-bottom:.6rem;color:var(--text);font:600 1.45rem var(--display);letter-spacing:.02em;text-transform:uppercase}.about-steps p{margin:0;color:var(--muted);font-size:.9rem}.about-actions{align-items:center;justify-content:flex-end;min-width:310px}
@@ -699,3 +749,24 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 .form-status[data-state="success"] { color: var(--cyan-strong); }
 .form-status[data-state="warning"] { color: var(--amber); }
 .form-status[data-state="error"] { color: var(--coral); }
+
+/* Final legal document overrides: keep these outside legacy layers so they win over the marketing scale. */
+.legal-page .page-hero { padding: clamp(2.4rem, 6vw, 5.5rem) 0 clamp(2rem, 4vw, 3.5rem); }
+.legal-page .page-hero h1 { max-width: 17ch; font-size: clamp(2.8rem, 6.4vw, 6.4rem); line-height: .96; letter-spacing: -.045em; }
+.legal-page .page-hero p { max-width: 760px; }
+.legal-page .content-section { padding: clamp(2rem, 5vw, 4rem) 0 clamp(4rem, 8vw, 7rem); }
+.legal-page .prose { max-width: 900px; padding: clamp(1.25rem, 3vw, 2.6rem); border: 1px solid var(--apple-border); border-radius: 24px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 18px 46px rgba(23, 42, 47, .08); }
+.legal-page .prose h2 { margin: clamp(1.8rem, 4vw, 3rem) 0 .7rem; font-size: clamp(1.5rem, 2.8vw, 2.45rem); line-height: 1.05; letter-spacing: -.025em; }
+.legal-page .prose h2:first-child { margin-top: 0; }
+.legal-page .prose p, .legal-page .prose li { max-width: 76ch; font-size: 1rem; line-height: 1.75; }
+.legal-page .prose ul { padding-left: 1.35rem; }
+.legal-page .prose a { text-decoration-thickness: 1px; text-underline-offset: .18em; }
+.legal-page .notice { margin-top: 2rem; }
+.legal-page .site-card h3 { font-size: clamp(1.45rem, 2.8vw, 2.35rem); line-height: 1.05; }
+.legal-page .card-grid { align-items: stretch; }
+.legal-page .site-card { border-radius: 20px; box-shadow: 0 12px 30px rgba(23, 42, 47, .07); }
+@media (max-width: 650px) {
+  .legal-page .page-hero { padding-top: 2.4rem; }
+  .legal-page .page-hero h1 { font-size: clamp(2.45rem, 13vw, 4.2rem); }
+  .legal-page .prose { padding: 1.2rem; border-radius: 18px; }
+}
