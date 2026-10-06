@@ -14,7 +14,7 @@
 #endif
 
 #define MyAppName "LongJumpReplay"
-#define MyAppPublisher "Tomáš Pisár"
+#define MyAppPublisher "Novaryn Solutions"
 #define MyAppURL "https://tomaspisar.cz"
 #define MyAppExeName "LongJumpReplay.exe"
 #define MyAppAssocName MyAppName + " File"

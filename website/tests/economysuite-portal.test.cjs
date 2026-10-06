@@ -32,7 +32,7 @@ test('purchase return renders instructions and Minecraft currency icons', () => 
 
 test('store explains how purchases support the developer', () => {
   assert.match(script, /es-support-note/);
-  assert.match(script, /Všechny peníze z tohoto obchodu jdou přímo vývojáři/);
+  assert.match(script, /Novaryn Solutions/);
   assert.match(script, /All money from this store goes directly to developer/);
   assert.match(css, /\.es-support-note/);
 });

@@ -2,7 +2,7 @@
   "name": "longjumpreplay-licensing-api",
   "version": "1.0.0",
   "private": true,
-  "description": "Cloudflare Worker issuing and verifying LongJumpReplay licenses",
+  "description": "Novaryn Solutions licensing and EconomySuite portal Worker for LongJumpReplay",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",

@@ -42,7 +42,7 @@ function env(db: D1Database): Env {
     AUTHORIZATION_TTL_DAYS: "30",
     SUBSCRIPTION_GRACE_DAYS: "7",
     MAIL_FROM: "info@example.com",
-    MAIL_FROM_NAME: "LongJumpReplay",
+    MAIL_FROM_NAME: "Novaryn Solutions",
     PORTAL_ORIGIN: "https://account.example.com",
     PORTAL_SESSION_TTL_DAYS: "30",
     STRIPE_PRICE_LIFETIME: "price_lifetime",

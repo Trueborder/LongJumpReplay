@@ -290,8 +290,8 @@
   scrolling. The body reserves its desktop/mobile header space, and the mobile
   navigation remains positioned below the fixed header.
 - Customer-facing support, product, licensing, privacy, and contact copy now
-  uses a consistent plural company voice in English and Czech. The About page
-  remains intentionally personal because it describes Tomáš directly.
+  uses a consistent Novaryn Solutions company voice in English and Czech. The
+  About page presents the studio and its products as a company brand.
 
 ## Account portal readability redesign (2026-09-01)
 

@@ -115,7 +115,7 @@
       dialog.setAttribute('aria-labelledby', 'feedback-modal-title');
       dialog.setAttribute('aria-describedby', 'feedback-modal-description');
       dialog.setAttribute('aria-modal', 'true');
-      dialog.innerHTML = `<div class="feedback-modal-kicker">LONGJUMPREPLAY / CONFIRMATION</div><h2 id="feedback-modal-title"></h2><p id="feedback-modal-description"></p><div class="feedback-modal-actions"><button type="button" class="button button-outline" data-modal-cancel></button><button type="button" class="button ${destructive ? 'button-danger' : 'button-primary'}" data-modal-confirm></button></div>`;
+      dialog.innerHTML = `<div class="feedback-modal-kicker">NOVARYN SOLUTIONS / CONFIRMATION</div><h2 id="feedback-modal-title"></h2><p id="feedback-modal-description"></p><div class="feedback-modal-actions"><button type="button" class="button button-outline" data-modal-cancel></button><button type="button" class="button ${destructive ? 'button-danger' : 'button-primary'}" data-modal-confirm></button></div>`;
       dialog.querySelector('#feedback-modal-title').textContent = title || '';
       dialog.querySelector('#feedback-modal-description').textContent = description || '';
       dialog.querySelector('[data-modal-cancel]').textContent = cancelLabel;
@@ -158,7 +158,7 @@
     const favicon = document.createElement('link');
     favicon.rel = 'icon';
     favicon.type = 'image/svg+xml';
-    favicon.href = '/assets/icons/favicon.svg';
+    favicon.href = '/assets/images/branding/novaryn-solutions-symbol.png';
     document.head.append(favicon);
   }
 
@@ -366,12 +366,12 @@
     en: {
       skip: 'Skip to content', software: 'Software', about: 'About', contact: 'Contact', account: 'Account',
       menu: 'Open menu', close: 'Close menu', language: 'Switch to Czech', closeImage: 'Close image',
-      footer: 'Independent software development from the Czech Republic.', cookies: 'Cookie settings'
+      footer: 'Digital products and software solutions from the Czech Republic.', cookies: 'Cookie settings'
     },
     cs: {
-      skip: 'Přejít na obsah', software: 'Software', about: 'O mně', contact: 'Kontakt', account: 'Účet',
+      skip: 'Přejít na obsah', software: 'Software', about: 'O Novaryn Solutions', contact: 'Kontakt', account: 'Účet',
       menu: 'Otevřít menu', close: 'Zavřít menu', language: 'Přepnout do angličtiny', closeImage: 'Zavřít obrázek',
-      footer: 'Nezávislý vývoj softwaru z České republiky.', cookies: 'Nastavení cookies'
+      footer: 'Digitální produkty a softwarová řešení z České republiky.', cookies: 'Nastavení cookies'
     }
   };
 

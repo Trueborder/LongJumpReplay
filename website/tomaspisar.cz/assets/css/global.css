@@ -67,11 +67,16 @@ button,
   position: relative;
   width: 35px;
   height: 35px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 11px;
   color: #07110f;
-  background: var(--cyan);
-  font: 500 .69rem var(--mono);
+  background: #061516;
   box-shadow: 5px 5px 0 color-mix(in srgb, var(--amber) 85%, transparent);
 }
+
+.brand-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
 
 .brand-mark::after {
   content: "";

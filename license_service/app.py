@@ -129,7 +129,7 @@ def _license_email_body(customer: str, machine: str, key: str) -> str:
         f"This key is tied to machine code {machine} and will only activate that\n"
         "computer. If you need it moved to a different computer, reply to this\n"
         "email with the new machine code.\n\n"
-        "Tomas Pisar\n"
+        "Novaryn Solutions\n"
         "https://tomaspisar.cz\n"
     )
 

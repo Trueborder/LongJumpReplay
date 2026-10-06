@@ -1,4 +1,4 @@
-# Tomáš Pisár — Design System
+# Novaryn Solutions — Design System
 
 Generated with UI/UX Pro Max on 2026-08-12, then refined after the initial generic portfolio match failed the project-specific design critique.
 

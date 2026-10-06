@@ -39,7 +39,7 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
       const sql = readFileSync(`migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(';').map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
       await shared.exec(sql);
     }
-    env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://account.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'EconomySuite' } as Env;
+    env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://account.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
   });
   afterEach(async () => { vi.unstubAllGlobals(); await runtime?.dispose(); });
   const request = (path: string, payload?: unknown) => new Request(`https://account.tomaspisar.cz/api/economysuite/${path}`, payload ? { method: 'POST', body: JSON.stringify(payload) } : undefined);

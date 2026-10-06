@@ -116,9 +116,12 @@ body::before { display: none; }
   width: 36px;
   height: 36px;
   border-radius: 12px;
+  background: #061516;
   box-shadow: none;
   transition: transform 220ms var(--apple-ease), border-radius 220ms var(--apple-ease);
 }
+
+.brand-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
 
 .brand:hover .brand-mark { transform: rotate(-4deg) scale(1.04); border-radius: 10px; }
 
@@ -220,6 +223,7 @@ h3 { font-size: clamp(1.7rem, 3vw, 2.6rem); }
 
 .hero-image { filter: saturate(.72) contrast(1.04); }
 .hero-grid { opacity: .12; }
+.novaryn-hero-logo { position: absolute; z-index: 2; top: 3.8rem; right: 1.25rem; width: min(180px, 34%); height: auto; filter: drop-shadow(0 14px 26px rgba(0, 0, 0, .3)); }
 .hero-badge { border-radius: 14px; background: rgba(7, 16, 20, .78); backdrop-filter: blur(16px); }
 .hero-line { box-shadow: 0 0 12px color-mix(in srgb, var(--amber) 52%, transparent); }
 

@@ -55,7 +55,7 @@
 - Added a restart confirmation after applying camera/live-buffer changes; the relaunch preserves script or frozen-executable arguments. Wired the board guide-line width through preview, calibration, and evidence rendering.
 - Added a camera Help button when no live frame is available, with plain-language checks for source type, camera index, permissions, competing apps, capture mode, and diagnostics.
 - Added a branded startup preparation window and bounded indeterminate progress feedback while starting/resuming/stopping the camera system.
-- Refined the startup splash with the original long-jump hero photograph, stronger two-tone product header, startup state badge, and the restored `© 2026 · Developed by Tomáš Pisár` footer credit.
+- Refined the startup splash with the original long-jump hero photograph, stronger two-tone product header, startup state badge, and the restored `© 2026 · Novaryn Solutions` footer credit.
 - Added `--splash-preview` so the splash can be inspected without starting the camera or judge station.
 - Replaced the indeterminate splash bar with a themed 0–100% startup sequence, staged at 80% while the application initializes, and added a live action-status strip beneath it.
 - Added a visible centered geometry reveal and contraction to the startup splash and its standalone preview, avoiding unreliable platform alpha transitions.

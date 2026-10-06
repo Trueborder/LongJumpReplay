@@ -21,7 +21,7 @@ function env(): Env {
     VERIFICATION_CODE_TTL_MINUTES: "10", MAX_VERIFICATION_ATTEMPTS: "5",
     OFFLINE_VERIFICATION_WINDOW_DAYS: "30", AUTHORIZATION_TTL_DAYS: "30",
     SUBSCRIPTION_GRACE_DAYS: "7", MAIL_FROM: "info@example.com",
-    MAIL_FROM_NAME: "LongJumpReplay", PORTAL_ORIGIN: "https://account.example.com",
+    MAIL_FROM_NAME: "Novaryn Solutions", PORTAL_ORIGIN: "https://account.example.com",
     PORTAL_SESSION_TTL_DAYS: "30", STRIPE_PRICE_LIFETIME: "price_lifetime",
     STRIPE_PRICE_SUBSCRIPTION: "price_subscription", STRIPE_WEBHOOK_SECRET: "webhook",
     STRIPE_SECRET_KEY: "stripe", VERIFICATION_PEPPER: "pepper",

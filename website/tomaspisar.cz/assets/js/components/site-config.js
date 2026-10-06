@@ -1,7 +1,8 @@
 window.SITE_CONFIG = {
   siteUrl: "https://tomaspisar.cz",
   contact: { apiUrl: "https://api.tomaspisar.cz/api/contact", turnstileSiteKey: "0x4AAAAAAEj9IbwE21Qhi_lO" },
-  developer: { name: "Tomáš Pisár", email: "info@tomaspisar.cz", github: "https://github.com/Trueborder" },
+  brand: { name: "Novaryn Solutions", symbol: "https://tomaspisar.cz/assets/images/branding/novaryn-solutions-symbol.png", badge: "https://tomaspisar.cz/assets/images/branding/novaryn-solutions-badge.png" },
+  developer: { name: "Novaryn Solutions", email: "info@tomaspisar.cz", github: "https://github.com/Trueborder" },
   licensing: { deviceLimit: 2, offlineGraceDays: 30, updateMonths: 12 },
   plans: { lifetime: { label: "Lifetime", labelCs: "Doživotní" }, monthly: { label: "Monthly", labelCs: "Měsíční", price: "379 Kč", period: "month", periodCs: "měsíc" } },
   products: {

@@ -21,11 +21,11 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [
-          StringStruct(u'CompanyName', u'Tomáš Pisár'),
+          StringStruct(u'CompanyName', u'Novaryn Solutions'),
           StringStruct(u'FileDescription', u'LongJumpReplay'),
           StringStruct(u'FileVersion', u'$version'),
           StringStruct(u'InternalName', u'LongJumpReplay'),
-          StringStruct(u'LegalCopyright', u'Copyright © 2026 Tomáš Pisár'),
+          StringStruct(u'LegalCopyright', u'Copyright © 2026 Novaryn Solutions'),
           StringStruct(u'OriginalFilename', u'LongJumpReplay.exe'),
           StringStruct(u'ProductName', u'LongJumpReplay'),
           StringStruct(u'ProductVersion', u'$version')
