@@ -1905,6 +1905,30 @@ async function portalLogout(request: Request, env: Env): Promise<Response> {
   return jsonWithClearedPortalSession({ logged_out: true });
 }
 
+async function portalDataExport(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in before requesting your data.", 401);
+  const [profile, licenses, devices] = await Promise.all([
+    findPortalProfile(env.DB, auth.customer.id),
+    listLicensesForCustomer(env.DB, auth.customer.id),
+    listDevicesForCustomer(env.DB, auth.customer.id),
+  ]);
+  await env.DB.prepare("INSERT INTO privacy_requests(id,customer_id,type,created_at,detail) VALUES(?,?,?,?,'self_service_export')").bind(crypto.randomUUID(), auth.customer.id, "export", now()).run();
+  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices });
+}
+
+async function portalDeletionRequest(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in before requesting account deletion.", 401);
+  if (!(await portalPasswordMutationAllowed(request, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null))) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request);
+  if (!(await verifyPassword(passwordFrom(data, "password"), auth.credential?.password_hash || ""))) return fail("invalid_password", "The password is incorrect.", 401);
+  const existing = await env.DB.prepare("SELECT id FROM privacy_requests WHERE customer_id=? AND type='deletion' AND status='open' LIMIT 1").bind(auth.customer.id).first<{ id: string }>();
+  const id = existing?.id || crypto.randomUUID();
+  if (!existing) await env.DB.prepare("INSERT INTO privacy_requests(id,customer_id,type,created_at,detail) VALUES(?,?,?,?,'user_requested')").bind(id, auth.customer.id, "deletion", now()).run();
+  return json({ requested: true, request_id: id, message: "Your deletion request is recorded. Payment, accounting, security and contractual records may need to be retained where required by law." });
+}
+
 /* ------------------------------------------------------------------ Router */
 
 export default {
@@ -1940,6 +1964,9 @@ export default {
       }
       if (path === "/api/portal/account" && request.method === "GET") {
         return withPortalCors(await portalAccount(request, env), request, env);
+      }
+      if (path === "/api/portal/data-export" && request.method === "GET") {
+        return withPortalCors(await portalDataExport(request, env), request, env);
       }
       if (path === "/api/portal/device-details" && request.method === "GET") {
         return withPortalCors(await portalDeviceDetails(request, env), request, env);
@@ -2013,6 +2040,9 @@ export default {
           break;
         case "/api/portal/logout":
           response = await portalLogout(request, env);
+          break;
+        case "/api/portal/account/deletion-request":
+          response = await portalDeletionRequest(request, env);
           break;
         case "/api/portal/billing":
           response = await portalBilling(request, env);

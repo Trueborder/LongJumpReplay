@@ -31,12 +31,15 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
   beforeEach(async () => {
     runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB', 'ES'], compatibilityDate: '2026-08-01' }));
     const db = await runtime.getD1Database('ES'), shared = await runtime.getD1Database('DB');
-    await db.exec(readFileSync('economysuite-migrations/0001_player_portal.sql', 'utf8'));
+    for (const migration of readdirSync('economysuite-migrations').filter(name => name.endsWith('.sql')).sort()) {
+      const sql = readFileSync(`economysuite-migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(';').map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
+      await db.exec(sql);
+    }
     for (const migration of readdirSync('migrations').filter(name => name.endsWith('.sql')).sort()) {
       const sql = readFileSync(`migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(';').map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
       await shared.exec(sql);
     }
-    env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://account.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64) } as Env;
+    env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://account.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'EconomySuite' } as Env;
   });
   afterEach(async () => { vi.unstubAllGlobals(); await runtime?.dispose(); });
   const request = (path: string, payload?: unknown) => new Request(`https://account.tomaspisar.cz/api/economysuite/${path}`, payload ? { method: 'POST', body: JSON.stringify(payload) } : undefined);
@@ -127,6 +130,29 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     expect(second.operation_id).toBe(first.operation_id);
     expect(await db.prepare("SELECT COUNT(*) AS n FROM bridge_operations WHERE kind='refresh'").first('n')).toBe(1);
   });
+  it('rejects checkout without legal acceptance and persists the accepted purchase evidence', async () => {
+    const db = env.ECONOMYSUITE_DB!;
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/products?')) return Response.json({ data: [{ active: true, name: 'Tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 300, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false });
+      return Response.json({ id: 'cs_es', url: 'https://checkout.stripe.com/c/pay' });
+    }));
+    expect((await economySuite(request('checkout', { price_id: 'price_es' }), env, auth)).status).toBe(422);
+    const result = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 300, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
+    expect(result.status).toBe(200);
+    const retry = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 300, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
+    expect(retry.status).toBe(200);
+    expect((await retry.json() as { idempotent?: boolean }).idempotent).toBe(true);
+    expect(await db.prepare('SELECT policy_version,immediate_delivery_requested,withdrawal_rights_acknowledged,displayed_price_minor FROM store_orders').first()).toMatchObject({ policy_version: '2026-10-06', immediate_delivery_requested: 1, withdrawal_rights_acknowledged: 1, displayed_price_minor: 300 });
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM purchase_consents').first('n')).toBe(1);
+    expect(await db.prepare('SELECT status FROM order_confirmations').first('status')).toBe('sent');
+  });
+  it('serves the public EconomySuite catalogue without authentication', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [{ active: true, name: 'Public tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_public', active: true, currency: 'czk', type: 'one_time', unit_amount: 300, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false })));
+    const response = await economySuite(new Request('https://account.tomaspisar.cz/api/economysuite/catalog'), env, { authenticate: async () => null, mutation: async () => false });
+    expect(response.status).toBe(200);
+    expect((await response.json() as { packages: { id: string }[] }).packages[0].id).toBe('price_public');
+  });
   it('registers players without a real-name profile and retains the LongJumpReplay setup gate', async () => {
     const timestamp = Math.floor(Date.now() / 1000), setup = 'verified-test-registration';
     await env.DB.prepare('INSERT INTO portal_registration_challenges(id,email,code_hash,setup_token_hash,purpose,created_at,expires_at,verified_at) VALUES(?,?,?,?,?,?,?,?)').bind('setup', 'owner@example.com', 'verified', await sha256(setup), 'registration', timestamp, timestamp + 300, timestamp).run();
@@ -142,6 +168,15 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     const cookie = playerLogin.headers.get('Set-Cookie')!.match(/ljr-portal-session=[^;]+/)![0];
     const next = await worker.fetch(new Request('https://account.tomaspisar.cz/login?product=economysuite&next=/economysuite/pair', { headers: { Cookie: cookie } }), env);
     expect(next.headers.get('Location')).toBe('https://account.tomaspisar.cz/economysuite/pair');
+    const setCookie = playerLogin.headers.get('Set-Cookie')!;
+    const sessionCookie = setCookie.match(/ljr-portal-session=[^;]+/)![0];
+    const csrfCookie = setCookie.match(/ljr-portal-csrf=([^;]+)/)![1];
+    const exported = await worker.fetch(new Request('https://account.tomaspisar.cz/api/portal/data-export', { headers: { Origin: env.PORTAL_ORIGIN, Cookie: sessionCookie } }), env);
+    expect(exported.status).toBe(200);
+    expect((await exported.json() as { customer: { email: string } }).customer.email).toBe('owner@example.com');
+    const deletion = await worker.fetch(new Request('https://account.tomaspisar.cz/api/portal/account/deletion-request', { method: 'POST', headers: { Origin: env.PORTAL_ORIGIN, Cookie: `${sessionCookie}; ljr-portal-csrf=${csrfCookie}`, 'X-CSRF-Token': decodeURIComponent(csrfCookie), 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }), env);
+    expect(deletion.status).toBe(200);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM privacy_requests WHERE type='deletion'").first('n')).toBe(1);
   });
   it('only stores the allowlisted gameplay snapshot and never publishes secrets', async () => {
     await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();

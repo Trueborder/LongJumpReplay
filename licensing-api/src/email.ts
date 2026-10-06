@@ -21,6 +21,28 @@ export interface VerificationEmail {
   replyTo?: string;
 }
 
+export function orderConfirmationEmail(order: { orderId: string; productName: string; amount: number; currency: string; priceMinor: number; purchaseUrl: string; refundUrl: string }): VerificationEmail {
+  const price = `${(order.priceMinor / 100).toFixed(2).replace('.', ',')} Kč`;
+  return {
+    subject: `[EconomySuite] Potvrzení objednávky ${order.orderId}`,
+    text: [
+      'EconomySuite — potvrzení objednávky',
+      '',
+      `Objednávka: ${order.orderId}`,
+      `Produkt: ${order.productName}`,
+      `Obsah: ${order.amount} ${order.currency}`,
+      `Cena: ${price}`,
+      '',
+      'Digitální obsah bude doručen do propojeného hráče po potvrzení platby. Pokud je server offline, objednávka zůstane ve frontě.',
+      `Podmínky nákupu: ${order.purchaseUrl}`,
+      `Vrácení peněz a odstoupení: ${order.refundUrl}`,
+      '',
+      'EconomySuite není přidružena ke společnostem Mojang ani Microsoft.',
+    ].join('\n'),
+    html: `<!doctype html><html lang="cs"><head><meta charset="utf-8"><title>Potvrzení objednávky</title></head><body><h1>Potvrzení objednávky EconomySuite</h1><p><strong>Objednávka:</strong> ${escapeHtml(order.orderId)}</p><p><strong>Produkt:</strong> ${escapeHtml(order.productName)}</p><p><strong>Obsah:</strong> ${order.amount} ${escapeHtml(order.currency)}</p><p><strong>Cena:</strong> ${escapeHtml(price)}</p><p>Po potvrzení platby bude digitální obsah doručen do propojeného hráče. Pokud je server offline, objednávka zůstane ve frontě.</p><p><a href="${escapeHtml(order.purchaseUrl)}">Podmínky nákupu</a> · <a href="${escapeHtml(order.refundUrl)}">Vrácení peněz a odstoupení</a></p><p>EconomySuite není přidružena ke společnostem Mojang ani Microsoft.</p></body></html>`,
+  };
+}
+
 export class EmailDeliveryError extends Error {
   constructor(public readonly providerStatus: number, detail = "") {
     super(`email send failed with ${providerStatus}${detail ? `: ${detail}` : ""}`);

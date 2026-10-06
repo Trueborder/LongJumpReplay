@@ -304,6 +304,15 @@
   document.querySelectorAll('.site-footer').forEach((footer) => {
     const shell = footerShell(footer);
     const links = shell.querySelector('.site-footer-links');
+    if (!links.querySelector('[data-legal-link]')) {
+      const legal = document.createElement('a');
+      legal.href = '/legal/';
+      legal.dataset.legalLink = '';
+      legal.dataset.en = 'Legal';
+      legal.dataset.cs = 'Právní informace';
+      legal.textContent = lang === 'cs' ? legal.dataset.cs : legal.dataset.en;
+      links.append(legal);
+    }
     const github = cfg.developer?.github;
     if (!github || links.querySelector('[data-github-link]')) return;
     const link = document.createElement('a');

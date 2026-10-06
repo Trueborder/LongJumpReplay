@@ -2,13 +2,15 @@ import type { Env } from './config';
 import { generateToken, sha256, timingSafeEqual, verifyPassword } from './crypto';
 import { now, rateLimit } from './db';
 import { verifySignature } from './stripe';
+import { mailer, orderConfirmationEmail } from './email';
+import { ECONOMYSUITE_POLICY_URLS, ECONOMYSUITE_POLICY_VERSIONS, policyVersionsMatch } from './economysuite-compliance';
 
 export interface PlayerAuth { customer: { id: string; email: string }; credential: { password_hash: string } | null }
 export interface EconomyAuth { authenticate(request: Request): Promise<PlayerAuth | null>; mutation(request: Request): Promise<boolean> }
 export type Currency = 'coins' | 'tokens';
 interface Package { id: string; name: string; description: string; currency: Currency; amount: number; price_minor: number; sort: number }
 interface Link { customer_id: string; uuid: string; name: string; leaderboard: number }
-interface Order { id: string; customer_id: string; uuid: string; player_name: string; price_id: string; currency_type: Currency; currency_amount: number; price_minor: number; session_id: string | null; payment_intent: string | null; dispute_id: string | null; paid: number; target_amount: number; revision: number; delivered_revision: number; state: string; receipt_url: string | null; created_at: number }
+interface Order { id: string; customer_id: string; uuid: string; player_name: string; price_id: string; currency_type: Currency; currency_amount: number; price_minor: number; session_id: string | null; payment_intent: string | null; dispute_id: string | null; paid: number; target_amount: number; revision: number; delivered_revision: number; state: string; receipt_url: string | null; receipt_reference: string | null; created_at: number }
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 const error = (code: string, message: string, status = 400) => reply({ error: code, message }, status);
@@ -47,6 +49,35 @@ async function stripe(env: Env, path: string, values?: Record<string, string>, i
   const response = await fetch(`https://api.stripe.com/v1/${path}`, { method: values ? 'POST' : 'GET', headers, body: values ? new URLSearchParams(values) : undefined, signal: AbortSignal.timeout(10000) });
   if (!response.ok) throw new Error(`EconomySuite Stripe request failed (${response.status})`);
   return object(JSON.parse(await boundedText(response, 2_000_000)));
+}
+async function consentIpHash(env: Env, request: Request): Promise<string | null> {
+  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim();
+  if (!ip) return null;
+  return sha256(`${env.VERIFICATION_PEPPER || env.ECONOMYSUITE_BRIDGE_SECRET || 'economysuite'}:${ip}`);
+}
+function consentUserAgent(request: Request): string | null {
+  const value = request.headers.get('User-Agent')?.trim();
+  return value ? value.slice(0, 300) : null;
+}
+async function sendOrderConfirmation(env: Env, db: D1Database, orderId: string, email: string, pack: Package): Promise<void> {
+  await db.prepare('INSERT OR IGNORE INTO order_confirmations(id,order_id,customer_id,email,status,created_at) SELECT ?,id,customer_id,?,\'pending\',? FROM store_orders WHERE id=?').bind(crypto.randomUUID(), email, now(), orderId).run();
+  try {
+    await mailer(env).send(email, orderConfirmationEmail({
+      orderId,
+      productName: pack.name,
+      amount: pack.amount,
+      currency: pack.currency,
+      priceMinor: pack.price_minor,
+      purchaseUrl: ECONOMYSUITE_POLICY_URLS.purchase,
+      refundUrl: ECONOMYSUITE_POLICY_URLS.refund,
+    }));
+    await db.batch([
+      db.prepare("UPDATE order_confirmations SET status='sent',sent_at=? WHERE order_id=? AND status='pending'").bind(now(), orderId),
+      db.prepare('UPDATE store_orders SET order_confirmation_sent_at=? WHERE id=?').bind(now(), orderId),
+    ]);
+  } catch (failure) {
+    await db.prepare("UPDATE order_confirmations SET status='failed',error_code=? WHERE order_id=? AND status='pending'").bind(failure instanceof Error ? failure.name.slice(0, 80) : 'delivery_failed', orderId).run();
+  }
 }
 export function packageFromProduct(value: unknown): Package | null {
   const p = object(value), m = object(p.metadata), price = object(p.default_price), pm = object(price.metadata);
@@ -127,7 +158,7 @@ async function webhook(request: Request, env: Env, db: D1Database): Promise<Resp
   const revision = order.revision + 1, timestamp = now(), operation = crypto.randomUUID();
   const changed = await db.batch([
     db.prepare('INSERT INTO bridge_operations(id,uuid,kind,payload,order_id,revision,created_at) SELECT ?,?,?,?,?,?,? FROM store_orders WHERE id=? AND revision=?').bind(operation, order.uuid, 'purchase', JSON.stringify({ order_id: order.id, currency: order.currency_type, target_amount: target, revision }), order.id, revision, timestamp, order.id, order.revision),
-    db.prepare('UPDATE store_orders SET paid=1,payment_intent=?,dispute_id=?,target_amount=?,revision=?,state=?,receipt_url=?,updated_at=? WHERE id=? AND revision=?').bind(intentId, disputeId, target, revision, state, s(charge.receipt_url) || null, timestamp, order.id, order.revision),
+    db.prepare('UPDATE store_orders SET paid=1,payment_intent=?,dispute_id=?,target_amount=?,revision=?,state=?,receipt_url=?,receipt_reference=?,updated_at=? WHERE id=? AND revision=?').bind(intentId, disputeId, target, revision, state, s(charge.receipt_url) || null, s(charge.id) || intentId, timestamp, order.id, order.revision),
     db.prepare('INSERT OR IGNORE INTO webhook_events(id,processed_at) SELECT ?,? WHERE EXISTS(SELECT 1 FROM bridge_operations WHERE id=?)').bind(eventId, timestamp, operation),
   ]);
   if (!changed[1].meta.changes) return error('retry', 'Concurrent order update. Retry.', 503);
@@ -207,6 +238,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   if (request.method !== 'GET' && !(await auth.mutation(request))) return error('forbidden', 'Invalid request.', 403);
   if (!(await rateLimit(env.DB, `es:${player.customer.id}`, 60, 90))) return error('rate_limited', 'Please try again shortly.', 429);
   const link = await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind(player.customer.id).first<Link>();
+  const data = request.method === 'POST' ? await body(request) : {};
   if (path === '/api/economysuite/account' && request.method === 'GET') {
     const snapshot = link ? await db.prepare('SELECT payload,synced_at FROM player_snapshots WHERE uuid=?').bind(link.uuid).first<{ payload: string; synced_at: number }>() : null;
     const heartbeat = await db.prepare("SELECT last_seen FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number }>();
@@ -217,8 +249,22 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
   }
   if (path === '/api/economysuite/orders' && request.method === 'GET') {
-    const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
+    const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,receipt_reference,order_confirmation_sent_at,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
     return reply({ orders: orders.results });
+  }
+  if (path === '/api/economysuite/export' && request.method === 'GET') {
+    const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_reference,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
+    return reply({ exported_at: now(), account: { email: player.customer.email, link }, orders: orders.results });
+  }
+  if (path === '/api/economysuite/confirmation/retry' && request.method === 'POST') {
+    const orderId = s(data.order_id);
+    const order = await db.prepare('SELECT id,price_id FROM store_orders WHERE id=? AND customer_id=?').bind(orderId, player.customer.id).first<{ id: string; price_id: string }>();
+    if (!order) return error('not_found', 'Order not found.', 404);
+    const pack = (await catalog(env)).find(p => p.id === order.price_id);
+    if (!pack) return error('invalid_package', 'The package is no longer available.', 409);
+    await db.prepare("UPDATE order_confirmations SET status='pending',error_code=NULL WHERE order_id=? AND status='failed'").bind(orderId).run();
+    await sendOrderConfirmation(env, db, orderId, player.customer.email, pack);
+    return reply({ queued: true });
   }
   if (path === '/api/economysuite/leaderboard' && request.method === 'GET') {
     const metric = new URL(request.url).searchParams.get('metric') || 'playtime';
@@ -226,7 +272,6 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     const rows = await db.prepare("SELECT l.uuid,l.name,CAST(json_extract(s.payload, ?) AS INTEGER) AS value FROM player_links l JOIN player_snapshots s ON s.uuid=l.uuid WHERE l.leaderboard=1 ORDER BY value DESC,l.name LIMIT 50").bind(`$.statistics.all_time.${metric}`).all();
     return reply({ metric, entries: rows.results });
   }
-  const data = request.method === 'POST' ? await body(request) : {};
   if (path === '/api/economysuite/pair/inspect' && request.method === 'POST') {
     const row = await db.prepare('SELECT uuid,name,expires_at FROM pairing_challenges WHERE token_hash=? AND expires_at>? AND confirmed_at IS NULL').bind(await sha256(s(data.token)), now()).first();
     return row ? reply(row) : error('pair_expired', 'Start a new pairing with /web link.', 410);
@@ -275,13 +320,32 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     if (env.ECONOMYSUITE_PURCHASES_ENABLED !== 'true') return error('unavailable', 'Purchases are not available yet.', 503);
     const pack = (await catalog(env)).find(p => p.id === s(data.price_id));
     if (!pack) return error('invalid_package', 'This package is no longer available.');
-    const id = crypto.randomUUID(), timestamp = now();
-    await db.prepare('INSERT INTO store_orders(id,customer_id,uuid,player_name,price_id,currency_type,currency_amount,price_minor,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id, player.customer.id, link.uuid, link.name, pack.id, pack.currency, pack.amount, pack.price_minor, timestamp, timestamp).run();
+    if (data.accepted_purchase_terms !== true || data.immediate_delivery_requested !== true || data.withdrawal_rights_acknowledged !== true || !policyVersionsMatch(data.policy_versions)) {
+      return error('purchase_consent_required', 'Před platbou potvrďte podmínky nákupu, okamžité digitální dodání a ztrátu práva na odstoupení.', 422);
+    }
+    const displayedPrice = integer(data.displayed_price_minor, 0);
+    if (displayedPrice !== pack.price_minor || s(data.displayed_currency) !== 'czk') return error('price_changed', 'Cena se změnila. Obnovte katalog a zkontrolujte objednávku.', 409);
+    const checkoutKey = s(data.idempotency_key);
+    if (!/^[A-Za-z0-9_-]{16,100}$/.test(checkoutKey)) return error('invalid_input', 'Chybí bezpečný identifikátor objednávky.', 422);
+    const existing = await db.prepare('SELECT id,session_id FROM store_orders WHERE checkout_key=? AND customer_id=?').bind(checkoutKey, player.customer.id).first<{ id: string; session_id: string | null }>();
+    if (existing?.session_id) {
+      const checkout = await stripe(env, `checkout/sessions/${encodeURIComponent(existing.session_id)}`);
+      const checkoutUrl = s(checkout.url);
+      if (checkoutUrl.startsWith('https://checkout.stripe.com/')) return reply({ url: checkoutUrl, order_id: existing.id, idempotent: true });
+    }
+    if (existing) return error('checkout_retry', 'Objednávka se zpracovává. Zkuste to za chvíli.', 409);
+    const id = crypto.randomUUID(), timestamp = now(), vatNotice = 'DPH/VAT: režim a zahrnutí DPH bude doplněno provozovatelem.';
+    const ipHash = await consentIpHash(env, request), userAgent = consentUserAgent(request), policy = ECONOMYSUITE_POLICY_VERSIONS;
+    await db.batch([
+      db.prepare('INSERT INTO store_orders(id,customer_id,uuid,player_name,price_id,currency_type,currency_amount,price_minor,checkout_key,product_name,displayed_currency,displayed_price_minor,vat_notice,policy_version,immediate_delivery_requested,withdrawal_rights_acknowledged,consent_at,consent_ip_hash,consent_user_agent,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, player.customer.id, link.uuid, link.name, pack.id, pack.currency, pack.amount, pack.price_minor, checkoutKey, pack.name, 'czk', pack.price_minor, vatNotice, policy.purchase, 1, 1, timestamp, ipHash, userAgent, timestamp, timestamp),
+      db.prepare('INSERT INTO purchase_consents(id,order_id,customer_id,accepted_at,policy_version,terms_version,refund_version,delivery_version,immediate_delivery_requested,withdrawal_rights_acknowledged,ip_hash,user_agent,product_id,product_name,displayed_price_minor,displayed_currency,vat_notice) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, player.customer.id, timestamp, policy.privacy, policy.purchase, policy.refund, policy.delivery, 1, 1, ipHash, userAgent, pack.id, pack.name, pack.price_minor, 'czk', vatNotice),
+    ]);
     try {
-      const checkout = await stripe(env, 'checkout/sessions', { mode: 'payment', customer_email: player.customer.email, 'line_items[0][price]': pack.id, 'line_items[0][quantity]': '1', 'metadata[purchase_type]': 'economysuite_currency', 'metadata[order_id]': id, 'metadata[customer_id]': player.customer.id, 'metadata[player_uuid]': link.uuid, 'payment_intent_data[metadata][purchase_type]': 'economysuite_currency', success_url: `${env.PORTAL_ORIGIN}/economysuite/purchases?order=${id}`, cancel_url: `${env.PORTAL_ORIGIN}/economysuite/store`, expires_at: String(timestamp + 1800), integration_identifier: `economysuite_${generateToken().replace(/[^a-z]/gi, '').slice(0, 8).padEnd(8, 'x')}` }, id);
+      const checkout = await stripe(env, 'checkout/sessions', { mode: 'payment', locale: 'cs', customer_email: player.customer.email, 'line_items[0][price]': pack.id, 'line_items[0][quantity]': '1', 'metadata[purchase_type]': 'economysuite_currency', 'metadata[order_id]': id, 'metadata[customer_id]': player.customer.id, 'metadata[player_uuid]': link.uuid, 'metadata[policy_version]': policy.purchase, 'metadata[consent_at]': String(timestamp), 'payment_intent_data[metadata][purchase_type]': 'economysuite_currency', 'payment_intent_data[metadata][order_id]': id, success_url: `${env.PORTAL_ORIGIN}/economysuite/purchases?order=${id}`, cancel_url: `${env.PORTAL_ORIGIN}/economysuite/store`, expires_at: String(timestamp + 1800), integration_identifier: `economysuite_${generateToken().replace(/[^a-z]/gi, '').slice(0, 8).padEnd(8, 'x')}` }, checkoutKey);
       const checkoutUrl = s(checkout.url);
       if (!checkoutUrl.startsWith('https://checkout.stripe.com/')) throw new Error('Invalid checkout URL');
       await db.prepare('UPDATE store_orders SET session_id=? WHERE id=?').bind(s(checkout.id), id).run();
+      await sendOrderConfirmation(env, db, id, player.customer.email, pack);
       return reply({ url: checkoutUrl, order_id: id });
     } catch (failure) {
       await db.prepare("UPDATE store_orders SET state='cancelled' WHERE id=?").bind(id).run();
