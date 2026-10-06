@@ -4,7 +4,23 @@
   const page = document.body.dataset.portalPage;
   const productParams = new URLSearchParams(window.location.search);
   const playerProduct = productParams.get('product') === 'economysuite';
+  const loginProduct = playerProduct ? 'economysuite' : 'longjumpreplay';
   const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
+  if (page === 'login') {
+    const destination = document.querySelector('#form-title');
+    const productCopy = playerProduct
+      ? { en: 'Pantheon / EconomySuite', cs: 'Pantheon / EconomySuite' }
+      : { en: 'LongJumpReplay', cs: 'LongJumpReplay' };
+    if (destination) {
+      destination.dataset.en = productCopy.en;
+      destination.dataset.cs = productCopy.cs;
+      destination.textContent = document.documentElement.lang === 'cs' ? productCopy.cs : productCopy.en;
+    }
+    document.querySelectorAll('[data-login-product]').forEach((link) => {
+      if (link.dataset.loginProduct === loginProduct) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+  }
   if (playerProduct && ['login', 'register'].includes(page)) {
     document.title = 'Pantheon / EconomySuite — Account';
     const eyebrow = document.querySelector('.account-intro .eyebrow span[data-en]');
