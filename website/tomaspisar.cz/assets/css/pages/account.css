@@ -664,7 +664,7 @@
   background: #fffefa;
   box-shadow: 0 26px 70px rgba(21, 49, 57, .16);
   transform: none;
-  animation: portal-login-card-in 360ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: focused-login-card-in 360ms cubic-bezier(.2, .8, .2, 1) both;
   backdrop-filter: none;
 }
 .login-card-bar {
@@ -750,4 +750,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .portal-login-page .login-card { animation: none; }
+}
+
+@keyframes focused-login-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to { opacity: 1; transform: none; }
 }
