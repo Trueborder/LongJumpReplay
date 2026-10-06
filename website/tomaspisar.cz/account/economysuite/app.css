@@ -40,4 +40,6 @@
 .es-purchase-consent label{display:flex;gap:.65rem;align-items:flex-start;line-height:1.5}
 .es-purchase-consent input{margin-top:.25rem;accent-color:#7c3aed}
 .es-purchase-consent a{color:#6d28d9;text-decoration:underline;text-underline-offset:.2em}
+.es-support-note{border-left:4px solid #7c3aed;background:linear-gradient(135deg,#faf5ff,#fff)}
+.es-support-note strong{color:#5b21b6}
 .es-pack-price small{font-size:.65em;color:#64748b}
