@@ -631,6 +631,7 @@
 /* One-purpose login: the destination and credentials share a single card. */
 .portal-login-page {
   min-height: 100dvh;
+  padding-top: 0;
   overflow: auto;
   background:
     radial-gradient(circle at 50% 12%, rgba(20, 132, 116, .09), transparent 34rem),
