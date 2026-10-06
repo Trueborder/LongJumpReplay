@@ -4,8 +4,21 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let lang = localStorage.getItem('es-language') === 'en' ? 'en' : 'cs';
   let account = null, packages = [], purchasesEnabled = false, orders = [], rankings = [], metric = 'playtime';
+  let refreshBaseline = null, refreshStarted = 0;
   const route = location.pathname.split('/')[2] || 'overview';
+  const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
   const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], store: ['Obchod', 'Store'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
+  const paths = {
+    overview: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
+    statistics: '<path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/>', progress: '<path d="m4 12 5 5L20 6"/>',
+    appearance: '<path d="m12 3 1.4 4.1L18 8.5l-4.1 1.4L12.5 14l-1.4-4.1L7 8.5l4.1-1.4L12 3Zm-6 9 .8 2.2L9 15l-2.2.8L6 18l-.8-2.2L3 15l2.2-.8L6 12Zm11 3 1 2.8 3 1-3 1L17 23l-1-3.2-3-1 3-1L17 15Z"/>',
+    store: '<path d="M4 9h16l-1 11H5L4 9Zm3 0a5 5 0 0 1 10 0"/>', purchases: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/>'
+  };
+  const icon = name => `<svg class="es-icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.overview}</svg>`;
+  const currencyIcon = currency => currency === 'tokens'
+    ? '<svg class="es-currency-icon es-amethyst" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 27 11 21 28H10L4 12Z"/><path d="m16 2-2 10 7 16M4 12l10 0 13-1M10 28l4-16"/></svg>'
+    : '<svg class="es-currency-icon es-sunflower" viewBox="0 0 32 32" aria-hidden="true"><path class="stem" d="M16 18v12m0-5-6-3m6 4 6-4"/><g class="petals"><circle cx="16" cy="5" r="5"/><circle cx="25" cy="9" r="5"/><circle cx="25" cy="19" r="5"/><circle cx="7" cy="19" r="5"/><circle cx="7" cy="9" r="5"/></g><circle class="centre" cx="16" cy="14" r="6"/></svg>';
   const t = (cs, en) => lang === 'cs' ? cs : en;
   const number = value => new Intl.NumberFormat(lang === 'cs' ? 'cs-CZ' : 'en-GB').format(Number(value || 0));
   const money = value => new Intl.NumberFormat(lang === 'cs' ? 'cs-CZ' : 'en-GB', { style: 'currency', currency: 'CZK' }).format(Number(value) / 100);
@@ -39,11 +52,11 @@
   const table = (headers, rows) => `<div class="es-table-wrap"><table class="es-table"><thead><tr>${headers.map(h => `<th>${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   const row = cells => `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
   const statNames = { playtime: ['Doba hraní (min)', 'Playtime (min)'], blocks_mined: ['Vytěžené bloky', 'Blocks mined'], blocks_placed: ['Položené bloky', 'Blocks placed'], mobs_killed: ['Zabití mobové', 'Mobs killed'], deaths: ['Úmrtí', 'Deaths'], crafted: ['Výroba', 'Crafting'], smelted: ['Tavení', 'Smelting'], fish_caught: ['Ulovené ryby', 'Fish caught'], breeding: ['Chov', 'Breeding'], trades: ['Obchody', 'Trades'], items_sold: ['Prodané předměty', 'Items sold'], items_bought: ['Koupené předměty', 'Items bought'], challenges_won: ['Vyhrané výzvy', 'Challenges won'], tasks_completed: ['Dokončené úkoly', 'Completed tasks'], crates_opened: ['Otevřené crates', 'Crates opened'], daily_claims: ['Denní odměny', 'Daily claims'], passive_job_coins: ['Výdělek z profese', 'Job income'], duel_wins: ['Výhry v duelech', 'Duel wins'], duel_losses: ['Prohry v duelech', 'Duel losses'], duel_draws: ['Remízy v duelech', 'Duel draws'], duel_damage: ['Poškození v duelech', 'Duel damage'] };
-  const metricCard = (title, value, note) => `<section class="es-panel es-metric"><small>${escape(title)}</small><strong>${number(value)}</strong><span class="es-label">${escape(note)}</span></section>`;
+  const metricCard = (title, value, note, currency = '') => `<section class="es-panel es-metric"><div class="es-metric-heading">${currency ? currencyIcon(currency) : icon('statistics')}<small>${escape(title)}</small></div><strong>${number(value)}</strong><span class="es-label">${escape(note)}</span></section>`;
   function overview(snapshot) {
     const level = snapshot.level || {};
     const debt = Number(snapshot.debt?.coins || 0) + Number(snapshot.debt?.tokens || 0);
-    return `<div class="es-grid">${metricCard('Coins', snapshot.coins, t('Dostupný zůstatek', 'Available balance'))}${metricCard('Tokens', snapshot.tokens, `${t('Čekající', 'Pending')}: ${number(snapshot.pending_tokens)}`)}${metricCard(t('Aktivní minuty', 'Active minutes'), snapshot.active_minutes, t('Počítá se pouze hra na serveru', 'Only server gameplay counts'))}</div>` +
+    return `<div class="es-grid">${metricCard('Coins', snapshot.coins, t('Dostupný zůstatek', 'Available balance'), 'coins')}${metricCard('Tokens', snapshot.tokens, `${t('Čekající', 'Pending')}: ${number(snapshot.pending_tokens)}`, 'tokens')}${metricCard(t('Aktivní minuty', 'Active minutes'), snapshot.active_minutes, t('Počítá se pouze hra na serveru', 'Only server gameplay counts'))}</div>` +
       panel(t('Tvoje úroveň', 'Your level'), `<div class="es-level"><span class="es-level-number">${number(level.level || 1)}</span><div><strong>${number(level.xp)} XP</strong><p>${escape(t('XP a odměny získáváš hraním na Pantheonu.', 'Earn XP and rewards by playing on Pantheon.'))}</p></div></div>`) +
       panel(t('Profese a odměny', 'Job and rewards'), `<div class="es-detail"><span>${t('Profese', 'Job')}</span><strong>${escape(strip(snapshot.job?.display || snapshot.job?.id || t('Nevybraná', 'Not selected')))}</strong></div><div class="es-detail"><span>${t('Úroveň profese', 'Job level')}</span><strong>${number(snapshot.job?.level)}</strong></div><div class="es-detail"><span>${t('Denní kalendář', 'Daily calendar')}</span><strong>${number(snapshot.daily?.day)} / 30</strong></div><p>${escape(t('Odměny si vyzvedni ve hře. Webová aktivita nepřidává aktivní čas ani tokeny.', 'Claim rewards in-game. Website activity does not add active time or tokens.'))}</p>`) +
       (debt ? panel(t('Dluh po vrácení platby', 'Refund debt'), `<p>${number(snapshot.debt.coins)} coins · ${number(snapshot.debt.tokens)} tokens</p><p>${escape(t('Utrácení a převody jsou pozastavené, dokud dluh nesplatíš. Další příjmy nejdřív splácejí dluh příslušné měny.', 'Spending and transfers are paused until the debt is settled. Future income first pays down debt in the same currency.'))}</p>`) : '');
@@ -71,16 +84,25 @@
   }
   function store() {
     return `<div class="es-panel"><p>${escape(t('Jednorázové balíčky pro tvůj propojený účet na Pantheonu. Coins a tokens nemají peněžní hodnotu a nelze je vybrat za skutečné peníze.', 'One-time packages for your paired Pantheon account. Coins and tokens have no monetary value and cannot be cashed out.'))}</p><p>${escape(t('Hráč může být offline. Pokud server neběží, zaplacený balíček počká na doručení.', 'Your player can be offline. If the server is stopped, a paid package waits for delivery.'))}</p></div>` +
-      (packages.length ? `<div class="es-grid">${packages.map(pack => panel(pack.name, `<div class="es-pack-amount">${number(pack.amount)} ${escape(pack.currency)}</div><p>${escape(pack.description)}</p><span class="es-pack-price">${money(pack.price_minor)}</span><button class="es-primary buy" data-price="${escape(pack.id)}" ${!purchasesEnabled || !account?.link ? 'disabled' : ''}>${t('Koupit přes Stripe', 'Buy with Stripe')}</button>`, 'es-pack')).join('')}</div>` : panel(t('Obchod se připravuje.', 'The store is being prepared.'), `<p>${escape(t('Balíčky a ceny zde budou zveřejněné před otevřením prodeje.', 'Packages and prices will be published here before sales open.'))}</p>`, 'es-empty')) +
+      (packages.length ? `<div class="es-grid">${packages.map(pack => panel(pack.name, `<div class="es-pack-amount">${currencyIcon(pack.currency)}<span>${number(pack.amount)} ${escape(pack.currency)}</span></div><p>${escape(pack.description)}</p><span class="es-pack-price">${money(pack.price_minor)}</span><button class="es-primary buy" data-price="${escape(pack.id)}" ${!purchasesEnabled || !account?.link ? 'disabled' : ''}>${icon('store')}${t('Koupit přes Stripe', 'Buy with Stripe')}</button>`, 'es-pack')).join('')}</div>` : panel(t('Obchod se připravuje.', 'The store is being prepared.'), `<p>${escape(t('Balíčky a ceny zde budou zveřejněné před otevřením prodeje.', 'Packages and prices will be published here before sales open.'))}</p>`, 'es-empty')) +
       (!account?.link ? `<p>${t('Pro nákup se přihlas a propoj hráče.', 'Sign in and pair your player to purchase.')} <a href="/login?product=economysuite">${t('Přihlásit se', 'Sign in')}</a></p>` : '');
   }
   function purchases() {
     const labels = { checkout: ['Čeká na platbu', 'Awaiting payment'], cancelled: ['Zrušeno', 'Cancelled'], paid: ['Zaplaceno', 'Paid'], refunded: ['Vráceno', 'Refunded'], partially_refunded: ['Částečně vráceno', 'Partially refunded'], disputed: ['Spor o platbu', 'Payment dispute'] };
-    return panel(t('Historie nákupů', 'Purchase history'), orders.length ? table([t('Datum', 'Date'), t('Balíček', 'Package'), t('Cena', 'Price'), t('Stav', 'Status'), t('Doklad', 'Receipt')], orders.map(order => {
+    const thanks = successfulOrder ? thankYou(orders.find(order => order.id === successfulOrder)) : '';
+    return thanks + panel(t('Historie nákupů', 'Purchase history'), orders.length ? table([t('Datum', 'Date'), t('Balíček', 'Package'), t('Cena', 'Price'), t('Stav', 'Status'), t('Doklad', 'Receipt')], orders.map(order => {
       const receipt = /^https:\/\/(pay|invoice|dashboard)\.stripe\.com\//.test(order.receipt_url || '') ? `<a href="${escape(order.receipt_url)}" rel="noopener" target="_blank">${t('Otevřít', 'Open')}</a>` : '—';
       const delivery = order.revision > 0 ? order.delivered_revision >= order.revision ? t('Potvrzeno serverem', 'Confirmed by server') : t('Čeká na server', 'Waiting for server') : '';
-      return row([escape(date(order.created_at)), `${number(order.currency_amount)} ${escape(order.currency_type)}<br><span class="es-muted">${escape(order.player_name)}</span>`, money(order.price_minor), `${escape(t(...(labels[order.state] || [order.state, order.state])))}<br><span class="es-muted">${escape(delivery)}</span>`, receipt]);
+      return row([escape(date(order.created_at)), `<span class="es-order-item">${currencyIcon(order.currency_type)}<span>${number(order.currency_amount)} ${escape(order.currency_type)}<br><span class="es-muted">${escape(order.player_name)}</span></span></span>`, money(order.price_minor), `${escape(t(...(labels[order.state] || [order.state, order.state])))}<br><span class="es-muted">${escape(delivery)}</span>`, receipt]);
     })) : `<p>${t('Zatím nemáš žádné nákupy.', 'You have no purchases yet.')}</p>`);
+  }
+  function thankYou(order) {
+    const paid = order && order.revision > 0, delivered = paid && order.delivered_revision >= order.revision;
+    const state = delivered ? 'delivered' : paid ? 'delivering' : 'confirming';
+    const heading = delivered ? t('Děkujeme! Nákup je ve hře.', 'Thank you! Your purchase is in-game.') : paid ? t('Děkujeme za nákup.', 'Thank you for your purchase.') : t('Děkujeme. Ověřujeme platbu.', 'Thank you. We are confirming your payment.');
+    const detail = delivered ? t('Server doručení potvrdil. Zůstatek uvidíš přes /money nebo /tokens.', 'The server confirmed delivery. Check your balance with /money or /tokens.') : paid ? t('Platba je potvrzená a server balíček doručuje. Obvykle to trvá do pěti sekund.', 'Payment is confirmed and the server is delivering your package. This usually takes up to five seconds.') : t('Stripe nás právě vrací k objednávce. Potvrzení může trvat až 30 sekund; stránku můžeš bezpečně opustit.', 'Stripe is returning you to the order. Confirmation can take up to 30 seconds; you may safely leave this page.');
+    const item = order ? `<div class="es-thanks-item">${currencyIcon(order.currency_type)}<strong>${number(order.currency_amount)} ${escape(order.currency_type)}</strong><span>${money(order.price_minor)}</span></div>` : '';
+    return `<section class="es-thanks" data-state="${state}"><div class="es-thanks-check" aria-hidden="true">${delivered ? '✓' : '···'}</div><div><p class="es-eyebrow">STRIPE / PANTHEON</p><h2>${heading}</h2><p>${detail}</p>${item}<ol><li>${t('Připoj se na Pantheon.', 'Join Pantheon.')}</li><li>${t('Otevři chat a použij /money nebo /tokens.', 'Open chat and use /money or /tokens.')}</li><li>${t('Když je server offline, nákup zůstane bezpečně čekat.', 'If the server is offline, the purchase remains safely queued.')}</li></ol></div></section>`;
   }
   function settings() {
     return panel(t('Propojený hráč', 'Paired player'), account.link ? `<p><strong>${escape(account.link.name)}</strong><br><span class="es-muted">${escape(account.link.uuid)}</span></p><form id="unlink-form" class="es-form"><label for="unlink-password">${t('Potvrď odpojení heslem k webovému účtu', 'Confirm unlinking with your website password')}</label><input id="unlink-password" type="password" autocomplete="current-password" required><button type="submit" class="es-danger">${t('Odpojit hráče', 'Unlink player')}</button></form>` : empty()) +
@@ -101,17 +123,28 @@
     if (!pairing) return empty();
     return panel(t('Propojit hráče', 'Pair player'), `<h2>${escape(pairing.name)}</h2><p>${t('Potvrď pouze hráče, který je tvůj. Po potvrzení zde získáš příkaz pro dokončení ve hře.', 'Confirm only your own player. You will receive a command to finish pairing in-game.')}</p><button id="approve-pair" class="es-primary">${t('Potvrdit hráče', 'Confirm player')}</button><div id="pair-command"></div>`);
   }
+  function renderConnection() {
+    const state = account?.server_status || 'connecting';
+    const labels = { connected: ['Server je připojený', 'Server connected'], connecting: ['Server se připojuje…', 'Server connecting…'], disconnected: ['Server je odpojený', 'Server disconnected'] };
+    const connection = $('#connection');
+    connection.dataset.state = state;
+    connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t(...labels[state]))}</span>`;
+    connection.title = account?.server_last_seen ? `${t('Poslední kontakt', 'Last contact')}: ${date(account.server_last_seen)}` : t('Čekáme na první kontakt se serverem.', 'Waiting for the first server contact.');
+    const refresh = $('#refresh-data');
+    refresh.hidden = !account?.link;
+    refresh.disabled = refreshBaseline !== null;
+    refresh.querySelector('span').textContent = refreshBaseline !== null ? t('Obnovuji…', 'Refreshing…') : t('Obnovit data', 'Refresh data');
+  }
   function render() {
     document.documentElement.lang = lang;
-    document.title = `${t(...(names[route] || names.overview))} — Pantheon`;
+    document.title = successfulOrder ? `${t('Děkujeme za nákup', 'Thank you for your purchase')} — Pantheon` : `${t(...(names[route] || names.overview))} — Pantheon`;
     $('#language').textContent = lang === 'cs' ? 'EN' : 'CZ'; $('#logout').textContent = t('Odhlásit se', 'Sign out'); $('#logout').hidden = !account;
     $('#support').textContent = t('Podpora', 'Support');
-    $('#page-title').textContent = t(...(names[route] || names.overview));
-    $('#page-description').textContent = t('Tvůj Pantheon účet. Postup ve hře, vzhled a nákupy na jednom místě.', 'Your Pantheon account. Game progress, appearance, and purchases in one place.');
-    $('#navigation').innerHTML = Object.entries(names).filter(([key]) => key !== 'pair').map(([key, labels]) => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${escape(t(...labels))}</a>`).join('');
+    $('#page-title').textContent = successfulOrder ? t('Děkujeme za nákup', 'Thank you for your purchase') : t(...(names[route] || names.overview));
+    $('#page-description').textContent = successfulOrder ? t('Tady můžeš sledovat potvrzení platby i doručení na server.', 'Track payment confirmation and server delivery here.') : t('Tvůj Pantheon účet. Postup ve hře, vzhled a nákupy na jednom místě.', 'Your Pantheon account. Game progress, appearance, and purchases in one place.');
+    $('#navigation').innerHTML = Object.entries(names).filter(([key]) => key !== 'pair').map(([key, labels]) => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${icon(key)}<span>${escape(t(...labels))}</span></a>`).join('');
     $('#player-identity').innerHTML = `<span class="es-avatar" aria-hidden="true">${escape(account?.link?.name?.slice(0, 2).toUpperCase() || 'P')}</span><div><strong>${escape(account?.link?.name || t('Hráčský účet', 'Player account'))}</strong><small>Pantheon Survival</small></div>`;
-    $('#connection').textContent = account?.server_online ? t('Server je připojený', 'Server connected') : t('Server není připojený', 'Server disconnected');
-    if (account?.synced_at) $('#connection').title = `${t('Poslední synchronizace', 'Last sync')}: ${date(account.synced_at)}`;
+    renderConnection();
     let html;
     if (route === 'store') html = store();
     else if (route === 'pair') html = pairingPage();
@@ -134,6 +167,13 @@
     $('#ranking-metric')?.addEventListener('change', async event => { metric = event.target.value; try { rankings = (await api(`/api/economysuite/leaderboard?metric=${metric}`)).entries; render(); } catch (failure) { status(failure.message, true); } });
     $('#approve-pair')?.addEventListener('click', event => action(event.currentTarget, async () => { const result = await api('/api/economysuite/pair/approve', { token: pairingToken }); pairConfirmation = result.command; sessionStorage.removeItem('es-pair'); pairingToken = ''; render(); }));
   }
+  $('#refresh-data').addEventListener('click', async () => {
+    refreshBaseline = Number(account?.synced_at || 0); refreshStarted = Date.now(); renderConnection();
+    try {
+      await api('/api/economysuite/refresh', {});
+      status(account?.server_status === 'disconnected' ? t('Obnovení čeká, až se server připojí.', 'Refresh is queued until the server connects.') : t('Načítám čerstvá data přímo ze serveru…', 'Loading fresh data directly from the server…'));
+    } catch (failure) { refreshBaseline = null; renderConnection(); status(failure.message, true); }
+  });
   async function load() {
     try { account = await api('/api/economysuite/account'); }
     catch (failure) { if (failure.status === 401 && !['store', 'pair'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) status(failure.message, true); }
@@ -148,5 +188,13 @@
   $('#language').addEventListener('click', () => { lang = lang === 'cs' ? 'en' : 'cs'; localStorage.setItem('es-language', lang); render(); });
   $('#logout').addEventListener('click', () => action($('#logout'), async () => { await api('/api/portal/logout', {}); location.assign('/login?product=economysuite'); }));
   load();
-  if (['overview', 'purchases', 'pair'].includes(route)) setInterval(() => { if (!document.hidden && !document.querySelector('input:focus,select:focus')) load(); }, 30000);
+  setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const latest = await api('/api/economysuite/account'); account = latest; renderConnection();
+      if (refreshBaseline !== null && Number(latest.synced_at || 0) > refreshBaseline) { refreshBaseline = null; await load(); status(t('Data byla obnovena ze serveru.', 'Data refreshed from the server.')); return; }
+      if (refreshBaseline !== null && Date.now() - refreshStarted > 45000) { refreshBaseline = null; renderConnection(); status(t('Server zatím nová data neposlal. Zkus obnovení později.', 'The server has not sent fresh data yet. Try again later.'), true); }
+      if (successfulOrder) { orders = (await api('/api/economysuite/orders')).orders; render(); }
+    } catch { const connection = $('#connection'); connection.dataset.state = 'disconnected'; connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t('Server je odpojený', 'Server disconnected'))}</span>`; }
+  }, 5000);
 })();

@@ -211,7 +211,10 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     const snapshot = link ? await db.prepare('SELECT payload,synced_at FROM player_snapshots WHERE uuid=?').bind(link.uuid).first<{ payload: string; synced_at: number }>() : null;
     const heartbeat = await db.prepare("SELECT last_seen FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number }>();
     const pending = link ? await db.prepare("SELECT id,kind,state,result FROM bridge_operations WHERE uuid=? AND kind='cosmetic' ORDER BY created_at DESC LIMIT 10").bind(link.uuid).all() : { results: [] };
-    return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, synced_at: snapshot?.synced_at ?? null, server_online: Boolean(heartbeat && now() - heartbeat.last_seen < 90), cosmetic_operations: pending.results });
+    const refresh = link ? await db.prepare("SELECT id,state,result,created_at,completed_at FROM bridge_operations WHERE uuid=? AND kind='refresh' ORDER BY created_at DESC LIMIT 1").bind(link.uuid).first() : null;
+    const heartbeatAge = heartbeat ? Math.max(0, now() - heartbeat.last_seen) : null;
+    const serverStatus = heartbeatAge === null || heartbeatAge >= 90 ? 'disconnected' : heartbeatAge >= 20 ? 'connecting' : 'connected';
+    return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
   }
   if (path === '/api/economysuite/orders' && request.method === 'GET') {
     const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
@@ -249,6 +252,13 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     return reply({ unlinked: true });
   }
   if (!link) return error('pair_required', 'Pair your Minecraft account first.', 409);
+  if (path === '/api/economysuite/refresh' && request.method === 'POST') {
+    const existing = await db.prepare("SELECT id,created_at FROM bridge_operations WHERE uuid=? AND kind='refresh' AND state='pending' ORDER BY created_at DESC LIMIT 1").bind(link.uuid).first<{ id: string; created_at: number }>();
+    if (existing) return reply({ queued: true, operation_id: existing.id, requested_at: existing.created_at, synced_at: null });
+    const operation = crypto.randomUUID(), requested = now();
+    await db.prepare("INSERT INTO bridge_operations(id,uuid,kind,payload,created_at) VALUES(?,?,?,'{}',?)").bind(operation, link.uuid, 'refresh', requested).run();
+    return reply({ queued: true, operation_id: operation, requested_at: requested, synced_at: null });
+  }
   if (path === '/api/economysuite/privacy' && request.method === 'POST') {
     if (typeof data.leaderboard !== 'boolean') return error('invalid_input', 'Choose a privacy preference.');
     await db.prepare('UPDATE player_links SET leaderboard=? WHERE customer_id=?').bind(data.leaderboard ? 1 : 0, player.customer.id).run();

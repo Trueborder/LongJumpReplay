@@ -110,6 +110,23 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     expect((await economySuite(request('account'), env, { ...auth, authenticate: async () => null })).status).toBe(401);
     expect((await economySuite(request('privacy', { leaderboard: true }), env, { ...auth, mutation: async () => false })).status).toBe(403);
   });
+  it('reports live bridge states and deduplicates player refresh requests', async () => {
+    const db = env.ECONOMYSUITE_DB!, timestamp = Math.floor(Date.now() / 1000);
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', timestamp).run();
+    await db.prepare("INSERT INTO bridge_status(server,last_seen) VALUES('pantheon',?)").bind(timestamp).run();
+    let account = await (await economySuite(request('account'), env, auth)).json() as { server_status: string };
+    expect(account.server_status).toBe('connected');
+    await db.prepare("UPDATE bridge_status SET last_seen=? WHERE server='pantheon'").bind(timestamp - 30).run();
+    account = await (await economySuite(request('account'), env, auth)).json() as { server_status: string };
+    expect(account.server_status).toBe('connecting');
+    await db.prepare("UPDATE bridge_status SET last_seen=? WHERE server='pantheon'").bind(timestamp - 100).run();
+    account = await (await economySuite(request('account'), env, auth)).json() as { server_status: string };
+    expect(account.server_status).toBe('disconnected');
+    const first = await (await economySuite(request('refresh', {}), env, auth)).json() as { operation_id: string };
+    const second = await (await economySuite(request('refresh', {}), env, auth)).json() as { operation_id: string };
+    expect(second.operation_id).toBe(first.operation_id);
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM bridge_operations WHERE kind='refresh'").first('n')).toBe(1);
+  });
   it('registers players without a real-name profile and retains the LongJumpReplay setup gate', async () => {
     const timestamp = Math.floor(Date.now() / 1000), setup = 'verified-test-registration';
     await env.DB.prepare('INSERT INTO portal_registration_challenges(id,email,code_hash,setup_token_hash,purpose,created_at,expires_at,verified_at) VALUES(?,?,?,?,?,?,?,?)').bind('setup', 'owner@example.com', 'verified', await sha256(setup), 'registration', timestamp, timestamp + 300, timestamp).run();
