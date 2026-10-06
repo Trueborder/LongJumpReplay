@@ -51,6 +51,43 @@
       if (duration > 0) toast._dismissTimer = window.setTimeout(() => removeToast(toast), duration);
       return toast;
     };
+    const updateToast = (toast, kind, message, options = {}) => {
+      if (!toast) return null;
+      toast.className = `toast toast-${kind}`;
+      toast.dataset.kind = kind;
+      toast.setAttribute('role', kind === 'error' || kind === 'warning' ? 'alert' : 'status');
+      toast.setAttribute('aria-live', kind === 'error' || kind === 'warning' ? 'assertive' : 'polite');
+      toast.querySelector('.toast-icon').textContent = icons[kind] || icons.info;
+      toast.querySelector('.toast-title').textContent = options.title || titles[language()][kind] || titles[language()].info;
+      toast.querySelector('.toast-message').textContent = message || '';
+      if (toast._dismissTimer) window.clearTimeout(toast._dismissTimer);
+      const duration = options.duration ?? (kind === 'error' ? 8500 : kind === 'warning' ? 6500 : 4800);
+      if (duration > 0) toast._dismissTimer = window.setTimeout(() => removeToast(toast), duration);
+      return toast;
+    };
+    const promiseToast = async (work, options = {}) => {
+      const toast = showToast('info', options.loading || (language() === 'cs' ? 'Pracuji…' : 'Working…'), { title: options.loadingTitle, duration: 0 });
+      try {
+        const result = await work;
+        updateToast(toast, 'success', typeof options.success === 'function' ? options.success(result) : (options.success || (language() === 'cs' ? 'Hotovo.' : 'Done.')), { title: options.successTitle });
+        return result;
+      } catch (error) {
+        updateToast(toast, 'error', typeof options.error === 'function' ? options.error(error) : (options.error || (language() === 'cs' ? 'Akci se nepodařilo dokončit.' : 'The action could not be completed.')), { title: options.errorTitle });
+        throw error;
+      }
+    };
+    const setBusy = (button, busy) => {
+      if (!button) return;
+      if (busy) {
+        button.dataset.feedbackWasDisabled = String(button.disabled);
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+      } else {
+        button.disabled = button.dataset.feedbackWasDisabled === 'true';
+        delete button.dataset.feedbackWasDisabled;
+        button.removeAttribute('aria-busy');
+      }
+    };
     const setInline = (target, message, kind = 'info') => {
       const element = typeof target === 'string' ? document.querySelector(target) : target;
       if (!element) return;
@@ -113,7 +150,7 @@
         node.querySelectorAll?.('dialog').forEach(bindDialog);
       }
     }))).observe(document.documentElement, { childList: true, subtree: true });
-    return { toast: { success: (message, options) => showToast('success', message, options), error: (message, options) => showToast('error', message, options), warning: (message, options) => showToast('warning', message, options), info: (message, options) => showToast('info', message, options) }, inline: setInline, bindDialog, confirm };
+    return { toast: { success: (message, options) => showToast('success', message, options), error: (message, options) => showToast('error', message, options), warning: (message, options) => showToast('warning', message, options), info: (message, options) => showToast('info', message, options), promise: promiseToast }, promise: promiseToast, busy: setBusy, inline: setInline, bindDialog, confirm };
   })();
   window.LJR_FEEDBACK = feedback;
 

@@ -5,6 +5,7 @@
   let lang = localStorage.getItem('es-language') === 'en' ? 'en' : 'cs';
   let account = null, packages = [], purchasesEnabled = false, orders = [], rankings = [], metric = 'playtime';
   let refreshBaseline = null, refreshStarted = 0;
+  const feedback = window.LJR_FEEDBACK;
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
   const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], store: ['Obchod', 'Store'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
@@ -33,7 +34,7 @@
     }).join('');
   }
   const preview = (type, entry) => chatPreview(`${entry?.value ?? entry?.display ?? ''}${type === 'prefix' ? ' ' : ''}${account.link.name}${type === 'color' ? t(': Ukázka zprávy', ': Example message') : ''}`);
-  const status = (message, failed = false) => { $('#status').textContent = message; $('#status').dataset.error = String(failed); };
+  const status = (message, failed = false, kind = failed ? 'error' : 'info') => { const element = $('#status'); element.textContent = message; element.dataset.error = String(failed); feedback?.inline(element, message, kind); };
   const cookie = name => document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.split('=').slice(1).join('=') || '';
   const errors = { pair_required: ['Nejdřív propoj svůj Minecraft účet.', 'Pair your Minecraft account first.'], invalid_password: ['Heslo není správné.', 'The password is incorrect.'], pair_expired: ['Propojení vypršelo. Použij znovu /web link.', 'Pairing expired. Run /web link again.'], pending_delivery: ['Nejdřív dokonči čekající nákupy a doručení.', 'Finish pending checkouts and deliveries first.'], already_linked: ['Tento účet nebo hráč už je propojený.', 'This account or player is already linked.'], unavailable: ['Tato funkce zatím není dostupná.', 'This feature is not available yet.'], invalid_confirmation: ['Potvrzení není platné.', 'The confirmation is invalid.'] };
   async function api(path, data) {
@@ -49,6 +50,8 @@
   const panel = (title, content, cls = '') => `<section class="es-panel ${cls}"><h2>${escape(title)}</h2>${content}</section>`;
   const empty = () => panel(t('Tvůj hráčský účet začíná propojením.', 'Your player account starts with pairing.'), `<p>${escape(t('Přihlas se na Pantheon a spusť příkaz. Na webu potvrď hráče a poté dokonči propojení ve hře.', 'Sign in to Pantheon and run the command. Confirm your player on the website, then finish pairing in-game.'))}</p><code>/web link</code>`, 'es-empty');
   const waiting = () => panel(t('Čekáme na první synchronizaci.', 'Waiting for the first sync.'), `<p>${escape(t('Účet je propojený. Přehled se naplní, jakmile se připojí server.', 'Your account is paired. Your overview will populate when the server connects.'))}</p>`);
+  const loading = () => `<div class="es-skeleton-grid" aria-label="${escape(t('Načítám obsah', 'Loading content'))}"><span class="es-skeleton es-skeleton-large"></span><span class="es-skeleton"></span><span class="es-skeleton"></span></div>`;
+  const loadError = failure => panel(t('Data se nepodařilo načíst.', 'We could not load this dashboard.'), `<p>${escape(failure?.message || t('Zkontroluj připojení a zkus to znovu.', 'Check your connection and try again.'))}</p><button id="retry-load" class="es-primary es-retry" type="button">${t('Zkusit znovu', 'Try again')}</button>`, 'es-empty es-content-error');
   const table = (headers, rows) => `<div class="es-table-wrap"><table class="es-table"><thead><tr>${headers.map(h => `<th>${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   const row = cells => `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
   const statNames = { playtime: ['Doba hraní (min)', 'Playtime (min)'], blocks_mined: ['Vytěžené bloky', 'Blocks mined'], blocks_placed: ['Položené bloky', 'Blocks placed'], mobs_killed: ['Zabití mobové', 'Mobs killed'], deaths: ['Úmrtí', 'Deaths'], crafted: ['Výroba', 'Crafting'], smelted: ['Tavení', 'Smelting'], fish_caught: ['Ulovené ryby', 'Fish caught'], breeding: ['Chov', 'Breeding'], trades: ['Obchody', 'Trades'], items_sold: ['Prodané předměty', 'Items sold'], items_bought: ['Koupené předměty', 'Items bought'], challenges_won: ['Vyhrané výzvy', 'Challenges won'], tasks_completed: ['Dokončené úkoly', 'Completed tasks'], crates_opened: ['Otevřené crates', 'Crates opened'], daily_claims: ['Denní odměny', 'Daily claims'], passive_job_coins: ['Výdělek z profese', 'Job income'], duel_wins: ['Výhry v duelech', 'Duel wins'], duel_losses: ['Prohry v duelech', 'Duel losses'], duel_draws: ['Remízy v duelech', 'Duel draws'], duel_damage: ['Poškození v duelech', 'Duel damage'] };
@@ -159,8 +162,9 @@
     $('#content').innerHTML = html; $('#content').setAttribute('aria-busy', 'false');
     bind();
   }
-  async function action(button, work) { button.disabled = true; try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) button.disabled = false; } }
+  async function action(button, work) { feedback?.busy(button, true); try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) feedback?.busy(button, false); } }
   function bind() {
+    $('#retry-load')?.addEventListener('click', () => action($('#retry-load'), () => load({ initial: true })));
     document.querySelectorAll('.cosmetic-form select').forEach(select => select.addEventListener('change', () => { const form = select.closest('form'), type = form.dataset.type; const entry = account.snapshot.cosmetics[type].find(e => e.id === select.value && e.owned); form.querySelector('.es-preview').innerHTML = preview(type, entry); }));
     const purchaseForm = $('#purchase-consent-form');
     const updatePurchaseButtons = () => { const ready = Boolean($('#accept-purchase-terms')?.checked && $('#request-immediate-delivery')?.checked); document.querySelectorAll('.buy').forEach(button => { button.disabled = button.disabled && !account?.link ? true : !ready || !purchasesEnabled || !account?.link; }); };
@@ -176,21 +180,28 @@
     $('#approve-pair')?.addEventListener('click', event => action(event.currentTarget, async () => { const result = await api('/api/economysuite/pair/approve', { token: pairingToken }); pairConfirmation = result.command; sessionStorage.removeItem('es-pair'); pairingToken = ''; render(); }));
   }
   $('#refresh-data').addEventListener('click', async () => {
-    refreshBaseline = Number(account?.synced_at || 0); refreshStarted = Date.now(); renderConnection();
+    const button = $('#refresh-data');
+    refreshBaseline = Number(account?.synced_at || 0); refreshStarted = Date.now(); renderConnection(); feedback?.busy(button, true);
     try {
-      await api('/api/economysuite/refresh', {});
+      const refreshWork = api('/api/economysuite/refresh', {});
+      await (feedback?.promise ? feedback.promise(refreshWork, { loading: t('Odesílám obnovení…', 'Requesting refresh…'), success: t('Obnovení bylo zařazeno.', 'Refresh queued.'), error: t('Obnovení se nepodařilo spustit.', 'Refresh could not be started.') }) : refreshWork);
       status(account?.server_status === 'disconnected' ? t('Obnovení čeká, až se server připojí.', 'Refresh is queued until the server connects.') : t('Načítám čerstvá data přímo ze serveru…', 'Loading fresh data directly from the server…'));
     } catch (failure) { refreshBaseline = null; renderConnection(); status(failure.message, true); }
+    finally { feedback?.busy(button, false); }
   });
-  async function load() {
+  async function load(options = {}) {
+    const initial = options.initial ?? !account;
+    if (initial) { $('#content').setAttribute('aria-busy', 'true'); $('#content').innerHTML = loading(); }
+    let accountFailure = null;
     try { account = await api('/api/economysuite/account'); }
-    catch (failure) { if (failure.status === 401 && !['store', 'pair'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) status(failure.message, true); }
+    catch (failure) { if (failure.status === 401 && !['store', 'pair'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) accountFailure = failure; }
+    if (accountFailure && !['store', 'pair'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); return; }
     try {
       if (route === 'store') { const catalog = await api('/api/economysuite/catalog'); packages = catalog.packages; purchasesEnabled = catalog.purchases_enabled; }
       if (route === 'purchases' && account) orders = (await api('/api/economysuite/orders')).orders;
       if (route === 'statistics' && account) rankings = (await api(`/api/economysuite/leaderboard?metric=${metric}`)).entries;
       if (route === 'pair' && account && pairingToken) pairing = await api('/api/economysuite/pair/inspect', { token: pairingToken });
-    } catch (failure) { status(failure.message, true); }
+    } catch (failure) { $('#content').innerHTML = loadError(failure); $('#content').setAttribute('aria-busy', 'false'); bind(); return; }
     render();
   }
   $('#language').addEventListener('click', () => { lang = lang === 'cs' ? 'en' : 'cs'; localStorage.setItem('es-language', lang); render(); });

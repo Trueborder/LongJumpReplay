@@ -35,8 +35,14 @@
 
   <main id="main" class="account-shell dashboard-shell">
     <h1 class="dashboard-accessible-title" data-en="LongJumpReplay account" data-cs="Účet LongJumpReplay">LongJumpReplay account</h1>
-    <p id="account-status" class="status" role="status" aria-live="polite"></p>
-    <div id="dashboard-loading" class="dashboard-loading" role="status"><span></span><span data-en="Loading your account…" data-cs="Načítám váš účet…">Loading your account…</span></div>
+    <div class="dashboard-status-row">
+      <p id="account-status" class="status" role="status" aria-live="polite"></p>
+      <button id="dashboard-refresh" class="button button-outline" type="button" hidden><span data-en="Refresh account" data-cs="Obnovit účet">Refresh account</span></button>
+    </div>
+    <div id="dashboard-loading" class="dashboard-loading" role="status">
+      <div class="dashboard-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+      <span data-en="Loading your account…" data-cs="Načítám váš účet…">Loading your account…</span>
+    </div>
 
     <div id="dashboard-content" class="dashboard-layout" hidden>
       <aside class="dashboard-nav" aria-label="Dashboard categories">

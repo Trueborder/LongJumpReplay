@@ -263,6 +263,14 @@
 .dashboard-loading[hidden], .dashboard-layout[hidden], .licensed-only[hidden] { display: none; }
 .dashboard-loading > span:first-child { width: 18px; height: 18px; border: 2px solid var(--account-border); border-top-color: var(--cyan); border-radius: 50%; animation: account-spin .8s linear infinite; }
 @keyframes account-spin { to { transform: rotate(360deg); } }
+.dashboard-status-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 48px; margin-bottom: .75rem; }
+.dashboard-status-row .status { flex: 1; margin: 0; }
+.dashboard-status-row button { flex: 0 0 auto; min-height: 42px; }
+.dashboard-status-row button[hidden] { display: none; }
+.dashboard-skeleton { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; width: 100%; margin-bottom: 1rem; }
+.dashboard-skeleton span { display: block; height: 138px; border-radius: 14px; background: linear-gradient(100deg, #e6eeea 20%, #f8fbf8 38%, #e6eeea 56%); background-size: 200% 100%; animation: account-shimmer 1.35s ease-in-out infinite; }
+.dashboard-skeleton span:first-child { grid-column: span 2; }
+@keyframes account-shimmer { to { background-position: -200% 0; } }
 
 .dashboard-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: clamp(2rem, 5vw, 4rem); padding: clamp(2rem, 4vw, 3rem) 0 clamp(4rem, 8vw, 7rem); }
 .dashboard-nav { position: sticky; top: 110px; align-self: start; display: grid; gap: .15rem; padding: .55rem; border: 1px solid var(--account-border); border-radius: 14px; background: color-mix(in srgb, var(--account-panel) 92%, transparent); backdrop-filter: blur(18px) saturate(120%); }
@@ -385,6 +393,10 @@
 }
 @media (max-width: 650px) {
   .dashboard-shell { width: calc(100% - 1.5rem); }
+  .dashboard-status-row { align-items: stretch; flex-direction: column; }
+  .dashboard-status-row button { width: 100%; }
+  .dashboard-skeleton { grid-template-columns: 1fr; }
+  .dashboard-skeleton span:first-child { grid-column: auto; }
   .dashboard-hero { padding-top: 3.5rem; }
   .dashboard-hero h1 { font-size: clamp(2.8rem, 15vw, 4.6rem); }
   .dashboard-actions { display: grid; }
@@ -404,7 +416,7 @@
   .table-card { margin-right: -.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-loading > span:first-child { animation-duration: 1.6s; }
+  .dashboard-loading > span:first-child, .dashboard-skeleton span { animation: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .dashboard-nav, .account-panel { background: var(--surface); backdrop-filter: none; }

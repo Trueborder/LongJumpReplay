@@ -200,6 +200,7 @@
     feedback?.inline(element, message, message ? kind : 'info');
   };
   const notify = (kind, message, title) => feedback?.toast?.[kind]?.(message, { title });
+  const setDashboardRetry = (visible) => { const button = $('#dashboard-refresh'); if (button) button.hidden = !visible; };
   const cookieValue = (name) => document.cookie.split(';').map((part) => part.trim().split('=')).find(([key]) => key === name)?.slice(1).join('=') || '';
   const api = async (path, options = {}) => {
     if (playerProduct && options.body) { try { options.body = JSON.stringify({ ...JSON.parse(options.body), product: 'economysuite' }); } catch { /* existing validation handles malformed bodies */ } }
@@ -581,11 +582,14 @@
     $('#dashboard-content').hidden = false;
   };
 
-  const loadDashboard = async () => {
-    try { renderDashboard(await api('/api/portal/account')); }
+  const loadDashboard = async (options = {}) => {
+    const refresh = Boolean(options.refresh);
+    if (!refresh) { $('#dashboard-loading').hidden = false; $('#dashboard-content').hidden = true; }
+    setDashboardRetry(false);
+    try { renderDashboard(await api('/api/portal/account')); setStatus('', '#account-status'); }
     catch (error) {
       if (error.status === 401) window.location.replace('/login');
-      else { $('#dashboard-loading').hidden = true; setStatus(error, '#account-status', 'error'); }
+      else { $('#dashboard-loading').hidden = true; if (!refresh) $('#dashboard-content').hidden = true; setStatus(error, '#account-status', 'error'); setDashboardRetry(true); }
     }
   };
 
@@ -798,6 +802,15 @@
     document.querySelectorAll('[data-open-billing]').forEach((button) => button.addEventListener('click', openBilling));
     $('#logout-button')?.addEventListener('click', signOut);
     $('#security-logout-button')?.addEventListener('click', signOut);
+    $('#dashboard-refresh')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      feedback?.busy(button, true);
+      try {
+        await loadDashboard({ refresh: true });
+        if (!button.hidden) return;
+        notify('success', state.lang === 'cs' ? 'Účet byl obnoven.' : 'Account refreshed.', state.lang === 'cs' ? 'Obnoveno' : 'Refreshed');
+      } finally { feedback?.busy(button, false); }
+    });
     $('#profile-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const firstName = $('#profile-first-name')?.value.trim() || '';

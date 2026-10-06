@@ -36,10 +36,14 @@
 @media(prefers-reduced-motion:reduce){.es-connection-dot,.es-refresh svg,.es-thanks-check{animation:none!important}}
 @media(max-width:650px){.es-live-actions{justify-items:start;margin-top:14px}.es-connection{margin-top:0}.es-thanks{grid-template-columns:1fr;padding:21px}}
 [hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){.es-skeleton,.es-portal button[aria-busy=true]::before{animation:none!important}}
 .es-purchase-consent{display:grid;gap:.75rem;margin:1rem 0 1.5rem;padding:1rem 1.2rem;border:1px solid #d6dbe4;border-left:3px solid #7c3aed;background:#fff}
 .es-purchase-consent label{display:flex;gap:.65rem;align-items:flex-start;line-height:1.5}
 .es-purchase-consent input{margin-top:.25rem;accent-color:#7c3aed}
 .es-purchase-consent a{color:#6d28d9;text-decoration:underline;text-underline-offset:.2em}
 .es-support-note{border-left:4px solid #7c3aed;background:linear-gradient(135deg,#faf5ff,#fff)}
 .es-support-note strong{color:#5b21b6}
+.es-status[hidden]{display:none}.es-status[data-state=error]{border-left-color:#a24536;background:#f9eee8;color:#8f3328}.es-status[data-state=warning]{border-left-color:#c68a21;background:#fff8e8;color:#765313}.es-status[data-state=success]{border-left-color:#2b8a57;background:#eef8f1;color:#17633f}
+.es-content-error{max-width:700px;border-left:4px solid #a24536!important;background:#fff4f1!important}.es-content-error .es-retry{margin-top:10px}.es-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.es-skeleton{display:block;height:190px;border-radius:13px;background:linear-gradient(100deg,#e9eee6 20%,#f7f8f3 38%,#e9eee6 56%);background-size:200% 100%;animation:es-shimmer 1.35s ease-in-out infinite}.es-skeleton-large{grid-column:span 1;height:260px}.es-skeleton-grid::before{display:block;grid-column:1/-1;width:35%;height:22px;border-radius:5px;background:#e3eae0;content:''}@keyframes es-shimmer{to{background-position:-200% 0}}.es-portal button[aria-busy=true]::before{display:inline-block;width:.8em;height:.8em;margin-right:.45em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;content:'';vertical-align:-.08em;animation:es-spin .75s linear infinite}.es-portal button[aria-busy=true]{cursor:wait}
+.es-skeleton-grid + *{margin-top:0}
 .es-pack-price small{font-size:.65em;color:#64748b}

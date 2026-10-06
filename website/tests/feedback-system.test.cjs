@@ -14,12 +14,32 @@ const componentsCss = read('assets/css/components.css');
 test('shared feedback primitives cover toast, inline, and modal decisions', () => {
   assert.match(sharedScript, /window.LJR_FEEDBACK = feedback/);
   assert.match(sharedScript, /toast: { success:/);
+  assert.match(sharedScript, /const promiseToast =/);
+  assert.match(sharedScript, /const setBusy =/);
   assert.match(sharedScript, /const setInline =/);
   assert.match(sharedScript, /const confirm =/);
   assert.match(sharedScript, /beforetoggle/);
   assert.match(componentsCss, /.toast-region/);
   assert.match(componentsCss, /.feedback-modal/);
   assert.match(componentsCss, /.inline-message/);
+  assert.match(componentsCss, /aria-busy="true"/);
+});
+
+test('both account dashboards expose loading, retry, and refresh feedback states', () => {
+  const economyHtml = read('account/economysuite/index.html');
+  const economyScript = read('account/economysuite/app.js');
+  const dashboardHtml = read('account/dashboard/index.html');
+  const dashboardScript = read('assets/js/account/account.js');
+  const dashboardCss = read('assets/css/pages/account.css');
+  assert.match(economyHtml, /assets\/js\/components\/site\.js/);
+  assert.match(economyHtml, /es-skeleton-grid/);
+  assert.match(economyScript, /const loadError =/);
+  assert.match(economyScript, /retry-load/);
+  assert.match(economyScript, /feedback\?\.promise/);
+  assert.match(dashboardHtml, /id="dashboard-refresh"/);
+  assert.match(dashboardHtml, /dashboard-skeleton/);
+  assert.match(dashboardScript, /setDashboardRetry/);
+  assert.match(dashboardCss, /dashboard-skeleton/);
 });
 
 test('destructive account actions use the reusable modal and successes use toasts', () => {
