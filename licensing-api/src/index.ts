@@ -71,6 +71,8 @@ import {
   listDevicesForCustomer,
   listLicensesForCustomer,
   logEvent,
+  markStripeEventFailed,
+  markStripeEventProcessed,
   normaliseEmail,
   now,
   rateLimit,
@@ -86,7 +88,7 @@ import {
   purgeOldDeviceActivity,
 } from "./db";
 import type { DeviceMetadata } from "./db";
-import { EmailDeliveryError, sendContactMessage, sendVerificationCode } from "./email";
+import { EmailDeliveryError, longJumpReplayOrderConfirmationEmail, mailer, sendContactMessage, sendVerificationCode } from "./email";
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
   DEAD_SUBSCRIPTION_STATUSES,
@@ -97,6 +99,7 @@ import {
 import type { StripeEvent } from "./stripe";
 import { portalPageRoute } from "./portal-routing";
 import { economySuite } from "./economysuite";
+import { LJR_POLICY_VERSIONS, appendLjrOrderEvent, createLjrOrder, findLjrOrderById, findLjrOrderByIdempotency, findLjrOrderByPaymentIntent, findLjrOrderBySession, listLjrOrdersForCustomer, publicLjrOrder, updateLjrOrder, updateLjrOrderCheckout } from "./ljr-purchases";
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
@@ -108,6 +111,8 @@ const PASSWORD_MAX_LENGTH = 128;
 const SETUP_TOKEN_TTL_SECONDS = 15 * 60;
 const CONTACT_ORIGIN = "https://tomaspisar.cz";
 const CONTACT_TOPICS = new Set(["support", "licence", "club", "bug", "feedback", "general"]);
+const LJR_TAX_NOTICE = "[[VAT_TREATMENT]] — daňové zacházení potvrďte před zveřejněním prodeje.";
+const LJR_SUPPORT_EMAIL = "info@tomaspisar.cz";
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
   const responseHeaders = new Headers({
@@ -424,6 +429,7 @@ async function handleAdditionalComputerCheckout(env: Env, event: StripeEvent): P
 async function handleCheckoutCompleted(env: Env, event: StripeEvent): Promise<void> {
   const session = event.data.object;
   if (session.metadata?.purchase_type === 'economysuite_currency') return;
+  if (session.metadata?.purchase_type === "longjumpreplay_license") { await handleLjrCheckoutCompleted(env, event); return; }
   if (session.metadata?.purchase_type === "additional_computers") { await handleAdditionalComputerCheckout(env, event); return; }
   const email: string =
     session.customer_details?.email ?? session.customer_email ?? "";
@@ -532,11 +538,20 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     return json({ duplicate: event.id });
   }
 
+  try {
   switch (event.type) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
       await handleCheckoutCompleted(env, event);
       break;
+    case "checkout.session.async_payment_failed": {
+      const session = event.data.object;
+      if (session.metadata?.purchase_type === "longjumpreplay_license") {
+        const order = (session.metadata?.order_id && await findLjrOrderById(env.DB, String(session.metadata.order_id))) || await findLjrOrderBySession(env.DB, session.id);
+        if (order) { await updateLjrOrder(env.DB, order.id, { status: "payment_failed" }); await appendLjrOrderEvent(env.DB, order.id, event.type, event.id); }
+      }
+      break;
+    }
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted":
@@ -560,8 +575,20 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
       }
       break;
     }
+    case "charge.refunded":
+    case "charge.refund.updated":
+    case "charge.dispute.created":
+    case "charge.dispute.updated":
+    case "charge.dispute.closed":
+      await handleLjrFinancialEvent(env, event);
+      break;
     default:
       break; // subscribed-to-but-unhandled types are acknowledged, not errors
+  }
+  await markStripeEventProcessed(env.DB, event.id);
+  } catch (error) {
+    await markStripeEventFailed(env.DB, event.id, error instanceof Error ? error.message : "webhook processing failed");
+    throw error;
   }
 
   return json({ received: event.id });
@@ -1696,6 +1723,7 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
 
   const licenses = await listLicensesForCustomer(env.DB, auth.customer.id);
   const devices = await listDevicesForCustomer(env.DB, auth.customer.id);
+  const orders = await listLjrOrdersForCustomer(env.DB, auth.customer.id);
   let invoices: Record<string, unknown>[] = [];
   if (env.STRIPE_SECRET_KEY && auth.customer.stripe_customer_id) {
     try {
@@ -1748,6 +1776,7 @@ async function portalAccount(request: Request, env: Env): Promise<Response> {
     })),
     activation_keys: keys,
     invoices,
+    orders: orders.map(publicLjrOrder),
     additional_computers: eligibleAdditionalComputerOffers(licenses),
     billing: {
       customer_portal_available: Boolean(env.STRIPE_SECRET_KEY && auth.customer.stripe_customer_id),
@@ -1905,16 +1934,166 @@ async function portalLogout(request: Request, env: Env): Promise<Response> {
   return jsonWithClearedPortalSession({ logged_out: true });
 }
 
+async function portalRetryLjrDelivery(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticatedPortal(request, env);
+  if (!auth) return fail("not_authenticated", "Sign in to retry licence delivery.", 401);
+  const setupError = portalSetupGate(auth, "retrying licence delivery");
+  if (setupError) return setupError;
+  if (!(await portalPasswordMutationAllowed(request, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null))) return fail("forbidden", "This request is not allowed.", 403);
+  const data = await readJson(request); const orderId = str(data.order_id);
+  const order = await findLjrOrderById(env.DB, orderId);
+  if (!order || order.customer_id !== auth.customer.id) return fail("not_found", "Objednávka nebyla nalezena.", 404);
+  if (!order.stripe_checkout_session_id || !env.STRIPE_SECRET_KEY) return fail("delivery_unavailable", "Dodání zatím nelze opakovat.", 409);
+  const session = await stripeApi(env.STRIPE_SECRET_KEY).getCheckoutSession(order.stripe_checkout_session_id);
+  if (session.payment_status !== "paid") return fail("payment_pending", "Platba ještě není potvrzená.", 409);
+  await handleLjrCheckoutCompleted(env, { id: `portal_retry_${order.id}_${now()}`, type: "checkout.session.completed", data: { object: session } });
+  return json({ retried: true });
+}
+
+async function longJumpReplayCatalog(env: Env): Promise<Response> {
+  if (!env.STRIPE_SECRET_KEY) return fail("catalog_unavailable", "Aktuální ceny nejsou dočasně dostupné.", 503);
+  try {
+    const api = stripeApi(env.STRIPE_SECRET_KEY);
+    const entries = await Promise.all([
+      [env.STRIPE_PRICE_LIFETIME, "lifetime"] as const,
+      [env.STRIPE_PRICE_SUBSCRIPTION, "subscription"] as const,
+    ].filter(([id]) => Boolean(id)).map(async ([priceId, licenseType]) => {
+      const price = await api.getPrice(priceId);
+      const product = typeof price.product === "object" && price.product ? price.product : {};
+      return { price_id: price.id ?? priceId, product_id: typeof price.product === "string" ? price.product : product.id ?? null,
+        product_name: typeof product.name === "string" ? product.name : "LongJumpReplay",
+        license_type: licenseType, amount_minor: Number.isInteger(price.unit_amount) ? price.unit_amount : null,
+        currency: String(price.currency ?? "czk").toLowerCase(), recurring: Boolean(price.recurring), device_limit: settings(env).maxDevices,
+        offline_verification_days: Math.round(settings(env).offlineWindowSeconds / 86400),
+        subscription_grace_days: Math.round(settings(env).subscriptionGraceSeconds / 86400),
+        tax_notice: LJR_TAX_NOTICE, delivery: "online account and licence activation",
+        policy_versions: LJR_POLICY_VERSIONS };
+    }));
+    return json({ product: PRODUCT_ID, items: entries, support_email: LJR_SUPPORT_EMAIL });
+  } catch {
+    return fail("catalog_unavailable", "Aktuální ceny nejsou dočasně dostupné.", 503);
+  }
+}
+
+async function longJumpReplayCheckout(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get("Origin");
+  if (origin && !new Set(["https://tomaspisar.cz", "https://www.tomaspisar.cz", env.PORTAL_ORIGIN]).has(origin)) return fail("forbidden", "This request is not allowed.", 403);
+  const [max, window] = rateLimits(env).checkout;
+  if (!(await rateLimit(env.DB, `checkout:${clientKey(request)}`, max, window))) return fail("rate_limited", "Příliš mnoho pokusů o zahájení platby. Zkuste to později.", 429);
+  const data = await readJson(request);
+  const email = normaliseEmail(str(data.email));
+  const priceId = str(data.price_id);
+  const idempotencyKey = str(data.idempotency_key || request.headers.get("X-Idempotency-Key"));
+  if (!EMAIL_PATTERN.test(email) || !idempotencyKey || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) return fail("invalid_input", "Zadejte platný e-mail a identifikátor objednávky.", 422);
+  if (data.accepted_purchase_terms !== true || data.immediate_delivery_requested !== true || data.withdrawal_rights_acknowledged !== true) return fail("legal_acceptance_required", "Před platbou potvrďte podmínky nákupu, okamžitou aktivaci a příslušné poučení o odstoupení.", 422);
+  if (!env.STRIPE_SECRET_KEY || ![env.STRIPE_PRICE_LIFETIME, env.STRIPE_PRICE_SUBSCRIPTION].includes(priceId)) return fail("invalid_product", "Tento produkt není dostupný.", 422);
+  const existing = await findLjrOrderByIdempotency(env.DB, idempotencyKey);
+  if (existing?.stripe_checkout_session_id && env.STRIPE_SECRET_KEY) {
+    try {
+      const session = await stripeApi(env.STRIPE_SECRET_KEY).getCheckoutSession(existing.stripe_checkout_session_id);
+      if (typeof session.url === "string" && session.url.startsWith("https://checkout.stripe.com/")) return json({ url: session.url, order_id: existing.id, idempotent: true });
+    } catch { /* return a safe retry response below */ }
+  }
+  if (existing) return fail("checkout_in_progress", "Objednávka se zpracovává. Zkuste to za chvíli.", 409);
+  const price = await stripeApi(env.STRIPE_SECRET_KEY).getPrice(priceId);
+  const amount = Number(price.unit_amount);
+  const currency = String(price.currency ?? "").toLowerCase();
+  if (!Number.isInteger(amount) || !currency) return fail("invalid_price", "Cena produktu není správně nastavena.", 503);
+  const licenseType = licenseTypeForPrice(env, priceId);
+  if (!licenseType) return fail("invalid_product", "Tento produkt není dostupný.", 422);
+  const timestamp = now();
+  const order = await createLjrOrder(env.DB, {
+    id: randomId("ljr_order"), customer_id: null, email, product_id: PRODUCT_ID,
+    stripe_product_id: typeof price.product === "string" ? price.product : (price.product?.id ?? null), stripe_price_id: priceId,
+    product_name: typeof price.product === "object" && price.product?.name ? String(price.product.name) : "LongJumpReplay",
+    license_type: licenseType, displayed_price_minor: amount, currency, tax_notice: LJR_TAX_NOTICE,
+    purchase_terms_version: LJR_POLICY_VERSIONS.purchase, eula_version: LJR_POLICY_VERSIONS.eula,
+    refund_policy_version: LJR_POLICY_VERSIONS.refund, privacy_policy_version: LJR_POLICY_VERSIONS.privacy,
+    consent_version: LJR_POLICY_VERSIONS.consent, terms_accepted_at: timestamp,
+    immediate_delivery_requested_at: timestamp, withdrawal_acknowledged_at: timestamp,
+    consent_ip: bounded(request.headers.get("CF-Connecting-IP"), 64), consent_user_agent: bounded(request.headers.get("User-Agent"), 300),
+    idempotency_key: idempotencyKey, created_at: timestamp,
+  });
+  try {
+    const session = await stripeApi(env.STRIPE_SECRET_KEY).createLongJumpReplayCheckout({
+      priceId, mode: licenseType === "subscription" ? "subscription" : "payment", email, orderId: order.id, licenseType,
+      successUrl: `${env.PORTAL_ORIGIN}/dashboard/billing?order=${encodeURIComponent(order.id)}`,
+      cancelUrl: `${env.PORTAL_ORIGIN}/checkout?product=longjumpreplay&cancelled=1`, policyVersions: LJR_POLICY_VERSIONS,
+    });
+    await updateLjrOrderCheckout(env.DB, order.id, session.id);
+    await appendLjrOrderEvent(env.DB, order.id, "checkout_created", null, { stripe_session_id: session.id });
+    return json({ url: session.url, order_id: order.id });
+  } catch {
+    await updateLjrOrder(env.DB, order.id, { delivery_status: "failed" });
+    await appendLjrOrderEvent(env.DB, order.id, "checkout_creation_failed", null);
+    return fail("checkout_unavailable", "Platbu se nepodařilo zahájit. Zkuste to znovu.", 502);
+  }
+}
+
+async function handleLjrCheckoutCompleted(env: Env, event: StripeEvent): Promise<void> {
+  const session = event.data.object;
+  const order = (session.metadata?.order_id && await findLjrOrderById(env.DB, String(session.metadata.order_id))) || await findLjrOrderBySession(env.DB, session.id);
+  if (!order) return;
+  if (order.license_id && order.status === "paid") return;
+  if (session.payment_status && session.payment_status !== "paid") { await updateLjrOrder(env.DB, order.id, { status: "payment_failed" }); return; }
+  const email = normaliseEmail(String(session.customer_details?.email ?? session.customer_email ?? order.email));
+  const customer = await upsertCustomer(env.DB, email, session.customer ?? null);
+  const subscriptionId = session.subscription ?? null;
+  let license = order.license_id ? await findLicenseById(env.DB, order.license_id) : null;
+  if (!license && subscriptionId) license = await findLicenseBySubscription(env.DB, subscriptionId);
+  let periodEnd: number | null = null;
+  if (order.license_type === "subscription" && subscriptionId && env.STRIPE_SECRET_KEY) {
+    try { periodEnd = (await stripeApi(env.STRIPE_SECRET_KEY).getSubscription(subscriptionId)).current_period_end ?? null; } catch { /* subscription event will resync */ }
+  }
+  if (!license) license = await createLicense(env.DB, { customerId: customer.id, type: order.license_type, maxDevices: settings(env).maxDevices, stripeCustomerId: session.customer ?? null, stripeSubscriptionId: subscriptionId, stripePriceId: order.stripe_price_id, currentPeriodEnd: periodEnd });
+  await updateLjrOrder(env.DB, order.id, { customer_id: customer.id, stripe_customer_id: session.customer ?? null, payment_intent_id: session.payment_intent ?? null, stripe_subscription_id: subscriptionId, license_id: license.id, status: "paid", delivery_status: "delivered", entitlement_status: "active", paid_at: now(), receipt_reference: session.invoice ?? session.payment_intent ?? null });
+  await appendLjrOrderEvent(env.DB, order.id, "licence_delivered", event.id, { license_id: license.id });
+  try {
+    await mailer(env).send(email, longJumpReplayOrderConfirmationEmail({ orderId: order.id, productName: order.product_name, licenseType: order.license_type, priceMinor: order.displayed_price_minor, currency: order.currency, paidAt: now(), deliveryUrl: `${env.PORTAL_ORIGIN}/dashboard/billing`, purchaseUrl: "https://tomaspisar.cz/legal/longjumpreplay-purchases/", eulaUrl: "https://tomaspisar.cz/legal/longjumpreplay-eula/", refundUrl: "https://tomaspisar.cz/legal/longjumpreplay-refunds/", privacyUrl: "https://tomaspisar.cz/products/long-jump-replay/privacy/", supportEmail: LJR_SUPPORT_EMAIL, receiptReference: session.invoice ?? session.payment_intent ?? null }));
+    await updateLjrOrder(env.DB, order.id, { confirmation_status: "sent" });
+  } catch { await updateLjrOrder(env.DB, order.id, { confirmation_status: "failed" }); }
+}
+
+async function handleLjrFinancialEvent(env: Env, event: StripeEvent): Promise<void> {
+  const object = event.data.object;
+  const paymentIntent = String(object.payment_intent ?? object.id ?? "");
+  const order = await findLjrOrderByPaymentIntent(env.DB, paymentIntent);
+  if (!order) return;
+  const status = event.type === "charge.refunded" || event.type === "charge.refund.updated" ? (object.amount_refunded && object.amount_refunded < object.amount ? "partially_refunded" : "refunded") : event.type === "charge.dispute.created" ? "disputed" : event.type === "charge.dispute.closed" ? (object.status === "lost" ? "dispute_lost" : "dispute_won") : order.status;
+  await updateLjrOrder(env.DB, order.id, { status, refund_status: event.type.startsWith("charge.refund") ? status : order.refund_status, dispute_status: event.type.startsWith("charge.dispute") ? String(object.status ?? "opened") : order.dispute_status });
+  await appendLjrOrderEvent(env.DB, order.id, event.type, event.id, { stripe_object_id: object.id });
+}
+
+function longJumpReplayCorsHeaders(request: Request, env: Env): Headers {
+  const headers = new Headers();
+  const origin = request.headers.get("Origin");
+  const allowed = new Set(["https://tomaspisar.cz", "https://www.tomaspisar.cz", env.PORTAL_ORIGIN]);
+  if (origin && allowed.has(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Headers", "Content-Type, X-Idempotency-Key");
+    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    headers.set("Vary", "Origin");
+  }
+  return headers;
+}
+
+function withLongJumpReplayCors(response: Response, request: Request, env: Env): Response {
+  const headers = new Headers(response.headers);
+  longJumpReplayCorsHeaders(request, env).forEach((value, key) => headers.set(key, value));
+  return new Response(response.body, { status: response.status, headers });
+}
+
 async function portalDataExport(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in before requesting your data.", 401);
-  const [profile, licenses, devices] = await Promise.all([
+  const [profile, licenses, devices, orders] = await Promise.all([
     findPortalProfile(env.DB, auth.customer.id),
     listLicensesForCustomer(env.DB, auth.customer.id),
     listDevicesForCustomer(env.DB, auth.customer.id),
+    listLjrOrdersForCustomer(env.DB, auth.customer.id),
   ]);
   await env.DB.prepare("INSERT INTO privacy_requests(id,customer_id,type,created_at,detail) VALUES(?,?,?,?,'self_service_export')").bind(crypto.randomUUID(), auth.customer.id, "export", now()).run();
-  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices });
+  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices, orders: orders.map(publicLjrOrder), policy_versions: LJR_POLICY_VERSIONS });
 }
 
 async function portalDeletionRequest(request: Request, env: Env): Promise<Response> {
@@ -1945,6 +2124,7 @@ export default {
         });
         return withPortalCors(response, request, env);
       }
+      if (request.method === "OPTIONS" && path.startsWith("/api/longjumpreplay/")) return withLongJumpReplayCors(new Response(null, { status: 204 }), request, env);
       if (url.hostname === "account.tomaspisar.cz" && !path.startsWith('/api/')) {
         const page = await portalPage(request, env, url.pathname);
         if (page) return page;
@@ -1965,6 +2145,7 @@ export default {
       if (path === "/api/portal/account" && request.method === "GET") {
         return withPortalCors(await portalAccount(request, env), request, env);
       }
+      if (path === "/api/longjumpreplay/catalog" && request.method === "GET") return withLongJumpReplayCors(await longJumpReplayCatalog(env), request, env);
       if (path === "/api/portal/data-export" && request.method === "GET") {
         return withPortalCors(await portalDataExport(request, env), request, env);
       }
@@ -1978,6 +2159,9 @@ export default {
 
       let response: Response;
       switch (path) {
+        case "/api/longjumpreplay/checkout":
+          response = await longJumpReplayCheckout(request, env);
+          break;
         case "/api/stripe/webhook":
           response = await handleWebhook(request, env);
           break;
@@ -2047,6 +2231,9 @@ export default {
         case "/api/portal/billing":
           response = await portalBilling(request, env);
           break;
+        case "/api/portal/order/retry-delivery":
+          response = await portalRetryLjrDelivery(request, env);
+          break;
         case "/api/portal/additional-computers":
           response = await portalAdditionalComputers(request, env);
           break;
@@ -2086,18 +2273,21 @@ export default {
         default:
           response = fail("not_found", "Not found", 404);
       }
-      return (path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/")) ? withPortalCors(response, request, env) : response;
+      return path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/") ? withPortalCors(response, request, env)
+        : path.startsWith("/api/longjumpreplay/") ? withLongJumpReplayCors(response, request, env) : response;
     } catch (error) {
       // Never surface internals. The message is logged, not returned.
       if (error instanceof InvalidJsonError) {
         const response = fail("invalid_input", "Send a valid JSON object and try again.");
         return path === "/api/contact" ? withContactCors(response, request)
-          : (path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/")) ? withPortalCors(response, request, env) : response;
+          : path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/") ? withPortalCors(response, request, env)
+          : path.startsWith("/api/longjumpreplay/") ? withLongJumpReplayCors(response, request, env) : response;
       }
       console.error("unhandled", error instanceof Error ? error.message : "unknown");
       const response = fail("server_error", "Something went wrong. Please try again.", 500);
       return path === "/api/contact" ? withContactCors(response, request)
-        : (path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/")) ? withPortalCors(response, request, env) : response;
+        : path.startsWith("/api/portal/") || path.startsWith("/api/economysuite/") ? withPortalCors(response, request, env)
+        : path.startsWith("/api/longjumpreplay/") ? withLongJumpReplayCors(response, request, env) : response;
     }
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {

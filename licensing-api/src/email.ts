@@ -43,6 +43,21 @@ export function orderConfirmationEmail(order: { orderId: string; productName: st
   };
 }
 
+export function longJumpReplayOrderConfirmationEmail(order: { orderId: string; productName: string; licenseType: string; priceMinor: number; currency: string; paidAt: number; deliveryUrl: string; purchaseUrl: string; eulaUrl: string; refundUrl: string; privacyUrl: string; supportEmail: string; receiptReference?: string | null }): VerificationEmail {
+  const price = `${(order.priceMinor / 100).toFixed(2).replace('.', ',')} ${order.currency.toUpperCase()}`;
+  const date = new Date(order.paidAt * 1000).toISOString();
+  const subject = `[LongJumpReplay] Potvrzení objednávky ${order.orderId}`;
+  const text = [
+    'LongJumpReplay — potvrzení objednávky', '', `Objednávka: ${order.orderId}`, `Datum: ${date}`,
+    `Produkt: ${order.productName}`, `Licence: ${order.licenseType === 'subscription' ? 'předplatné' : 'doživotní'}`,
+    `Cena: ${price}`, order.receiptReference ? `Doklad: ${order.receiptReference}` : '', '',
+    'Licence se po potvrzení platby zobrazí v účtu a lze ji aktivovat e-mailem uvedeným při nákupu.',
+    `Účet a aktivace: ${order.deliveryUrl}`, `Podmínky nákupu: ${order.purchaseUrl}`, `Licenční smlouva: ${order.eulaUrl}`,
+    `Vrácení a odstoupení: ${order.refundUrl}`, `Soukromí: ${order.privacyUrl}`, '', `Podpora: ${order.supportEmail}`, 'Novaryn Solutions',
+  ].filter(Boolean).join('\n');
+  return { subject, text, html: `<!doctype html><html lang="cs"><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head><body><h1>Potvrzení objednávky LongJumpReplay</h1><p><strong>Objednávka:</strong> ${escapeHtml(order.orderId)}</p><p><strong>Produkt:</strong> ${escapeHtml(order.productName)}</p><p><strong>Licence:</strong> ${escapeHtml(order.licenseType)}</p><p><strong>Cena:</strong> ${escapeHtml(price)}</p><p>Licence se po potvrzení platby zobrazí v účtu a lze ji aktivovat e-mailem uvedeným při nákupu.</p><p><a href="${escapeHtml(order.deliveryUrl)}">Účet a aktivace</a> · <a href="${escapeHtml(order.purchaseUrl)}">Podmínky nákupu</a> · <a href="${escapeHtml(order.eulaUrl)}">EULA</a> · <a href="${escapeHtml(order.refundUrl)}">Vrácení a odstoupení</a> · <a href="${escapeHtml(order.privacyUrl)}">Soukromí</a></p><p>Podpora: ${escapeHtml(order.supportEmail)}</p></body></html>` };
+}
+
 export class EmailDeliveryError extends Error {
   constructor(public readonly providerStatus: number, detail = "") {
     super(`email send failed with ${providerStatus}${detail ? `: ${detail}` : ""}`);

@@ -42,6 +42,7 @@ export interface Env {
   RATE_LIMIT_REGISTRATION_REQUEST?: string;
   RATE_LIMIT_REGISTRATION_VERIFY?: string;
   RATE_LIMIT_REGISTRATION_COMPLETE?: string;
+  RATE_LIMIT_CHECKOUT?: string;
 
   // Secrets - set with `wrangler secret put`, never in wrangler.jsonc.
   STRIPE_WEBHOOK_SECRET: string;
@@ -124,5 +125,6 @@ export function rateLimits(env: Env) {
     registrationRequest: [int(env.RATE_LIMIT_REGISTRATION_REQUEST, 5), window] as [number, number],
     registrationVerify: [int(env.RATE_LIMIT_REGISTRATION_VERIFY, 10), window] as [number, number],
     registrationComplete: [int(env.RATE_LIMIT_REGISTRATION_COMPLETE, 10), window] as [number, number],
+    checkout: [int(env.RATE_LIMIT_CHECKOUT, 5), window] as [number, number],
   };
 }

@@ -91,9 +91,12 @@ export interface StripeEvent {
 export interface StripeApi {
   getSubscription(id: string): Promise<Record<string, any>>;
   getCheckoutLineItems(sessionId: string): Promise<Record<string, any>[]>;
+  getCheckoutSession(id: string): Promise<Record<string, any>>;
+  getPrice(id: string): Promise<Record<string, any>>;
   getInvoices(customerId: string): Promise<Record<string, any>[]>;
   createBillingPortalSession(customerId: string, returnUrl: string): Promise<string>;
   createAdditionalComputerCheckout(input: { customerId: string; licenseId: string; quantity: number; pricesCzk: number[]; successUrl: string; cancelUrl: string }): Promise<string>;
+  createLongJumpReplayCheckout(input: { priceId: string; mode: "payment" | "subscription"; email: string; orderId: string; licenseType: string; successUrl: string; cancelUrl: string; policyVersions: Record<string, string> }): Promise<{ id: string; url: string }>;
 }
 
 /**
@@ -132,6 +135,8 @@ export function stripeApi(secretKey: string): StripeApi {
       const data = await get(`checkout/sessions/${encodeURIComponent(sessionId)}/line_items?limit=10`);
       return Array.isArray(data.data) ? data.data : [];
     },
+    getPrice: (id) => get(`prices/${encodeURIComponent(id)}?expand[]=product`),
+    getCheckoutSession: (id) => get(`checkout/sessions/${encodeURIComponent(id)}`),
     getInvoices: async (customerId) => {
       const data = await get(`invoices?customer=${encodeURIComponent(customerId)}&limit=10`);
       return Array.isArray(data.data) ? data.data : [];
@@ -157,6 +162,31 @@ export function stripeApi(secretKey: string): StripeApi {
       const data = await postForm("checkout/sessions", values);
       if (typeof data.url !== "string" || !data.url) throw new Error("Stripe did not return a Checkout URL");
       return data.url;
+    },
+    createLongJumpReplayCheckout: async (input) => {
+      const values: Record<string, string> = {
+        mode: input.mode,
+        "line_items[0][price]": input.priceId,
+        "line_items[0][quantity]": "1",
+        customer_email: input.email,
+        client_reference_id: input.orderId,
+        success_url: input.successUrl,
+        cancel_url: input.cancelUrl,
+        "metadata[purchase_type]": "longjumpreplay_license",
+        "metadata[product]": "LongJumpReplay",
+        "metadata[order_id]": input.orderId,
+        "metadata[license_type]": input.licenseType,
+        "metadata[purchase_terms_version]": input.policyVersions.purchase,
+        "metadata[eula_version]": input.policyVersions.eula,
+        "metadata[refund_policy_version]": input.policyVersions.refund,
+        "metadata[privacy_policy_version]": input.policyVersions.privacy,
+        "metadata[consent_version]": input.policyVersions.consent,
+        "payment_intent_data[metadata][purchase_type]": "longjumpreplay_license",
+        "payment_intent_data[metadata][order_id]": input.orderId,
+      };
+      const data = await postForm("checkout/sessions", values);
+      if (typeof data.id !== "string" || typeof data.url !== "string" || !data.url.startsWith("https://checkout.stripe.com/")) throw new Error("Stripe did not return a Checkout URL");
+      return { id: data.id, url: data.url };
     },
   };
 }

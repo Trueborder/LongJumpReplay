@@ -78,7 +78,7 @@
       sending: 'Sending code…', checking: 'Checking code…', sent: 'A code is on the way. It is valid for 10 minutes.',
       invalidEmail: 'Enter a valid email address.', invalidCode: 'Enter the six-digit code from your email.',
       genericError: 'We could not complete that request. Check your connection and try again.', noDevices: 'No activated computers.',
-      noInvoices: 'No invoices available yet.', deactivate: 'Deactivate', deactivating: 'Deactivating…',
+      noInvoices: 'No invoices available yet.', noOrders: 'No LongJumpReplay orders available yet.', order: 'Order', product: 'Product', delivery: 'Delivery', entitlement: 'Entitlement', refund: 'Refund', dispute: 'Dispute', retryDelivery: 'Retry delivery', deactivate: 'Deactivate', deactivating: 'Deactivating…',
       deactivated: 'Computer deactivated.', statusActive: 'Active', statusInactive: 'Inactive',
       statusDeactivated: 'Deactivated', statusLicenceInactive: 'Inactive licence', lifetime: 'Lifetime licence', subscription: 'Monthly subscription',
       devices: 'computers', purchased: 'Purchased', activated: 'Activated', paidThrough: 'Paid through', lastSync: 'Last server sync',
@@ -100,7 +100,7 @@
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
       invalidEmail: 'Zadejte platnou e-mailovou adresu.', invalidCode: 'Zadejte šestimístný kód z e-mailu.',
       genericError: 'Požadavek se nepodařilo dokončit. Zkontrolujte připojení a zkuste to znovu.', noDevices: 'Žádné aktivované počítače.',
-      noInvoices: 'Zatím nejsou k dispozici žádné faktury.', deactivate: 'Deaktivovat', deactivating: 'Deaktivuji…',
+      noInvoices: 'Zatím nejsou k dispozici žádné faktury.', noOrders: 'Zatím nejsou k dispozici žádné objednávky LongJumpReplay.', order: 'Objednávka', product: 'Produkt', delivery: 'Dodání', entitlement: 'Licence', refund: 'Vrácení', dispute: 'Spor', retryDelivery: 'Opakovat dodání', deactivate: 'Deaktivovat', deactivating: 'Deaktivuji…',
       deactivated: 'Počítač byl deaktivován.', statusActive: 'Aktivní', statusInactive: 'Neaktivní',
       statusDeactivated: 'Deaktivováno', statusLicenceInactive: 'Neaktivní licence', lifetime: 'Doživotní licence', subscription: 'Měsíční předplatné',
       devices: 'počítače', purchased: 'Zakoupeno', activated: 'Aktivováno', paidThrough: 'Zaplaceno do', lastSync: 'Poslední synchronizace',
@@ -436,6 +436,13 @@
     });
   };
 
+  const renderOrders = (orders) => {
+    const target = $('#orders'); if (!target) return;
+    target.innerHTML = orders.length ? `<table class="data-table"><caption class="sr-only">${t('order')}</caption><thead><tr><th>${t('order')}</th><th>${t('product')}</th><th>${t('date')}</th><th>${t('amount')}</th><th>${t('delivery')}</th><th>${t('refund')}</th><th>${t('actions')}</th></tr></thead><tbody>${orders.map(order => `<tr><td>${escapeHtml(order.id)}</td><td>${escapeHtml(order.license_type === 'subscription' ? t('subscription') : t('lifetime'))}</td><td>${formatDate(order.created_at)}</td><td>${formatMoney(order.displayed_price_minor, order.currency)}</td><td>${escapeHtml(order.delivery_status || order.status || '—')}</td><td>${escapeHtml(order.refund_status || order.dispute_status || '—')}</td><td>${order.status === 'paid' && order.delivery_status !== 'delivered' ? `<button class="text-button" type="button" data-retry-order="${escapeHtml(order.id)}">${t('retryDelivery')}</button>` : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${t('noOrders')}</div>`;
+  };
+
+  const retryOrder = async (orderId, button) => { button.disabled = true; button.setAttribute('aria-busy','true'); try { await api('/api/portal/order/retry-delivery', { method: 'POST', body: JSON.stringify({ order_id: orderId }) }); notify('success', t('retryDelivery'), state.lang === 'cs' ? 'Dodání opakováno' : 'Delivery retried'); await loadDashboard({ refresh: true }); } catch (error) { setStatus(error, '#account-status', 'error'); } finally { button.disabled = false; button.removeAttribute('aria-busy'); } };
+
   const pairingLicenceOrder = (pairing) => (state.account?.licenses || [])
     .filter((licence) => licence.status === 'active')
     .map((licence) => {
@@ -575,6 +582,7 @@
     renderDevices(devices, activeLicenceIds);
     renderActivationKeys(data);
     renderInvoices(data.invoices || []);
+    renderOrders(data.orders || []);
     renderAdditionalComputers(data.additional_computers || []);
     renderDashboardRoute(hasActiveLicence);
     if (state.pairing) renderPairing(state.pairing);
@@ -798,6 +806,8 @@
       if (deleteButton) deleteDevice(deleteButton.dataset.deleteDevice);
       const detailsButton = event.target.closest('[data-details]');
       if (detailsButton) showDeviceDetails(detailsButton.dataset.details);
+      const retryButton = event.target.closest('[data-retry-order]');
+      if (retryButton) retryOrder(retryButton.dataset.retryOrder, retryButton);
     });
     document.querySelectorAll('[data-open-billing]').forEach((button) => button.addEventListener('click', openBilling));
     $('#logout-button')?.addEventListener('click', signOut);

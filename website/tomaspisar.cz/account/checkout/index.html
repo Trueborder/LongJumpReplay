@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="cs" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex"><title>Nákup licence — LongJumpReplay</title>
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/tokens.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/global.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/components.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/account.css"><link rel="stylesheet" href="/checkout/checkout.css">
+</head>
+<body class="account-page checkout-page">
+  <a class="skip-link" href="#main">Přejít na obsah</a>
+  <main id="main" class="account-shell checkout-shell">
+    <section class="checkout-card" aria-labelledby="checkout-title">
+      <a class="checkout-back" href="https://tomaspisar.cz/products/long-jump-replay/">← LongJumpReplay</a>
+      <p class="eyebrow">LONGJUMPREPLAY / NÁKUP</p><h1 id="checkout-title">Vyberte licenci.</h1>
+      <p class="checkout-lede">Cena, rozsah licence, aktivace a podmínky jsou zobrazené před otevřením zabezpečené platby Stripe.</p>
+      <div id="catalog" class="checkout-catalog" aria-live="polite"><div class="checkout-skeleton" aria-label="Načítám nabídku"></div><div class="checkout-skeleton"></div></div>
+      <form id="checkout-form" hidden>
+        <label for="checkout-email">E-mail účtu</label><input id="checkout-email" type="email" autocomplete="email" required>
+        <div id="checkout-summary" class="checkout-summary"></div>
+        <fieldset class="checkout-consents"><legend>Potvrzení před platbou</legend>
+          <label><input id="purchase-terms" type="checkbox" required> <span>Souhlasím s <a href="/legal/longjumpreplay-purchases/" target="_blank" rel="noopener">podmínkami nákupu LongJumpReplay</a> a <a href="/legal/longjumpreplay-eula/" target="_blank" rel="noopener">licencí EULA</a>.</span></label>
+          <label><input id="delivery-consent" type="checkbox" required> <span>Žádám o okamžité dodání a aktivaci licence před uplynutím běžné lhůty pro odstoupení.</span></label>
+          <label><input id="withdrawal-consent" type="checkbox" required> <span>Beru na vědomí poučení o možném zániku práva na odstoupení v rozsahu, v jakém to po zahájení nebo úplném poskytnutí digitálního plnění připouští právo.</span></label>
+        </fieldset>
+        <p class="checkout-legal-note">Povinná spotřebitelská práva zůstávají zachována. <a href="/legal/longjumpreplay-refunds/">Vrácení a odstoupení</a> · <a href="/products/long-jump-replay/privacy/">Soukromí</a>.</p>
+        <button id="checkout-submit" class="button button-primary button-full" type="submit">Objednávka zavazující k platbě</button>
+        <p id="checkout-status" class="status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+  <script src="https://tomaspisar.cz/assets/js/components/site.js"></script><script src="/checkout/checkout.js"></script>
+</body>
+</html>

@@ -422,6 +422,11 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 #buy { scroll-margin-top: 96px; }
 .pricing-embed { padding: clamp(1rem, 2.5vw, 2rem); border: 1px solid var(--line); background: #fff; box-shadow: 12px 14px 0 color-mix(in srgb, var(--surface-2) 55%, transparent); }
 .pricing-embed stripe-pricing-table { display: block; }
+.pricing-embed:has(.buy-option) { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.buy-option { padding: 1.25rem; border: 1px solid var(--apple-border); border-radius: 16px; background: var(--surface); }
+.buy-option h3 { margin: .25rem 0 .5rem; }
+.buy-option-price { display: block; margin-bottom: .65rem; font-size: 1.6rem; }
+.buy-option .button { margin-top: .5rem; }
 @media (max-width: 650px) { .pricing-embed { padding: .75rem; box-shadow: none; } }
 
 /* Cookie consent. Sits above content but never covers the whole viewport -

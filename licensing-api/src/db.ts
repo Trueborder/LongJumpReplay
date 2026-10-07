@@ -671,9 +671,15 @@ export async function purgeOldDeviceActivity(db: D1Database, cutoff: number): Pr
 
 /** Returns false when the event was already handled - the idempotency guard. */
 export async function claimStripeEvent(db: D1Database, id: string, type: string): Promise<boolean> {
+  const existing = await db.prepare("SELECT processing_status FROM stripe_events WHERE id=?").bind(id).first<{ processing_status: string }>();
+  if (existing?.processing_status === "processed") return false;
+  if (existing) {
+    await db.prepare("UPDATE stripe_events SET type=?, processing_status='processing', last_error=NULL, processed_at=? WHERE id=?").bind(type, now(), id).run();
+    return true;
+  }
   try {
     await db
-      .prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES (?, ?, ?)")
+      .prepare("INSERT INTO stripe_events (id, type, processed_at, processing_status) VALUES (?, ?, ?, 'processing')")
       .bind(id, type, now())
       .run();
     return true;
@@ -681,6 +687,14 @@ export async function claimStripeEvent(db: D1Database, id: string, type: string)
     // Primary key collision: a redelivery of an event already processed.
     return false;
   }
+}
+
+export async function markStripeEventProcessed(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE stripe_events SET processing_status='processed', last_error=NULL, processed_at=? WHERE id=?").bind(now(), id).run();
+}
+
+export async function markStripeEventFailed(db: D1Database, id: string, error: string): Promise<void> {
+  await db.prepare("UPDATE stripe_events SET processing_status='failed', last_error=? WHERE id=?").bind(error.slice(0, 500), id).run();
 }
 
 export async function applyAdditionalComputerPurchase(
