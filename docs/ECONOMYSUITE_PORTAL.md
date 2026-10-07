@@ -70,7 +70,7 @@ The plugin applies cumulative target revisions in SQLite transactions, records o
 
 The isolated sandbox is `acct_1UNHD7RZVoxIJv8F`, created by the Stripe CLI proof-of-work flow on 2026-10-05 for `info@tomaspisar.cz` and claimed on 2026-10-06. Review/rotate its test credentials after claiming it.
 
-The live catalog was published on 2026-10-06 with one-time CZK prices reduced by 60% from the initially approved tiers: 1,000 coins / 10 tokens at 19.60 CZK, 5,000 coins / 50 tokens at 79.60 CZK, and 10,000 coins / 100 tokens at 139.60 CZK.
+The live catalog currently contains six one-time CZK packages: 5,000 coins / 50 tokens at 19.90 CZK, 10,000 coins / 100 tokens at 29.90 CZK, and 100,000 coins / 1,000 tokens at 99.90 CZK. The former 1,000-coin and 10-token 4.90 CZK products were archived in Stripe and are no longer published.
 
 `scripts/rehearse-economysuite.mjs` uses only the named staging databases and refuses live Stripe keys. It creates a temporary test account, performs both pairing confirmations, temporarily publishes one sandbox package, creates/pays an actual sandbox Checkout Session using Stripe's test token, delivers signed events, tests partial/full refunds, then removes its D1 fixtures and returns the product to unpublished. The payment-page steps follow the [official Stripe CLI fixture](https://github.com/stripe/stripe-cli/blob/master/pkg/fixtures/triggers/checkout.session.completed.json).
 
