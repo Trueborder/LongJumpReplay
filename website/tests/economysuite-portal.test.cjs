@@ -44,8 +44,38 @@ test('purchase return renders instructions and Minecraft currency icons', () => 
 });
 
 test('store explains how purchases support the developer', () => {
-  assert.match(script, /es-support-note/);
+  assert.match(script, /es-store-note/);
   assert.match(script, /Novaryn Solutions/);
-  assert.match(script, /All money from this store goes directly to developer/);
-  assert.match(css, /\.es-support-note/);
+  assert.match(script, /Your purchase supports EconomySuite development and operation/);
+  assert.match(css, /\.es-store-note/);
+});
+
+test('appearance combines prefix, colour, and title into one preview', () => {
+  assert.match(script, /cosmetic-combined-form/);
+  assert.match(script, /combined-appearance-preview/);
+  assert.match(script, /combinedPreview\(cosmetics\)/);
+  assert.match(css, /\.es-combined-preview/);
+});
+
+test('level progress exposes current progress and the next level', () => {
+  assert.match(script, /function levelProgress/);
+  assert.match(script, /aria-valuemax/);
+  assert.match(script, /active progress/);
+  assert.match(css, /\.es-level-progress/);
+});
+
+test('store opens purchase agreements in a modal after Order', () => {
+  assert.match(script, /id="purchase-dialog" class="es-modal"/);
+  assert.match(script, /openPurchaseDialog/);
+  assert.match(script, /Confirm and continue to checkout/);
+  assert.match(script, /id="accept-purchase-terms" type="checkbox" required/);
+  assert.match(script, /id="request-immediate-delivery" type="checkbox" required/);
+  assert.doesNotMatch(script, /purchase-consent-form.*?support-note/s);
+  assert.match(css, /\.es-modal-card/);
+});
+
+test('purchase history defaults to paid and supports status filters', () => {
+  assert.match(script, /purchaseFilter = 'paid'/);
+  assert.match(script, /id="purchase-filter"/);
+  for (const state of ['all', 'cancelled', 'refunded', 'partially_refunded', 'disputed']) assert.match(script, new RegExp("'" + state + "'"));
 });
