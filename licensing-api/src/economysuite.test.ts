@@ -11,6 +11,8 @@ describe('EconomySuite currency catalog', () => {
   const product = { active: true, name: 'Coin pack', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 4900, metadata: { es_currency: 'coins', es_amount: '1000' } } };
   it('accepts only explicitly published one-time Pantheon packages', () => {
     expect(packageFromProduct(product)?.amount).toBe(1000);
+    expect(packageFromProduct(product)?.checkoutable).toBe(true);
+    expect(packageFromProduct({ ...product, default_price: { ...product.default_price, unit_amount: 490 } })?.checkoutable).toBe(false);
     expect(packageFromProduct({ ...product, metadata: {} })).toBeNull();
     expect(packageFromProduct({ ...product, default_price: { ...product.default_price, currency: 'eur' } })).toBeNull();
     expect(packageFromProduct({ ...product, default_price: { ...product.default_price, metadata: { es_currency: 'tokens', es_amount: '-1' } } })).toBeNull();
@@ -135,20 +137,20 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
     let checkoutBody: URLSearchParams | null = null;
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.includes('/products?')) return Response.json({ data: [{ active: true, name: 'Tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 300, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false });
+      if (url.includes('/products?')) return Response.json({ data: [{ active: true, name: 'Tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 1990, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false });
       if (url.endsWith('/checkout/sessions') && init?.body) checkoutBody = new URLSearchParams(String(init.body));
       return Response.json({ id: 'cs_es', url: 'https://checkout.stripe.com/c/pay' });
     }));
     expect((await economySuite(request('checkout', { price_id: 'price_es' }), env, auth)).status).toBe(422);
-    const result = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 300, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
+    const result = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 1990, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
     expect(result.status).toBe(200);
     const sentCheckoutBody = checkoutBody as unknown as URLSearchParams;
     expect(sentCheckoutBody.get('client_reference_id')).toBeTruthy();
     expect(sentCheckoutBody.has('integration_identifier')).toBe(false);
-    const retry = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 300, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
+    const retry = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 1990, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
     expect(retry.status).toBe(200);
     expect((await retry.json() as { idempotent?: boolean }).idempotent).toBe(true);
-    expect(await db.prepare('SELECT policy_version,immediate_delivery_requested,withdrawal_rights_acknowledged,displayed_price_minor FROM store_orders').first()).toMatchObject({ policy_version: '2026-10-06', immediate_delivery_requested: 1, withdrawal_rights_acknowledged: 1, displayed_price_minor: 300 });
+    expect(await db.prepare('SELECT policy_version,immediate_delivery_requested,withdrawal_rights_acknowledged,displayed_price_minor FROM store_orders').first()).toMatchObject({ policy_version: '2026-10-06', immediate_delivery_requested: 1, withdrawal_rights_acknowledged: 1, displayed_price_minor: 1990 });
     expect(await db.prepare('SELECT COUNT(*) AS n FROM purchase_consents').first('n')).toBe(1);
     expect(await db.prepare('SELECT status FROM order_confirmations').first('status')).toBe('sent');
   });
@@ -157,6 +159,18 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     const response = await economySuite(new Request('https://account.tomaspisar.cz/api/economysuite/catalog'), env, { authenticate: async () => null, mutation: async () => false });
     expect(response.status).toBe(200);
     expect((await response.json() as { packages: { id: string }[] }).packages[0].id).toBe('price_public');
+  });
+  it('rejects CZK packages below Stripe minimum before creating an order', async () => {
+    const db = env.ECONOMYSUITE_DB!;
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/products?')) return Response.json({ data: [{ active: true, name: 'Micro tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_micro', active: true, currency: 'czk', type: 'one_time', unit_amount: 490, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false });
+      throw new Error('Stripe Checkout must not be called for a sub-minimum package');
+    }));
+    const response = await economySuite(request('checkout', { price_id: 'price_micro', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 490, displayed_currency: 'czk', idempotency_key: 'checkout-micro-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: 'stripe_minimum' });
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM store_orders').first('n')).toBe(0);
   });
   it('registers players without a real-name profile and retains the LongJumpReplay setup gate', async () => {
     const timestamp = Math.floor(Date.now() / 1000), setup = 'verified-test-registration';

@@ -8,10 +8,13 @@ import { ECONOMYSUITE_POLICY_URLS, ECONOMYSUITE_POLICY_VERSIONS, policyVersionsM
 export interface PlayerAuth { customer: { id: string; email: string }; credential: { password_hash: string } | null }
 export interface EconomyAuth { authenticate(request: Request): Promise<PlayerAuth | null>; mutation(request: Request): Promise<boolean> }
 export type Currency = 'coins' | 'tokens';
-interface Package { id: string; name: string; description: string; currency: Currency; amount: number; price_minor: number; sort: number }
+interface Package { id: string; name: string; description: string; currency: Currency; amount: number; price_minor: number; sort: number; checkoutable: boolean }
 interface Link { customer_id: string; uuid: string; name: string; leaderboard: number }
 interface Order { id: string; customer_id: string; uuid: string; player_name: string; price_id: string; currency_type: Currency; currency_amount: number; price_minor: number; session_id: string | null; payment_intent: string | null; dispute_id: string | null; paid: number; target_amount: number; revision: number; delivered_revision: number; state: string; receipt_url: string | null; receipt_reference: string | null; created_at: number }
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+// Stripe currently requires a minimum charge of 15.00 CZK for CZK payments.
+// Keep this guard server-side so a public catalogue can never create a doomed Checkout Session.
+export const STRIPE_CZK_MINIMUM_MINOR = 1500;
 const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 const error = (code: string, message: string, status = 400) => reply({ error: code, message }, status);
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -83,7 +86,7 @@ export function packageFromProduct(value: unknown): Package | null {
   const p = object(value), m = object(p.metadata), price = object(p.default_price), pm = object(price.metadata);
   const amount = integer(pm.es_amount, 1), minor = integer(price.unit_amount, 1);
   if (p.active !== true || m.es_product !== 'economysuite' || m.es_server !== 'pantheon' || m.es_published !== 'true' || price.active !== true || price.currency !== 'czk' || price.type !== 'one_time' || !amount || !minor || !['coins', 'tokens'].includes(s(pm.es_currency)) || !s(price.id)) return null;
-  return { id: s(price.id), name: s(p.name), description: s(p.description), currency: pm.es_currency as Currency, amount, price_minor: minor, sort: integer(m.es_sort) ?? 0 };
+  return { id: s(price.id), name: s(p.name), description: s(p.description), currency: pm.es_currency as Currency, amount, price_minor: minor, sort: integer(m.es_sort) ?? 0, checkoutable: minor >= STRIPE_CZK_MINIMUM_MINOR };
 }
 async function catalog(env: Env): Promise<Package[]> {
   const out: Package[] = [];
@@ -320,6 +323,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     if (env.ECONOMYSUITE_PURCHASES_ENABLED !== 'true') return error('unavailable', 'Purchases are not available yet.', 503);
     const pack = (await catalog(env)).find(p => p.id === s(data.price_id));
     if (!pack) return error('invalid_package', 'This package is no longer available.');
+    if (!pack.checkoutable) return error('stripe_minimum', 'Tento balíček nelze přes Stripe účtovat. Stripe vyžaduje pro platby v CZK minimálně 15 Kč. Zvol vyšší balíček.', 422);
     if (data.accepted_purchase_terms !== true || data.immediate_delivery_requested !== true || data.withdrawal_rights_acknowledged !== true || !policyVersionsMatch(data.policy_versions)) {
       return error('purchase_consent_required', 'Před platbou potvrďte podmínky nákupu, okamžité digitální dodání a ztrátu práva na odstoupení.', 422);
     }
