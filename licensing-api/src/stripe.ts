@@ -146,7 +146,7 @@ export function stripeApi(secretKey: string): StripeApi {
         mode: "payment", customer: input.customerId, "metadata[customer_id]": input.customerId,
         "metadata[license_id]": input.licenseId, "metadata[quantity]": String(input.quantity),
         "metadata[product]": "LongJumpReplay", "metadata[purchase_type]": "additional_computers",
-        success_url: input.successUrl, cancel_url: input.cancelUrl, integration_identifier: `longjumpreplay_addon_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`,
+        success_url: input.successUrl, cancel_url: input.cancelUrl, client_reference_id: `longjumpreplay_addon_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`,
       };
       input.pricesCzk.forEach((amount, index) => {
         values[`line_items[${index}][price_data][currency]`] = "czk";

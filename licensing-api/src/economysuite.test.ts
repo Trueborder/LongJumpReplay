@@ -133,13 +133,18 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
   it('rejects checkout without legal acceptance and persists the accepted purchase evidence', async () => {
     const db = env.ECONOMYSUITE_DB!;
     await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    let checkoutBody: URLSearchParams | null = null;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/products?')) return Response.json({ data: [{ active: true, name: 'Tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 300, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false });
+      if (url.endsWith('/checkout/sessions') && init?.body) checkoutBody = new URLSearchParams(String(init.body));
       return Response.json({ id: 'cs_es', url: 'https://checkout.stripe.com/c/pay' });
     }));
     expect((await economySuite(request('checkout', { price_id: 'price_es' }), env, auth)).status).toBe(422);
     const result = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 300, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
     expect(result.status).toBe(200);
+    const sentCheckoutBody = checkoutBody as unknown as URLSearchParams;
+    expect(sentCheckoutBody.get('client_reference_id')).toBeTruthy();
+    expect(sentCheckoutBody.has('integration_identifier')).toBe(false);
     const retry = await economySuite(request('checkout', { price_id: 'price_es', accepted_purchase_terms: true, immediate_delivery_requested: true, withdrawal_rights_acknowledged: true, displayed_price_minor: 300, displayed_currency: 'czk', idempotency_key: 'checkout-test-123456', policy_versions: { privacy: '2026-10-06', purchase: '2026-10-06', refund: '2026-10-06', delivery: '2026-10-06' } }), env, auth);
     expect(retry.status).toBe(200);
     expect((await retry.json() as { idempotent?: boolean }).idempotent).toBe(true);
