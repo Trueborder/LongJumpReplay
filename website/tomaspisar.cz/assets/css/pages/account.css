@@ -225,6 +225,9 @@
 .profile-name-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 .profile-name-grid > div { display: grid; gap: .5rem; }
 .profile-status { margin-top: 1rem; }
+.privacy-settings-card { grid-column: 1 / -1; }
+.privacy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; margin: 1rem 0 1.25rem; }
+.privacy-deletion-form { max-width: 32rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .account-settings-card .password-security-tools { margin: 0; padding: 0; border: 0; }
 .login-info-button:hover + .login-info-tooltip,
 .login-info-button:focus + .login-info-tooltip,

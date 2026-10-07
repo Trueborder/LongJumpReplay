@@ -18,6 +18,10 @@ test('LongJumpReplay has separate legal pages and checkout evidence controls', (
   assert.match(checkout, /delivery-consent/);
   assert.match(checkout, /withdrawal-consent/);
   assert.doesNotMatch(checkout, /checked\s*=/i);
+  const dashboard = read('account/dashboard/index.html');
+  assert.match(dashboard, /export-data/);
+  assert.match(dashboard, /deletion-form/);
+  assert.match(dashboard, /Request account deletion|Požádat o výmaz účtu/);
 });
 
 test('LongJumpReplay public product no longer embeds a hardcoded Stripe pricing table', () => {

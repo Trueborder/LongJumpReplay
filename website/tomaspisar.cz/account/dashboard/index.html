@@ -184,6 +184,17 @@
                 <form id="password-enroll-form" class="password-security-form"></form>
               </div>
             </section>
+            <section class="account-settings-card privacy-settings-card" aria-labelledby="privacy-settings-title">
+              <div class="settings-card-heading"><p class="eyebrow" data-en="PRIVACY" data-cs="SOUKROMÍ">PRIVACY</p><h3 id="privacy-settings-title" data-en="Your data and account." data-cs="Vaše data a účet.">Your data and account.</h3></div>
+              <p data-en="Download a copy of your LongJumpReplay account data or request account deletion. Financial, security and legally required records may need to be retained." data-cs="Stáhněte si kopii dat účtu LongJumpReplay nebo požádejte o jeho výmaz. Finanční, bezpečnostní a zákonem vyžadované záznamy může být nutné uchovat.">Download a copy of your LongJumpReplay account data or request account deletion. Financial, security and legally required records may need to be retained.</p>
+              <div class="privacy-actions"><button id="export-data" class="button button-outline" type="button" data-en="Download my data" data-cs="Stáhnout moje data">Download my data</button><a class="text-button" href="https://tomaspisar.cz/products/long-jump-replay/privacy/" data-en="Read the privacy notice" data-cs="Přečíst zásady ochrany soukromí">Read the privacy notice</a></div>
+              <form id="deletion-form" class="account-settings-form privacy-deletion-form">
+                <label for="deletion-password" data-en="Current password to confirm deletion" data-cs="Současné heslo pro potvrzení výmazu">Current password to confirm deletion</label>
+                <input id="deletion-password" type="password" autocomplete="current-password" minlength="12" required>
+                <button id="deletion-request-button" class="button button-danger" type="submit" data-en="Request account deletion" data-cs="Požádat o výmaz účtu">Request account deletion</button>
+              </form>
+              <p id="privacy-status" class="status" role="status" aria-live="polite"></p>
+            </section>
           </div>
           <p id="profile-status" class="status profile-status" role="status" aria-live="polite"></p>
         </section>

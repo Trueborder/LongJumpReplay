@@ -78,7 +78,7 @@
       sending: 'Sending code…', checking: 'Checking code…', sent: 'A code is on the way. It is valid for 10 minutes.',
       invalidEmail: 'Enter a valid email address.', invalidCode: 'Enter the six-digit code from your email.',
       genericError: 'We could not complete that request. Check your connection and try again.', noDevices: 'No activated computers.',
-      noInvoices: 'No invoices available yet.', noOrders: 'No LongJumpReplay orders available yet.', order: 'Order', product: 'Product', delivery: 'Delivery', entitlement: 'Entitlement', refund: 'Refund', dispute: 'Dispute', retryDelivery: 'Retry delivery', deactivate: 'Deactivate', deactivating: 'Deactivating…',
+      noInvoices: 'No invoices available yet.', noOrders: 'No LongJumpReplay orders available yet.', order: 'Order', product: 'Product', delivery: 'Delivery', entitlement: 'Entitlement', refund: 'Refund', dispute: 'Dispute', retryDelivery: 'Retry delivery', exportReady: 'Your data export is ready.', deletionRequested: 'Your account deletion request was recorded.', deactivate: 'Deactivate', deactivating: 'Deactivating…',
       deactivated: 'Computer deactivated.', statusActive: 'Active', statusInactive: 'Inactive',
       statusDeactivated: 'Deactivated', statusLicenceInactive: 'Inactive licence', lifetime: 'Lifetime licence', subscription: 'Monthly subscription',
       devices: 'computers', purchased: 'Purchased', activated: 'Activated', paidThrough: 'Paid through', lastSync: 'Last server sync',
@@ -100,7 +100,7 @@
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
       invalidEmail: 'Zadejte platnou e-mailovou adresu.', invalidCode: 'Zadejte šestimístný kód z e-mailu.',
       genericError: 'Požadavek se nepodařilo dokončit. Zkontrolujte připojení a zkuste to znovu.', noDevices: 'Žádné aktivované počítače.',
-      noInvoices: 'Zatím nejsou k dispozici žádné faktury.', noOrders: 'Zatím nejsou k dispozici žádné objednávky LongJumpReplay.', order: 'Objednávka', product: 'Produkt', delivery: 'Dodání', entitlement: 'Licence', refund: 'Vrácení', dispute: 'Spor', retryDelivery: 'Opakovat dodání', deactivate: 'Deaktivovat', deactivating: 'Deaktivuji…',
+      noInvoices: 'Zatím nejsou k dispozici žádné faktury.', noOrders: 'Zatím nejsou k dispozici žádné objednávky LongJumpReplay.', order: 'Objednávka', product: 'Produkt', delivery: 'Dodání', entitlement: 'Licence', refund: 'Vrácení', dispute: 'Spor', retryDelivery: 'Opakovat dodání', exportReady: 'Export vašich dat je připraven.', deletionRequested: 'Žádost o výmaz účtu byla zaznamenána.', deactivate: 'Deaktivovat', deactivating: 'Deaktivuji…',
       deactivated: 'Počítač byl deaktivován.', statusActive: 'Aktivní', statusInactive: 'Neaktivní',
       statusDeactivated: 'Deaktivováno', statusLicenceInactive: 'Neaktivní licence', lifetime: 'Doživotní licence', subscription: 'Měsíční předplatné',
       devices: 'počítače', purchased: 'Zakoupeno', activated: 'Aktivováno', paidThrough: 'Zaplaceno do', lastSync: 'Poslední synchronizace',
@@ -796,6 +796,20 @@
     catch (error) { setStatus(error, '#account-status', 'error'); }
   };
 
+  const exportAccountData = async () => {
+    const button = $('#export-data'); if (!button) return; button.disabled = true; button.setAttribute('aria-busy', 'true');
+    try { const data = await api('/api/portal/data-export'); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'longjumpreplay-data-export.json'; link.click(); URL.revokeObjectURL(url); notify('success', t('exportReady'), state.lang === 'cs' ? 'Export připraven' : 'Export ready'); }
+    catch (error) { setStatus(error, '#privacy-status', 'error'); } finally { button.disabled = false; button.removeAttribute('aria-busy'); }
+  };
+
+  const requestAccountDeletion = async (event) => {
+    event.preventDefault(); const password = $('#deletion-password')?.value || ''; if (password.length < 12) { setStatus(state.lang === 'cs' ? 'Zadejte současné heslo.' : 'Enter your current password.', '#privacy-status', 'error'); return; }
+    const accepted = await feedback?.confirm?.({ title: state.lang === 'cs' ? 'Požádat o výmaz účtu?' : 'Request account deletion?', description: state.lang === 'cs' ? 'Žádost bude zaznamenána. Účetní, bezpečnostní a zákonem vyžadované záznamy mohou být uchovány.' : 'The request will be recorded. Accounting, security and legally required records may be retained.', confirmLabel: state.lang === 'cs' ? 'Požádat o výmaz' : 'Request deletion', cancelLabel: state.lang === 'cs' ? 'Zrušit' : 'Cancel', destructive: true });
+    if (!accepted) return; const button = $('#deletion-request-button'); button.disabled = true; button.setAttribute('aria-busy', 'true');
+    try { await api('/api/portal/account/deletion-request', { method: 'POST', body: JSON.stringify({ password }) }); $('#deletion-password').value = ''; setStatus(t('deletionRequested'), '#privacy-status'); notify('success', t('deletionRequested'), state.lang === 'cs' ? 'Žádost zaznamenána' : 'Request recorded'); }
+    catch (error) { setStatus(error, '#privacy-status', 'error'); } finally { button.disabled = false; button.removeAttribute('aria-busy'); }
+  };
+
   const initDashboard = () => {
     const pendingPairing = capturePairingFromLocation();
     renderDashboardRoute(false);
@@ -838,6 +852,8 @@
       } catch (error) { setStatus(error, '#profile-status', 'error'); }
       finally { button.disabled = false; }
     });
+    $('#export-data')?.addEventListener('click', exportAccountData);
+    $('#deletion-form')?.addEventListener('submit', requestAccountDeletion);
     $('#password-enroll-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
