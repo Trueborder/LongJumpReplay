@@ -75,6 +75,25 @@ test('overview explains XP sources and renders synced current and job tasks', ()
   assert.match(css, /\.es-job-task/);
 });
 
+test('EconomySuite pairing has an explicit four-step onboarding flow', () => {
+  assert.match(script, /function onboardingGuide/);
+  assert.match(script, /Run \/web link/);
+  assert.match(script, /Confirm your player/);
+  assert.match(script, /Finish in Minecraft/);
+  assert.match(script, /copy-pair-command/);
+  assert.match(script, /es-pair-confirmation/);
+  assert.match(css, /\.es-onboarding-steps/);
+  assert.match(css, /\.es-onboarding-step\.is-active/);
+});
+
+test('EconomySuite motion uses purposeful GPU-friendly transitions and reduced motion', () => {
+  assert.match(css, /--ease-out:cubic-bezier\(\.23,1,\.32,1\)/);
+  assert.match(css, /transform:translateY\(-1px\)/);
+  assert.match(css, /transform-origin:left center/);
+  assert.match(css, /prefers-reduced-motion:reduce/);
+  assert.doesNotMatch(css, /transition:all/);
+});
+
 test('store opens purchase agreements in a modal after Order', () => {
   assert.match(script, /id="purchase-dialog" class="es-modal"/);
   assert.match(script, /openPurchaseDialog/);
