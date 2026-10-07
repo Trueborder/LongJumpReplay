@@ -54,6 +54,12 @@ test('mobile dashboard keeps the sign-out action visible', () => {
   assert.doesNotMatch(css, /\.account-page \.account-logout-button \{ display: none; \}/);
 });
 
+test('LongJumpReplay dashboard exposes the EconomySuite switch', () => {
+  assert.match(html, /class="dashboard-product-switch button button-primary" href="\/economysuite\/overview"/);
+  assert.match(html, /class="dashboard-product-switch button button-primary" href="\/economysuite\/overview"[\s\S]*?data-en="Open EconomySuite" data-cs="Otevřít EconomySuite"/);
+  assert.match(css, /\.dashboard-product-switch-row/);
+});
+
 test('overview prioritizes licence state and gives a real next action', () => {
   assert.doesNotMatch(html, /class="dashboard-hero"/);
   assert.match(html, /class="dashboard-accessible-title"/);

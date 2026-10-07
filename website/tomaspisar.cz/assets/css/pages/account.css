@@ -499,6 +499,10 @@
 
 .portal-dashboard-page .dashboard-shell { width: min(1440px, calc(100% - 3rem)); padding-top: 0; }
 .portal-dashboard-page #account-status:empty { display: none; }
+.dashboard-product-switch-row { display: flex; justify-content: flex-end; margin: 0 0 .9rem; }
+.dashboard-product-switch { display: inline-flex; align-items: center; gap: .55rem; min-height: 44px; padding-inline: 1rem; border-radius: 11px; font-weight: 700; text-decoration: none; }
+.dashboard-product-switch:hover { transform: translateY(-1px); }
+.dashboard-product-switch span:last-child { font-size: 1.1em; }
 .dashboard-accessible-title { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .portal-dashboard-page .dashboard-hero {
   align-items: center;
@@ -637,6 +641,8 @@
   .portal-login-page .login-shell { width: calc(100% - 1.5rem); }
   .portal-dashboard-page .dashboard-hero { display: block; }
   .portal-dashboard-page .dashboard-actions { justify-content: start; margin-top: 1.5rem; }
+  .dashboard-product-switch-row { justify-content: stretch; }
+  .dashboard-product-switch { width: 100%; justify-content: center; }
   .overview-grid { grid-template-columns: 1fr; }
   .overview-shortcuts { grid-template-columns: 1fr; }
   .overview-shortcuts a { min-height: 0; }
