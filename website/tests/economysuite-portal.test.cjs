@@ -64,6 +64,17 @@ test('level progress exposes current progress and the next level', () => {
   assert.match(css, /\.es-level-progress/);
 });
 
+test('overview explains XP sources and renders synced current and job tasks', () => {
+  assert.match(script, /function xpSources/);
+  assert.match(script, /Ways to earn XP/);
+  assert.match(script, /function currentTasks/);
+  assert.match(script, /function jobTask/);
+  assert.match(script, /snapshot\.job_task/);
+  assert.match(script, /role="progressbar"/);
+  assert.match(css, /\.es-xp-sources/);
+  assert.match(css, /\.es-job-task/);
+});
+
 test('store opens purchase agreements in a modal after Order', () => {
   assert.match(script, /id="purchase-dialog" class="es-modal"/);
   assert.match(script, /openPurchaseDialog/);
