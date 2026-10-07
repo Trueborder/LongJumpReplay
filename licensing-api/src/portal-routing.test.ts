@@ -5,6 +5,8 @@ describe("customer portal page routing", () => {
   it("sends the account root to the correct first screen", () => {
     expect(portalPageRoute("/", false)).toEqual({ kind: "redirect", location: "/login" });
     expect(portalPageRoute("/", true)).toEqual({ kind: "redirect", location: "/dashboard/overview" });
+    expect(portalPageRoute("/", true, false, "economysuite")).toEqual({ kind: "redirect", location: "/economysuite/overview" });
+    expect(portalPageRoute("/", true, false, "longjumpreplay")).toEqual({ kind: "redirect", location: "/dashboard/overview" });
   });
 
   it("keeps authenticated customers out of the login screen", () => {

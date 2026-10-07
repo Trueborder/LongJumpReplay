@@ -23,9 +23,9 @@ const dashboardPath = (path: string): boolean => {
 };
 
 /** Resolve the public portal URLs while keeping auth policy out of asset code. */
-export function portalPageRoute(path: string, authenticated: boolean, setupRequired = false): PortalPageRoute {
+export function portalPageRoute(path: string, authenticated: boolean, setupRequired = false, lastProduct: "economysuite" | "longjumpreplay" | null = null): PortalPageRoute {
   if (path === "/") {
-    return { kind: "redirect", location: authenticated ? (setupRequired ? "/register?mode=migration" : "/dashboard/overview") : "/login" };
+    return { kind: "redirect", location: authenticated ? (setupRequired ? "/register?mode=migration" : lastProduct === "economysuite" ? "/economysuite/overview" : "/dashboard/overview") : "/login" };
   }
   if (path === "/register/") return { kind: "redirect", location: "/register" };
   if (path === "/register") return { kind: "asset", assetPath: REGISTRATION_ASSET };

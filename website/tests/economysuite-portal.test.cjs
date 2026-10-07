@@ -102,6 +102,7 @@ test('store opens purchase agreements in a modal after Order', () => {
   assert.match(script, /id="request-immediate-delivery" type="checkbox" required/);
   assert.doesNotMatch(script, /purchase-consent-form.*?support-note/s);
   assert.match(css, /\.es-modal-card/);
+  assert.match(css, /\.es-main\{animation:es-fade-in/);
 });
 
 test('purchase history defaults to paid and supports status filters', () => {

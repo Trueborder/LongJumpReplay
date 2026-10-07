@@ -70,6 +70,10 @@ body.es-portal{padding-top:0}
 .es-portal button:not(:disabled):active,.es-button:active,.es-product-switch:active,#navigation a:active{transform:translateY(1px) scale(.985)}
 @media(hover:hover) and (pointer:fine){.es-portal button:not(:disabled):hover,.es-button:hover,.es-product-switch:hover,#navigation a:hover{transform:translateY(-1px)}}
 .es-header,.es-sidebar,.es-main{animation:es-page-enter 240ms var(--ease-out) both}.es-sidebar{animation-delay:30ms}.es-main{animation-delay:55ms}
+/* Keep the main shell out of the fixed-position containing-block chain. A
+   transform on .es-main would trap the purchase dialog backdrop inside the
+   dashboard column instead of covering the viewport. */
+.es-main{animation:es-fade-in 240ms ease-out both}
 #content > .es-panel,#content > .es-grid > .es-panel,#content > .es-thanks{animation:es-content-enter 240ms var(--ease-out) both}
 #content > :nth-child(2){animation-delay:35ms}#content > :nth-child(3){animation-delay:70ms}#content > :nth-child(4){animation-delay:105ms}
 .es-progress[role=progressbar] span{width:100%!important;transform:scaleX(var(--es-progress-scale,0));transform-origin:left center;transition:transform 240ms var(--ease-out)}

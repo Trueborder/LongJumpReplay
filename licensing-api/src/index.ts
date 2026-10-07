@@ -106,6 +106,7 @@ const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const MAX_BODY_BYTES = 16_384;
 const PORTAL_SESSION_COOKIE = "ljr-portal-session";
 const PORTAL_CSRF_COOKIE = "ljr-portal-csrf";
+const PORTAL_PRODUCT_COOKIE = "ljr-last-product";
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 128;
 const SETUP_TOKEN_TTL_SECONDS = 15 * 60;
@@ -289,6 +290,21 @@ function portalCsrfCookie(token: string, maxAge: number): string {
   return `${PORTAL_CSRF_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Domain=.tomaspisar.cz; Path=/; Secure; SameSite=Lax`;
 }
 
+function portalProductCookie(product: "economysuite" | "longjumpreplay"): string {
+  return `${PORTAL_PRODUCT_COOKIE}=${product}; Max-Age=${60 * 60 * 24 * 180}; Domain=.tomaspisar.cz; Path=/; Secure; SameSite=Lax`;
+}
+
+function portalProductPreference(request: Request): "economysuite" | "longjumpreplay" | null {
+  const cookie = request.headers.get("Cookie") ?? "";
+  for (const part of cookie.split(";")) {
+    const [name, ...value] = part.trim().split("=");
+    if (name !== PORTAL_PRODUCT_COOKIE) continue;
+    const candidate = decodeURIComponent(value.join("="));
+    if (candidate === "economysuite" || candidate === "longjumpreplay") return candidate;
+  }
+  return null;
+}
+
 function jsonWithPortalSession(data: unknown, token: string, csrfToken: string, maxAge: number, status = 200): Response {
   const response = json(data, status);
   response.headers.append("Set-Cookie", portalCookie(token, maxAge));
@@ -347,7 +363,10 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
     // while every player data endpoint independently validates ownership.
     if (!auth && !['store', 'pair'].includes(category)) return portalRedirect(request, `/login?product=economysuite&next=${encodeURIComponent(path)}`);
     const asset = await env.ASSETS.fetch(new Request(new URL('/economysuite/', request.url), request));
-    return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
+    const headers = new Headers(asset.headers);
+    headers.set('Cache-Control', 'no-store');
+    if (auth && !auth.requiresSetup) headers.append('Set-Cookie', portalProductCookie('economysuite'));
+    return new Response(asset.body, { status: asset.status, headers });
   }
   const isPortalPage = ["/", "/login", "/login/", "/register", "/register/", "/dashboard", "/dashboard/", "/approve/pairing", "/approve/pairing/"].includes(path)
     || path.startsWith("/dashboard/");
@@ -362,7 +381,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
     const asset = await env.ASSETS.fetch(new Request(new URL(path.startsWith('/register') ? '/register/' : '/login/', request.url), request));
     return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
   }
-  const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup));
+  const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup), portalProductPreference(request));
   if (!route) return null;
   if (route.kind === "redirect") return portalRedirect(request, route.location);
 
@@ -370,6 +389,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
   const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
   const headers = new Headers(assetResponse.headers);
   headers.set("Cache-Control", "no-store");
+  if (auth && !auth.requiresSetup && path.startsWith("/dashboard/")) headers.append("Set-Cookie", portalProductCookie("longjumpreplay"));
   return new Response(assetResponse.body, {
     status: assetResponse.status,
     statusText: assetResponse.statusText,
