@@ -11,14 +11,20 @@ const css = fs.readFileSync(path.join(root, 'app.css'), 'utf8');
 test('EconomySuite portal exposes live server state and full data refresh', () => {
   assert.match(html, /class="es-live-actions"[^>]*data-state="connecting"[^>]*role="group"/);
   assert.match(html, /id="connection"[^>]*data-state="connecting"/);
-  assert.match(html, /id="refresh-data"/);
+  assert.match(html, /<button id="refresh-data" class="es-refresh es-connection-control"/);
+  assert.doesNotMatch(html, /<button id="refresh-data"[^>]*hidden/);
   assert.match(script, /server_status/);
   assert.match(script, /closest\('\.es-live-actions'\)\.dataset\.state = state/);
+  assert.match(script, /const state = refreshing \? 'connecting'/);
+  assert.match(script, /refresh\.dataset\.tooltip = tooltip/);
   assert.match(script, /\/api\/economysuite\/refresh/);
   assert.match(script, /Data refreshed from the server/);
   assert.match(css, /\.es-connection\[data-state=connected\]/);
   assert.match(css, /\.es-connection\[data-state=connecting\]/);
   assert.match(css, /\.es-connection\[data-state=disconnected\]/);
+  assert.match(css, /\.es-connection-control:hover::after/);
+  assert.match(css, /transform-origin:center/);
+  assert.match(css, /body\.es-portal\{padding-top:0\}/);
   assert.match(css, /@keyframes es-connection-pulse/);
 });
 

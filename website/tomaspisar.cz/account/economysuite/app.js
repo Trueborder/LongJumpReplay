@@ -130,17 +130,24 @@
     return panel(t('Propojit hráče', 'Pair player'), `<h2>${escape(pairing.name)}</h2><p>${t('Potvrď pouze hráče, který je tvůj. Po potvrzení zde získáš příkaz pro dokončení ve hře.', 'Confirm only your own player. You will receive a command to finish pairing in-game.')}</p><button id="approve-pair" class="es-primary">${t('Potvrdit hráče', 'Confirm player')}</button><div id="pair-command"></div>`);
   }
   function renderConnection() {
-    const state = account?.server_status || 'connecting';
+    const refreshing = refreshBaseline !== null;
+    const state = refreshing ? 'connecting' : account?.server_status || 'connecting';
     const labels = { connected: ['Server je připojený', 'Server connected'], connecting: ['Server se připojuje…', 'Server connecting…'], disconnected: ['Server je odpojený', 'Server disconnected'] };
     const connection = $('#connection');
     connection.dataset.state = state;
     connection.closest('.es-live-actions').dataset.state = state;
-    connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t(...labels[state]))}</span>`;
-    connection.title = account?.server_last_seen ? `${t('Poslední kontakt', 'Last contact')}: ${date(account.server_last_seen)}` : t('Čekáme na první kontakt se serverem.', 'Waiting for the first server contact.');
+    const label = t(...labels[state]);
+    connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span class="es-connection-label">${escape(label)}</span>`;
+    const tooltip = refreshing
+      ? t('Obnovuji data ze serveru…', 'Refreshing data from the server…')
+      : account?.server_last_seen
+        ? `${t('Poslední kontakt', 'Last contact')}: ${date(account.server_last_seen)}`
+        : t('Čekáme na první kontakt se serverem.', 'Waiting for the first server contact.');
     const refresh = $('#refresh-data');
-    refresh.hidden = !account?.link;
-    refresh.disabled = refreshBaseline !== null;
-    refresh.querySelector('span').textContent = refreshBaseline !== null ? t('Obnovuji…', 'Refreshing…') : t('Obnovit data', 'Refresh data');
+    refresh.disabled = !account?.link || refreshing;
+    refresh.dataset.tooltip = tooltip;
+    refresh.title = tooltip;
+    refresh.setAttribute('aria-label', `${label}. ${tooltip}`);
   }
   function render() {
     document.documentElement.lang = lang;
@@ -182,6 +189,7 @@
   }
   $('#refresh-data').addEventListener('click', async () => {
     const button = $('#refresh-data');
+    if (!account?.link || refreshBaseline !== null) return;
     refreshBaseline = Number(account?.synced_at || 0); refreshStarted = Date.now(); renderConnection(); feedback?.busy(button, true);
     try {
       const refreshWork = api('/api/economysuite/refresh', {});
@@ -215,6 +223,6 @@
       if (refreshBaseline !== null && Number(latest.synced_at || 0) > refreshBaseline) { refreshBaseline = null; await load(); status(t('Data byla obnovena ze serveru.', 'Data refreshed from the server.')); return; }
       if (refreshBaseline !== null && Date.now() - refreshStarted > 45000) { refreshBaseline = null; renderConnection(); status(t('Server zatím nová data neposlal. Zkus obnovení později.', 'The server has not sent fresh data yet. Try again later.'), true); }
       if (successfulOrder) { orders = (await api('/api/economysuite/orders')).orders; render(); }
-    } catch { const connection = $('#connection'); connection.dataset.state = 'disconnected'; connection.closest('.es-live-actions').dataset.state = 'disconnected'; connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t('Server je odpojený', 'Server disconnected'))}</span>`; }
+    } catch { refreshBaseline = null; const connection = $('#connection'); connection.dataset.state = 'disconnected'; connection.closest('.es-live-actions').dataset.state = 'disconnected'; connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span class="es-connection-label">${escape(t('Server je odpojený', 'Server disconnected'))}</span>`; const refresh = $('#refresh-data'); const tooltip = t('Server neodpovídá. Zkus obnovit znovu.', 'The server is not responding. Try refreshing again.'); refresh.dataset.tooltip = tooltip; refresh.title = tooltip; refresh.setAttribute('aria-label', `${t('Server je odpojený', 'Server disconnected')}. ${tooltip}`); refresh.disabled = !account?.link; }
   }, 5000);
 })();
