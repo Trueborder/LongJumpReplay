@@ -134,6 +134,7 @@
     const labels = { connected: ['Server je připojený', 'Server connected'], connecting: ['Server se připojuje…', 'Server connecting…'], disconnected: ['Server je odpojený', 'Server disconnected'] };
     const connection = $('#connection');
     connection.dataset.state = state;
+    connection.closest('.es-live-actions').dataset.state = state;
     connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t(...labels[state]))}</span>`;
     connection.title = account?.server_last_seen ? `${t('Poslední kontakt', 'Last contact')}: ${date(account.server_last_seen)}` : t('Čekáme na první kontakt se serverem.', 'Waiting for the first server contact.');
     const refresh = $('#refresh-data');
@@ -214,6 +215,6 @@
       if (refreshBaseline !== null && Number(latest.synced_at || 0) > refreshBaseline) { refreshBaseline = null; await load(); status(t('Data byla obnovena ze serveru.', 'Data refreshed from the server.')); return; }
       if (refreshBaseline !== null && Date.now() - refreshStarted > 45000) { refreshBaseline = null; renderConnection(); status(t('Server zatím nová data neposlal. Zkus obnovení později.', 'The server has not sent fresh data yet. Try again later.'), true); }
       if (successfulOrder) { orders = (await api('/api/economysuite/orders')).orders; render(); }
-    } catch { const connection = $('#connection'); connection.dataset.state = 'disconnected'; connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t('Server je odpojený', 'Server disconnected'))}</span>`; }
+    } catch { const connection = $('#connection'); connection.dataset.state = 'disconnected'; connection.closest('.es-live-actions').dataset.state = 'disconnected'; connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span>${escape(t('Server je odpojený', 'Server disconnected'))}</span>`; }
   }, 5000);
 })();

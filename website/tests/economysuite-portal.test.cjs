@@ -9,15 +9,22 @@ const script = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'app.css'), 'utf8');
 
 test('EconomySuite portal exposes live server state and full data refresh', () => {
+  assert.match(html, /class="es-live-actions"[^>]*data-state="connecting"[^>]*role="group"/);
   assert.match(html, /id="connection"[^>]*data-state="connecting"/);
   assert.match(html, /id="refresh-data"/);
   assert.match(script, /server_status/);
+  assert.match(script, /closest\('\.es-live-actions'\)\.dataset\.state = state/);
   assert.match(script, /\/api\/economysuite\/refresh/);
   assert.match(script, /Data refreshed from the server/);
   assert.match(css, /\.es-connection\[data-state=connected\]/);
   assert.match(css, /\.es-connection\[data-state=connecting\]/);
   assert.match(css, /\.es-connection\[data-state=disconnected\]/);
   assert.match(css, /@keyframes es-connection-pulse/);
+});
+
+test('EconomySuite header has a prominent LongJumpReplay dashboard switch', () => {
+  assert.match(html, /class="es-product-switch" href="\/dashboard\/overview"/);
+  assert.match(css, /\.es-product-switch/);
 });
 
 test('purchase return renders instructions and Minecraft currency icons', () => {

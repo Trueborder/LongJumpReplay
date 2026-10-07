@@ -48,6 +48,12 @@ test('dashboard markup does not contain duplicate ids', () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
+test('mobile dashboard keeps the sign-out action visible', () => {
+  assert.match(html, /id="logout-button"/);
+  assert.match(css, /@media \(max-width: 650px\)[\s\S]*?\.account-page \.account-logout-button \{[\s\S]*?display: inline-flex;/);
+  assert.doesNotMatch(css, /\.account-page \.account-logout-button \{ display: none; \}/);
+});
+
 test('overview prioritizes licence state and gives a real next action', () => {
   assert.doesNotMatch(html, /class="dashboard-hero"/);
   assert.match(html, /class="dashboard-accessible-title"/);

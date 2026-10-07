@@ -63,7 +63,15 @@
 @media (max-width: 650px) {
   .account-shell { width: calc(100% - 1.5rem); }
   .account-page .site-header { width: calc(100% - 1rem); }
-  .account-page .account-logout-button { display: none; }
+  .account-page .account-logout-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: .5rem .62rem;
+    font-size: .58rem;
+    white-space: nowrap;
+  }
   .account-hero { display: block; }
   .account-hero .button { margin-top: 1.25rem; }
   .account-trust-list { display: grid; }
