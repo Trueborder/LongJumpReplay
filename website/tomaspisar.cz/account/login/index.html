@@ -11,7 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="https://tomaspisar.cz/assets/images/branding/novaryn-solutions-symbol.png">
   <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/tokens.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/global.css"><link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/legacy.css">
   <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/components.css">
-  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/account.css?v=20261008-simple-login">
+  <link rel="stylesheet" href="https://tomaspisar.cz/assets/css/pages/account.css?v=20261008-login-options">
 
 </head>
 <body class="account-page portal-login-page" data-portal-page="login">
@@ -28,6 +28,10 @@
           <div class="panel-heading">
             <h1 id="form-title" data-en="LongJumpReplay" data-cs="LongJumpReplay">LongJumpReplay</h1>
           </div>
+          <nav class="login-product-switcher" aria-label="Account destination">
+            <a data-login-product="longjumpreplay" href="https://ljr.tomaspisar.cz/login">LongJumpReplay</a>
+            <a data-login-product="economysuite" href="https://minecraft.tomaspisar.cz/login">Pantheon / EconomySuite</a>
+          </nav>
           <form id="login-form" novalidate>
             <div id="email-step">
             <label for="email" data-en="Account email" data-cs="E-mail účtu">Account email</label>
@@ -68,9 +72,9 @@
               <input id="new-password" name="new-password" type="password" autocomplete="new-password" minlength="12">
             </div>
             <div id="login-mode-actions" class="login-mode-actions">
-              <button class="text-button login-forgot-button" id="forgot-password" type="button" data-en="Forgot password?" data-cs="Zapomenuté heslo?">Forgot password?</button>
               <button class="login-options-toggle" id="other-options-toggle" type="button" aria-expanded="false" aria-controls="login-other-options" data-en="Show other options" data-cs="Zobrazit další možnosti">Show other options</button>
               <div id="login-other-options" class="login-other-options" hidden>
+                <button class="text-button login-forgot-button" id="forgot-password" type="button" data-en="Forgot password?" data-cs="Zapomenuté heslo?">Forgot password?</button>
                 <button class="text-button" id="otp-mode-link" type="button" data-en="Use email code" data-cs="Použít kód z e-mailu">Use email code</button>
                 <a class="text-button" href="/register" data-en="Create account" data-cs="Vytvořit účet">Create account</a>
               </div>
@@ -86,6 +90,6 @@
   <script src="https://tomaspisar.cz/assets/js/components/site-config.js"></script>
   <script src="https://tomaspisar.cz/assets/js/components/site.js"></script>
   <script src="https://tomaspisar.cz/assets/js/account/state.js"></script>
-  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20261008-simple-login"></script>
+  <script src="https://tomaspisar.cz/assets/js/account/account.js?v=20261008-login-options"></script>
 </body>
 </html>

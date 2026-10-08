@@ -75,7 +75,8 @@ Live browser checks verified both login brands, Minecraft registration and clean
 redirect destination, with no console errors on registration.
 
 Login retains a single compact card, product heading, email/password fields and
-existing recovery/registration options. It has no product chooser, explanatory
+existing recovery/registration options. It retains the canonical product chooser. Forgot password, email-code login and
+registration are hidden under Show other options. There are no explanatory
 paragraphs, page navigation or footer. Product identity follows the host.
 
 Final public asset deployment: `ed18868f-fae7-4efb-914a-4009fa4b8fcf`.

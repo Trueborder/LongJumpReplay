@@ -2,6 +2,8 @@
 
 ## Separate product account domains (2026-10-08)
 
+- Login keeps the compact card and canonical product switcher; Forgot password, email-code login and registration are collapsed under Show other options. No destination label or explanatory copy is shown.
+
 - LongJumpReplay uses `https://ljr.tomaspisar.cz/login`, `/register` and `/dashboard/*`. EconomySuite uses `https://minecraft.tomaspisar.cz/login`, `/register` and `/economysuite/*`. Authentication requests are same-origin. Public links, desktop activation defaults and plugin portal/store defaults use the product domain.
 - `licensing-api/src/portal-domains.ts` scopes authentication from the request host/trusted API origin, never body/query product selectors. Minecraft auth tables live in EconomySuite D1 (`0004_separate_accounts.sql`); LJR auth remains in licensing D1. Sessions and CSRF use distinct `__Host-` cookies without a Domain attribute. Minecraft registration creates no LJR customer; password resets/changes/logout remain product-specific. Minecraft cannot call licence/billing APIs; LJR cannot call EconomySuite APIs.
 - Account-domain pages are retired with product-specific redirects; old account authentication APIs return 410. Only signed bridge/payment webhook compatibility remains so an installed plugin or existing Stripe endpoint continues functioning. New callers use minecraft.tomaspisar.cz. No legacy shared cookies are accepted. Games remain disabled in production.

@@ -7,6 +7,11 @@
   document.querySelector('link[rel=canonical]')?.setAttribute('href', location.origin + location.pathname);
   const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
   if (page === 'login') {
+    const loginProduct = playerProduct ? 'economysuite' : 'longjumpreplay';
+    document.querySelectorAll('[data-login-product]').forEach((link) => {
+      if (link.dataset.loginProduct === loginProduct) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
     const destination = document.querySelector('#form-title');
     const productCopy = playerProduct
       ? { en: 'Pantheon / EconomySuite', cs: 'Pantheon / EconomySuite' }

@@ -15,7 +15,8 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(login, /id="change-email"/);
   assert.match(login, /id="resend-code"/);
   assert.match(login, /id="other-options-toggle"[^>]*aria-expanded="false"/);
-  assert.match(login, /id="login-other-options"[^>]*hidden/);
+  assert.match(login, /id="login-other-options"[^>]*hidden>[\s\S]*?id="forgot-password"[\s\S]*?<\/div>/);
+  assert.equal(login.indexOf('id="forgot-password"') > login.indexOf('id="login-other-options"'), true);
   assert.match(login, /id="reset-actions"[^>]*hidden/);
   assert.doesNotMatch(login, /Having trouble\?/);
   assert.doesNotMatch(login, /class="login-info-button"/);
@@ -29,13 +30,15 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(account, /\/dashboard\/overview/);
 });
 
-test('login composition keeps one focused card without product navigation or extra copy', () => {
+test('login composition keeps one focused card with a product switcher and no extra copy', () => {
   assert.doesNotMatch(login, /class="login-backdrop"/);
   assert.doesNotMatch(login, /class="site-header"/);
   assert.doesNotMatch(login, /class="site-footer"/);
   assert.doesNotMatch(login, /class="account-intro login-context"/);
   assert.doesNotMatch(login, /login-destination-label|Signing in to/);
-  assert.doesNotMatch(login, /login-product-switcher|data-login-product/);
+  assert.match(login, /data-login-product="longjumpreplay" href="https:\/\/ljr\.tomaspisar\.cz\/login"/);
+  assert.match(login, /data-login-product="economysuite" href="https:\/\/minecraft\.tomaspisar\.cz\/login"/);
+  assert.match(account, /link\.dataset\.loginProduct === loginProduct/);
   assert.match(login, /id="form-title"/);
   assert.match(account, /location\.hostname === 'minecraft\.tomaspisar\.cz'/);
   assert.match(styles, /\.portal-login-page \.account-login-grid \{[^}]*place-items: center;/);
