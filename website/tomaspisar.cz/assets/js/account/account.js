@@ -6,6 +6,13 @@
   const playerProduct = location.hostname === 'minecraft.tomaspisar.cz';
   document.querySelector('link[rel=canonical]')?.setAttribute('href', location.origin + location.pathname);
   const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
+  if (playerProduct && page === 'register') {
+    const pairingToken = new URLSearchParams(window.location.hash.slice(1)).get('pair');
+    if (pairingToken && /^[A-Za-z0-9_-]{20,256}$/.test(pairingToken)) {
+      sessionStorage.setItem('es-pair', JSON.stringify({ token: pairingToken, expires: Date.now() + 300000 }));
+      history.replaceState({}, '', location.pathname + location.search);
+    }
+  }
   if (page === 'login') {
     const loginProduct = playerProduct ? 'economysuite' : 'longjumpreplay';
     document.querySelectorAll('[data-login-product]').forEach((link) => {

@@ -1,5 +1,9 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite `/web link` registration flow (2026-10-08)
+
+- `/web link` in EconomySuite 2.29.2 sends numbered Czech/English chat steps with clickable aqua bold buttons for the Minecraft formatting guide and direct player-account registration. Pairing URLs and tokens are never displayed in chat. The registration URL includes the short-lived pair token in its fragment; `assets/js/account/account.js` stores it in sessionStorage on the Minecraft registration route so it survives account creation and sign-in before `/economysuite/pair` resumes. Existing players can use the login switcher.
+
 ## EconomySuite leaderboard defaults (2026-10-08)
 
 - Migration 0006_leaderboard_default_on.sql changes new player_links.leaderboard to default 1 and enables existing linked players except the protected xpisar10@gmail.com record, which is preserved exactly. The authenticated privacy endpoint still permits explicit opt-out. Rankings return only Minecraft UUID/name and an allowlisted selected statistic; missing snapshots count as zero. Settings copy explains the default in Czech and English; emails, balances and purchases are not exposed.
