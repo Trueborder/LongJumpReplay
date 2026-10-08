@@ -29,17 +29,17 @@ test('OTP login keeps the two-step email flow and recovery actions', () => {
   assert.match(account, /\/dashboard\/overview/);
 });
 
-test('login composition keeps one focused card and identifies the selected product', () => {
+test('login composition keeps one focused card without product navigation or extra copy', () => {
   assert.doesNotMatch(login, /class="login-backdrop"/);
   assert.doesNotMatch(login, /class="site-header"/);
   assert.doesNotMatch(login, /class="site-footer"/);
   assert.doesNotMatch(login, /class="account-intro login-context"/);
-  assert.match(login, /class="login-destination-label"[^>]*>Signing in to</);
-  assert.match(login, /data-login-product="longjumpreplay"/);
-  assert.match(login, /data-login-product="economysuite"/);
-  assert.match(account, /link\.dataset\.loginProduct === loginProduct/);
+  assert.doesNotMatch(login, /login-destination-label|Signing in to/);
+  assert.doesNotMatch(login, /login-product-switcher|data-login-product/);
+  assert.match(login, /id="form-title"/);
+  assert.match(account, /location\.hostname === 'minecraft\.tomaspisar\.cz'/);
   assert.match(styles, /\.portal-login-page \.account-login-grid \{[^}]*place-items: center;/);
-  assert.match(styles, /\.login-product-switcher a\[aria-current="page"\]/);
+
   assert.match(styles, /#login-status:empty/);
   assert.match(styles, /\.login-actions-secondary \{ min-height: 0; padding-top: 0; \}/);
   assert.match(styles, /\.portal-login-page \.login-actions-secondary\[hidden\]/);

@@ -343,7 +343,7 @@
     const links = shell.querySelector('.site-footer-links');
     if (!links.querySelector('[data-legal-link]')) {
       const legal = document.createElement('a');
-      legal.href = '/legal/';
+      legal.href = 'https://tomaspisar.cz/legal/';
       legal.dataset.legalLink = '';
       legal.dataset.en = 'Legal';
       legal.dataset.cs = 'Právní informace';

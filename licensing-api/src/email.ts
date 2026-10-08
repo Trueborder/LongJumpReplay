@@ -130,7 +130,7 @@ export function verificationEmail(
         <tr><td style="padding:0 34px 34px;">
           <p style="margin:0 0 14px;color:#D4DCDF;font-size:15px;line-height:1.6;">The code is valid for <strong>${ttlMinutes} minutes</strong> and can be used once.</p>
           <p style="margin:0 0 22px;color:#89999F;font-size:13px;line-height:1.6;">If you did not request this code, no action is needed. Nothing has been activated or signed in.</p>
-          <div style="padding-top:18px;border-top:1px solid #2B3A40;color:#89999F;font-size:12px;line-height:1.6;">Never share this code. Type it only into LongJumpReplay or account.tomaspisar.cz.<br><strong style="color:#D4DCDF;">Novaryn Solutions</strong> · tomaspisar.cz</div>
+          <div style="padding-top:18px;border-top:1px solid #2B3A40;color:#89999F;font-size:12px;line-height:1.6;">Never share this code. Type it only into LongJumpReplay or ljr.tomaspisar.cz.<br><strong style="color:#D4DCDF;">Novaryn Solutions</strong> · tomaspisar.cz</div>
         </td></tr>
       </table>
     </td></tr>
@@ -205,7 +205,13 @@ export async function sendVerificationCode(
   ttlMinutes: number,
   purpose: "activation" | "portal" | "password_reset" | "registration" = "activation",
 ): Promise<void> {
-  await mailer(env).send(to, verificationEmail(code, ttlMinutes, purpose));
+  const message = verificationEmail(code, ttlMinutes, purpose);
+  if (env.PORTAL_PRODUCT === 'economysuite') {
+    message.subject = message.subject.replaceAll('LongJumpReplay', 'EconomySuite');
+    message.text = message.text.replaceAll('LongJumpReplay', 'EconomySuite').replaceAll('LONGJUMPREPLAY', 'ECONOMYSUITE');
+    message.html = message.html.replaceAll('LongJumpReplay', 'EconomySuite').replaceAll('LONGJUMPREPLAY', 'ECONOMYSUITE').replaceAll('ljr.tomaspisar.cz', 'minecraft.tomaspisar.cz');
+  }
+  await mailer(env).send(to, message);
 }
 
 function escapeHtml(value: string): string {

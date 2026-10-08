@@ -33,7 +33,7 @@ from .authorization import (
 )
 
 API_BASE = os.environ.get("LJR_LICENSE_API_URL", "https://api.tomaspisar.cz").rstrip("/")
-PORTAL_LOGIN_URL = os.environ.get("LJR_ACCOUNT_PORTAL_URL", "https://account.tomaspisar.cz/login")
+PORTAL_LOGIN_URL = os.environ.get("LJR_ACCOUNT_PORTAL_URL", "https://ljr.tomaspisar.cz/login")
 REQUEST_TIMEOUT = 15
 EXPLICIT_REJECTION_CODES = {"no_license", "device_not_active", "license_inactive"}
 

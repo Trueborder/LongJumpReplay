@@ -2,7 +2,7 @@
 
 ## Routes and ownership
 
-`https://account.tomaspisar.cz/login?product=economysuite` selects player login. The product chooser also links to LongJumpReplay. Email/password, OTP recovery and session cookies are shared; player setup needs a password, while LongJumpReplay keeps its required real-name profile. Existing `/dashboard/*` remains the LongJumpReplay dashboard.
+`https://minecraft.tomaspisar.cz/login` and `/register` use independent Minecraft accounts in `ECONOMYSUITE_DB`. LongJumpReplay uses `https://ljr.tomaspisar.cz/login` and its licensing database. Registration, password changes, OTP/reset codes and sessions do not cross products. Minecraft setup requires a password; LongJumpReplay also requires a real-name profile. See [domain migration](PORTAL_DOMAIN_SPLIT.md).
 
 The player dashboard has `/economysuite/overview`, `/statistics`, `/progress`, `/appearance`, `/store`, `/purchases`, `/settings` and `/pair`. Prefix each suffix with `/economysuite`. Store and pairing shells are public; private data and every player mutation require a session, and mutations require the existing origin/CSRF checks. Pairing tokens arrive in URL fragments, are stored briefly in session storage, and are stripped from the URL.
 
@@ -60,7 +60,7 @@ The backend re-fetches this catalog before creating a checkout. It snapshots the
 
 ## Dedicated webhooks and durable delivery
 
-The production endpoint is `https://account.tomaspisar.cz/api/economysuite/stripe/webhook`, Stripe ID `we_1UNHvtRzuUbjN0GO8Ob7Hutj`. The existing LongJumpReplay endpoint is unchanged and explicitly ignores `economysuite_currency` checkout events. EconomySuite ignores unrelated product events and never creates licences.
+The canonical production endpoint is `https://minecraft.tomaspisar.cz/api/economysuite/stripe/webhook`, Stripe ID `we_1UNHvtRzuUbjN0GO8Ob7Hutj`. The existing LongJumpReplay endpoint is unchanged and explicitly ignores `economysuite_currency` checkout events. EconomySuite ignores unrelated product events and never creates licences.
 
 Subscribe to completed/async-succeeded/async-failed/expired Checkout Sessions, charge refunds, refund updates/failures, and dispute created/updated/closed/funds-withdrawn/funds-reinstated. Signed handlers retrieve current Stripe payment/refund/dispute state rather than trusting event arrival order. Optimistic order revisions and a D1 transaction atomically record the event, cumulative target and queued operation. Transient failures receive a retry response.
 

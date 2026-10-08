@@ -1,11 +1,11 @@
 (() => {
-  const API = 'https://api.tomaspisar.cz';
+  const API = ['ljr.tomaspisar.cz', 'minecraft.tomaspisar.cz'].includes(location.hostname) ? location.origin : 'https://api.tomaspisar.cz';
   const { deriveDashboardEntitlement, deriveDevicePortalState } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
   const productParams = new URLSearchParams(window.location.search);
-  const playerProduct = productParams.get('product') === 'economysuite';
-  const loginProduct = playerProduct ? 'economysuite' : 'longjumpreplay';
-  const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
+  const playerProduct = location.hostname === 'minecraft.tomaspisar.cz';
+  document.querySelector('link[rel=canonical]')?.setAttribute('href', location.origin + location.pathname);
+  const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
   if (page === 'login') {
     const destination = document.querySelector('#form-title');
     const productCopy = playerProduct
@@ -16,16 +16,12 @@
       destination.dataset.cs = productCopy.cs;
       destination.textContent = document.documentElement.lang === 'cs' ? productCopy.cs : productCopy.en;
     }
-    document.querySelectorAll('[data-login-product]').forEach((link) => {
-      if (link.dataset.loginProduct === loginProduct) link.setAttribute('aria-current', 'page');
-      else link.removeAttribute('aria-current');
-    });
   }
   if (playerProduct && ['login', 'register'].includes(page)) {
     document.title = 'Pantheon / EconomySuite — Account';
     const eyebrow = document.querySelector('.account-intro .eyebrow span[data-en]');
     if (eyebrow) { eyebrow.dataset.en = 'PANTHEON / PLAYER ACCOUNT'; eyebrow.dataset.cs = 'PANTHEON / HRÁČSKÝ ÚČET'; eyebrow.textContent = eyebrow.dataset.en; }
-    document.querySelectorAll('a[href="/register"],a[href="/login"]').forEach(a => { a.href = `${a.getAttribute('href')}?product=economysuite&next=${encodeURIComponent(playerNext)}`; });
+    document.querySelectorAll('a[href="/register"],a[href="/login"]').forEach(a => { a.href = `${a.getAttribute('href')}?next=${encodeURIComponent(playerNext)}`; });
     const title = document.querySelector('#login-title') || document.querySelector('#register-title');
     if (title) { title.dataset.en = 'Your Pantheon player account.'; title.dataset.cs = 'Tvůj hráčský účet na Pantheonu.'; title.textContent = document.documentElement.lang === 'cs' ? title.dataset.cs : title.dataset.en; }
     const intro = document.querySelector('.account-intro .hero-lede');
@@ -159,7 +155,7 @@
     const route = dashboardRoutes.has(dashboardRoute) ? dashboardRoute : 'overview';
     const [, title] = routeCopy[state.lang][route];
     document.title = `${title.replace(/\.$/, '')} — LongJumpReplay account`;
-    document.querySelector('link[rel="canonical"]')?.setAttribute('href', `https://account.tomaspisar.cz/dashboard/${route}`);
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', `https://ljr.tomaspisar.cz/dashboard/${route}`);
     document.querySelectorAll('[data-dashboard-link]').forEach((link) => {
       if (link.dataset.dashboardLink === route) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
@@ -204,7 +200,7 @@
   const cookieValue = (name) => document.cookie.split(';').map((part) => part.trim().split('=')).find(([key]) => key === name)?.slice(1).join('=') || '';
   const api = async (path, options = {}) => {
     if (playerProduct && options.body) { try { options.body = JSON.stringify({ ...JSON.parse(options.body), product: 'economysuite' }); } catch { /* existing validation handles malformed bodies */ } }
-    const csrf = cookieValue('ljr-portal-csrf');
+    const csrf = cookieValue(playerProduct ? '__Host-es-csrf' : '__Host-ljr-csrf');
     const response = await fetch(`${API}${path}`, {
       ...options,
       credentials: 'include',
@@ -299,7 +295,7 @@
       if ($('#migration-password-fields').hidden === false && password !== confirmation) { setStatus(t('passwordMismatch'), '#login-status', 'error'); return; }
       if ($('#migration-password-fields').hidden === false && !strongPassword(password)) { setStatus(t('passwordRules'), '#login-status', 'error'); return; }
       setStatus(t('checking'), '#login-status'); setLoginBusy(true);
-      try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: state.setupToken, first_name: firstName, last_name: lastName, club_name: clubName, password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet je připraven. Přesměrovávám na přihlášení…' : 'Your account is ready. Returning to sign in…', '#login-status'); window.setTimeout(() => window.location.replace(playerProduct ? '/login?registered=1&product=economysuite&next=' + encodeURIComponent(playerNext) : '/login?registered=1'), 500); }
+      try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: state.setupToken, first_name: firstName, last_name: lastName, club_name: clubName, password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet je připraven. Přesměrovávám na přihlášení…' : 'Your account is ready. Returning to sign in…', '#login-status'); window.setTimeout(() => window.location.replace(playerProduct ? '/login?registered=1&next=' + encodeURIComponent(playerNext) : '/login?registered=1'), 500); }
       catch (error) { setStatus(error, '#login-status', 'error'); }
       finally { setLoginBusy(false); }
     };
@@ -308,7 +304,7 @@
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('#email').setAttribute('aria-invalid', 'true'); setStatus(t('invalidEmail'), '#login-status', 'error'); return; }
        if (!password) { setStatus(t('passwordLength'), '#login-status', 'error'); return; }
       state.email = email; setStatus(t('signingIn'), '#login-status'); setLoginBusy(true);
-      try { const result = await api('/api/portal/password/login', { method: 'POST', body: JSON.stringify({ email, password }) }); setStatus(t('verified'), '#login-status'); if (result.password_setup_required) window.setTimeout(() => window.location.replace(playerProduct ? '/register?mode=migration&product=economysuite' : '/register?mode=migration'), 180); else redirectAfterAuth(); }
+      try { const result = await api('/api/portal/password/login', { method: 'POST', body: JSON.stringify({ email, password }) }); setStatus(t('verified'), '#login-status'); if (result.password_setup_required) window.setTimeout(() => window.location.replace(playerProduct ? '/register?mode=migration' : '/register?mode=migration'), 180); else redirectAfterAuth(); }
       catch (error) { setStatus(error, '#login-status', 'error'); }
       finally { setLoginBusy(false); }
     };
@@ -641,7 +637,7 @@
       if (registrationState.passwordRequired && password !== confirmation) { setStatus(t('passwordMismatch'), '#register-status', 'error'); return; }
       if (registrationState.passwordRequired && !strongPassword(password)) { setStatus(t('passwordLength'), '#register-status', 'error'); return; }
       setStatus(t('checking'), '#register-status'); busy(true);
-      try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: registrationState.setupToken, first_name: firstName, last_name: lastName, club_name: $('#register-club-name').value.trim(), password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet vytvořen. Přesměrovávám na přihlášení…' : 'Account created. Returning to sign in…', '#register-status'); window.setTimeout(() => window.location.replace(playerProduct ? '/login?registered=1&product=economysuite&next=' + encodeURIComponent(playerNext) : '/login?registered=1'), 600); }
+      try { await api('/api/portal/register/complete', { method: 'POST', body: JSON.stringify({ email: state.email, setup_token: registrationState.setupToken, first_name: firstName, last_name: lastName, club_name: $('#register-club-name').value.trim(), password, password_confirmation: confirmation }) }); setStatus(state.lang === 'cs' ? 'Účet vytvořen. Přesměrovávám na přihlášení…' : 'Account created. Returning to sign in…', '#register-status'); window.setTimeout(() => window.location.replace(playerProduct ? '/login?registered=1&next=' + encodeURIComponent(playerNext) : '/login?registered=1'), 600); }
       catch (error) { setStatus(error, '#register-status', 'error'); } finally { busy(false); }
     };
     const loadMigration = async () => {

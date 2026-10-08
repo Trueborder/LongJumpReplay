@@ -1,3 +1,4 @@
+import { AUTH_PATHS, accountEnv, requestProduct, sessionCookieName, csrfCookieName, retiredAccountLocation } from './portal-domains';
 /**
  * LongJumpReplay licensing API.
  *
@@ -104,9 +105,6 @@ import { LJR_POLICY_VERSIONS, appendLjrOrderEvent, createLjrOrder, findLjrOrderB
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MACHINE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 const MAX_BODY_BYTES = 16_384;
-const PORTAL_SESSION_COOKIE = "ljr-portal-session";
-const PORTAL_CSRF_COOKIE = "ljr-portal-csrf";
-const PORTAL_PRODUCT_COOKIE = "ljr-last-product";
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 128;
 const SETUP_TOKEN_TTL_SECONDS = 15 * 60;
@@ -282,40 +280,25 @@ export async function contact(request: Request, env: Env): Promise<Response> {
   return json({ sent: true });
 }
 
-function portalCookie(token: string, maxAge: number): string {
-  return `${PORTAL_SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Domain=.tomaspisar.cz; Path=/; HttpOnly; Secure; SameSite=Lax`;
+function portalCookie(env: Env, token: string, maxAge: number): string {
+  return `${sessionCookieName(env)}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
-function portalCsrfCookie(token: string, maxAge: number): string {
-  return `${PORTAL_CSRF_COOKIE}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Domain=.tomaspisar.cz; Path=/; Secure; SameSite=Lax`;
+function portalCsrfCookie(env: Env, token: string, maxAge: number): string {
+  return `${csrfCookieName(env)}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; Secure; SameSite=Lax`;
 }
 
-function portalProductCookie(product: "economysuite" | "longjumpreplay"): string {
-  return `${PORTAL_PRODUCT_COOKIE}=${product}; Max-Age=${60 * 60 * 24 * 180}; Domain=.tomaspisar.cz; Path=/; Secure; SameSite=Lax`;
-}
-
-function portalProductPreference(request: Request): "economysuite" | "longjumpreplay" | null {
-  const cookie = request.headers.get("Cookie") ?? "";
-  for (const part of cookie.split(";")) {
-    const [name, ...value] = part.trim().split("=");
-    if (name !== PORTAL_PRODUCT_COOKIE) continue;
-    const candidate = decodeURIComponent(value.join("="));
-    if (candidate === "economysuite" || candidate === "longjumpreplay") return candidate;
-  }
-  return null;
-}
-
-function jsonWithPortalSession(data: unknown, token: string, csrfToken: string, maxAge: number, status = 200): Response {
+function jsonWithPortalSession(env: Env, data: unknown, token: string, csrfToken: string, maxAge: number, status = 200): Response {
   const response = json(data, status);
-  response.headers.append("Set-Cookie", portalCookie(token, maxAge));
-  response.headers.append("Set-Cookie", portalCsrfCookie(csrfToken, maxAge));
+  response.headers.append("Set-Cookie", portalCookie(env, token, maxAge));
+  response.headers.append("Set-Cookie", portalCsrfCookie(env, csrfToken, maxAge));
   return response;
 }
 
-function jsonWithClearedPortalSession(data: unknown): Response {
+function jsonWithClearedPortalSession(env: Env, data: unknown): Response {
   const response = json(data);
-  response.headers.append("Set-Cookie", portalCookie("", 0));
-  response.headers.append("Set-Cookie", portalCsrfCookie("", 0));
+  response.headers.append("Set-Cookie", portalCookie(env, "", 0));
+  response.headers.append("Set-Cookie", portalCsrfCookie(env, "", 0));
   return response;
 }
 
@@ -332,11 +315,11 @@ async function portalPasswordMutationAllowed(request: Request, env: Env, tokenHa
   return Boolean(candidate && timingSafeEqual(await sha256(candidate), expectedCsrfHash) && tokenHash);
 }
 
-function portalToken(request: Request): string | null {
+function portalToken(request: Request, env: Env): string | null {
   const cookie = request.headers.get("Cookie") ?? "";
   for (const part of cookie.split(";")) {
     const [name, ...value] = part.trim().split("=");
-    if (name === PORTAL_SESSION_COOKIE) return decodeURIComponent(value.join("="));
+    if (name === sessionCookieName(env)) return decodeURIComponent(value.join("="));
   }
   return null;
 }
@@ -354,8 +337,9 @@ function portalRedirect(request: Request, location: string): Response {
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
   if (['/economysuite/app.js', '/economysuite/app.css', '/economysuite/games.js'].includes(path)) return env.ASSETS.fetch(request);
-  const product = new URL(request.url).searchParams.get('product');
+  const product = env.PORTAL_PRODUCT;
   if (path === '/economysuite' || path.startsWith('/economysuite/')) {
+    if (product !== 'economysuite') return new Response('Not found', { status: 404 });
     const category = path.split('/')[2] || 'overview';
     if (!['overview', 'statistics', 'progress', 'appearance', 'store', 'purchases', 'settings', 'pair', 'games'].includes(category) || path.split('/').filter(Boolean).length > 2) return new Response('Not found', { status: 404 });
     const auth = await authenticatedPortal(request, env);
@@ -365,7 +349,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
     const asset = await env.ASSETS.fetch(new Request(new URL('/economysuite/', request.url), request));
     const headers = new Headers(asset.headers);
     headers.set('Cache-Control', 'no-store');
-    if (auth && !auth.requiresSetup) headers.append('Set-Cookie', portalProductCookie('economysuite'));
+
     return new Response(asset.body, { status: asset.status, headers });
   }
   const isPortalPage = ["/", "/login", "/login/", "/register", "/register/", "/dashboard", "/dashboard/", "/approve/pairing", "/approve/pairing/"].includes(path)
@@ -373,15 +357,17 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
   if (!isPortalPage) return null;
 
   const auth = await authenticatedPortal(request, env);
-  if (['/login', '/login/', '/register', '/register/'].includes(path) && product === 'economysuite') {
+  if (product === 'economysuite' && (path === '/' || ['/login', '/login/', '/register', '/register/'].includes(path))) {
     if (auth?.credential) {
       const next = new URL(request.url).searchParams.get('next') || '';
       return portalRedirect(request, /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(next) ? next : '/economysuite/overview');
     }
+    if (path === '/') return portalRedirect(request, '/login');
     const asset = await env.ASSETS.fetch(new Request(new URL(path.startsWith('/register') ? '/register/' : '/login/', request.url), request));
     return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
   }
-  const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup), portalProductPreference(request));
+  if (product === 'economysuite') return new Response('Not found', { status: 404 });
+  const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup));
   if (!route) return null;
   if (route.kind === "redirect") return portalRedirect(request, route.location);
 
@@ -389,7 +375,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
   const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
   const headers = new Headers(assetResponse.headers);
   headers.set("Cache-Control", "no-store");
-  if (auth && !auth.requiresSetup && path.startsWith("/dashboard/")) headers.append("Set-Cookie", portalProductCookie("longjumpreplay"));
+
   return new Response(assetResponse.body, {
     status: assetResponse.status,
     statusText: assetResponse.statusText,
@@ -788,7 +774,7 @@ export async function verifyCode(request: Request, env: Env, purpose: Verificati
     if (!customer) return fail("invalid_code", "That code is not valid. Request a new one.");
     const credential = await findPasswordCredential(env.DB, customer.id);
     const profile = await findPortalProfile(env.DB, customer.id);
-    if (!credential || (!profile && data.product !== 'economysuite')) {
+    if (!credential || (!profile && env.PORTAL_PRODUCT !== 'economysuite')) {
       const setupToken = await issuePortalSetupToken(env, customer.id, customer.email, "migration");
       await logEvent(env.DB, "portal_migration_required", null, { password: Boolean(credential), profile: Boolean(profile) });
       return json({ authenticated: false, password_setup_required: true, setup_token: setupToken,
@@ -799,7 +785,7 @@ export async function verifyCode(request: Request, env: Env, purpose: Verificati
     const expiresAt = now() + cfg.portalSessionTtlSeconds;
     await createPortalSession(env.DB, customer.id, await sha256(token), expiresAt, await sha256(csrf));
     await logEvent(env.DB, "portal_login_success", null, {});
-    return jsonWithPortalSession({ authenticated: true, expires_at: expiresAt }, token, csrf, cfg.portalSessionTtlSeconds);
+    return jsonWithPortalSession(env, { authenticated: true, expires_at: expiresAt }, token, csrf, cfg.portalSessionTtlSeconds);
   }
 
   const row = await env.DB.prepare(
@@ -1368,7 +1354,7 @@ async function deactivate(request: Request, env: Env): Promise<Response> {
 /* ------------------------------------------------------- Customer portal */
 
 async function authenticatedPortal(request: Request, env: Env) {
-  const token = portalToken(request);
+  const token = portalToken(request, env);
   if (!token) return null;
   const session = await findPortalSession(env.DB, await sha256(token));
   if (!session) return null;
@@ -1381,7 +1367,7 @@ async function authenticatedPortal(request: Request, env: Env) {
   await touchPortalSession(env.DB, session.id);
   const credential = await findPasswordCredential(env.DB, customer.id);
   const profile = await findPortalProfile(env.DB, customer.id);
-  return { token, session, customer, credential, profile, requiresSetup: !credential || !profile };
+  return { token, session, customer, credential, profile, requiresSetup: !credential || (env.PORTAL_PRODUCT !== 'economysuite' && !profile) };
 }
 
 function portalSetupGate(auth: Awaited<ReturnType<typeof authenticatedPortal>>, action: string): Response | null {
@@ -1450,7 +1436,7 @@ async function portalRegistrationRequestCode(request: Request, env: Env): Promis
   const profile = customer ? await findPortalProfile(env.DB, customer.id) : null;
   // A complete account is never given a registration code. The generic
   // response keeps the endpoint from becoming an account-enumeration oracle.
-  if (credential && (profile || data.product === 'economysuite')) return registrationGeneric(env);
+  if (credential && (profile || env.PORTAL_PRODUCT === 'economysuite')) return registrationGeneric(env);
 
   await invalidatePortalRegistrationChallenges(env.DB, email, "registration");
   const code = generateVerificationCode();
@@ -1509,7 +1495,7 @@ async function portalRegistrationVerifyCode(request: Request, env: Env): Promise
   const customer = challenge.customer_id ? await findCustomerById(env.DB, challenge.customer_id) : null;
   const credential = customer ? await findPasswordCredential(env.DB, customer.id) : null;
   const profile = customer ? await findPortalProfile(env.DB, customer.id) : null;
-  if (credential && (profile || data.product === 'economysuite')) return fail("account_exists", "This email is already registered. Sign in instead.", 409);
+  if (credential && (profile || env.PORTAL_PRODUCT === 'economysuite')) return fail("account_exists", "This email is already registered. Sign in instead.", 409);
   return json({ verified: true, setup_token: setupToken, email, password_required: !credential, profile_required: !profile });
 }
 
@@ -1520,7 +1506,7 @@ async function portalRegistrationComplete(request: Request, env: Env): Promise<R
   const setupToken = str(data.setup_token);
   if (!EMAIL_PATTERN.test(email)) return fail("invalid_input", "Your registration session is incomplete. Start again.");
   const profile = profileValues(data);
-  const playerRegistration = data.product === 'economysuite';
+  const playerRegistration = env.PORTAL_PRODUCT === 'economysuite';
   if (!profile && !playerRegistration) return profileInputError();
   const password = passwordFrom(data, "password");
   const confirmation = passwordFrom(data, "password_confirmation");
@@ -1598,8 +1584,8 @@ async function portalPasswordLogin(request: Request, env: Env): Promise<Response
   }
   const session = await newPortalSession(env, customer.id);
   await logEvent(env.DB, "portal_password_login_success", null, {});
-  return jsonWithPortalSession(
-    { authenticated: true, expires_at: session.expiresAt, password_setup_required: data.product === 'economysuite' ? !credential : !credential || !(await findPortalProfile(env.DB, customer.id)) },
+  return jsonWithPortalSession(env,
+    { authenticated: true, expires_at: session.expiresAt, password_setup_required: env.PORTAL_PRODUCT === 'economysuite' ? !credential : !credential || !(await findPortalProfile(env.DB, customer.id)) },
     session.token,
     session.csrf,
     settings(env).portalSessionTtlSeconds,
@@ -1640,7 +1626,7 @@ async function portalPasswordChange(request: Request, env: Env): Promise<Respons
   await revokePortalSessionsForCustomer(env.DB, auth.customer.id);
   const session = await newPortalSession(env, auth.customer.id);
   await logEvent(env.DB, "portal_password_changed", null, {});
-  return jsonWithPortalSession(
+  return jsonWithPortalSession(env,
     { password_configured: true, expires_at: session.expiresAt },
     session.token,
     session.csrf,
@@ -1706,7 +1692,7 @@ async function portalPasswordReset(request: Request, env: Env): Promise<Response
   await revokePortalSessionsForCustomer(env.DB, customer.id);
   const session = await newPortalSession(env, customer.id);
   await logEvent(env.DB, "portal_password_reset_completed", null, {});
-  return jsonWithPortalSession(
+  return jsonWithPortalSession(env,
     { authenticated: true, password_configured: true, expires_at: session.expiresAt },
     session.token,
     session.csrf,
@@ -1732,6 +1718,7 @@ function publicLicense(license: Awaited<ReturnType<typeof findLicenseById>>) {
 async function portalAccount(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in to view your customer account.", 401);
+  if (env.PORTAL_PRODUCT === 'economysuite') return json({ customer: { email: auth.customer.email }, password_setup_required: !auth.credential });
   if (auth.requiresSetup) {
     return json({
       customer: { email: auth.customer.email },
@@ -1949,9 +1936,9 @@ async function portalDeleteDevice(request: Request, env: Env): Promise<Response>
 }
 
 async function portalLogout(request: Request, env: Env): Promise<Response> {
-  const token = portalToken(request);
+  const token = portalToken(request, env);
   if (token) await revokePortalSession(env.DB, await sha256(token));
-  return jsonWithClearedPortalSession({ logged_out: true });
+  return jsonWithClearedPortalSession(env, { logged_out: true });
 }
 
 async function portalRetryLjrDelivery(request: Request, env: Env): Promise<Response> {
@@ -2106,6 +2093,7 @@ function withLongJumpReplayCors(response: Response, request: Request, env: Env):
 async function portalDataExport(request: Request, env: Env): Promise<Response> {
   const auth = await authenticatedPortal(request, env);
   if (!auth) return fail("not_authenticated", "Sign in before requesting your data.", 401);
+  if (env.PORTAL_PRODUCT === 'economysuite') return economySuite(new Request(new URL('/api/economysuite/export', request.url), request), env, { authenticate: async () => auth, mutation: async () => true });
   const [profile, licenses, devices, orders] = await Promise.all([
     findPortalProfile(env.DB, auth.customer.id),
     listLicensesForCustomer(env.DB, auth.customer.id),
@@ -2113,7 +2101,7 @@ async function portalDataExport(request: Request, env: Env): Promise<Response> {
     listLjrOrdersForCustomer(env.DB, auth.customer.id),
   ]);
   await env.DB.prepare("INSERT INTO privacy_requests(id,customer_id,type,created_at,detail) VALUES(?,?,?,?,'self_service_export')").bind(crypto.randomUUID(), auth.customer.id, "export", now()).run();
-  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices, orders: orders.map(publicLjrOrder), policy_versions: LJR_POLICY_VERSIONS, ...(env.ECONOMYSUITE_DB ? { economysuite_games: (await env.ECONOMYSUITE_DB.prepare('SELECT * FROM game_rounds WHERE customer_id=? ORDER BY created_at').bind(auth.customer.id).all()).results } : {}) });
+  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices, orders: orders.map(publicLjrOrder), policy_versions: LJR_POLICY_VERSIONS });
 }
 
 async function portalDeletionRequest(request: Request, env: Env): Promise<Response> {
@@ -2131,11 +2119,29 @@ async function portalDeletionRequest(request: Request, env: Env): Promise<Respon
 /* ------------------------------------------------------------------ Router */
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, bindings: Env): Promise<Response> {
+    let env = bindings;
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
+      const legacyBridge = url.hostname === 'account.tomaspisar.cz' && /^\/api\/economysuite\/(bridge\/|stripe\/webhook)/.test(path);
+      if (url.hostname === 'account.tomaspisar.cz' && !legacyBridge) {
+        if (path.startsWith('/api/')) return fail('retired_domain', 'Use the product account domain.', 410);
+        return new Response(null, { status: 301, headers: { Location: retiredAccountLocation(request), 'Cache-Control': 'no-store' } });
+      }
+      const product = requestProduct(request, bindings);
+      const minecraftHost = url.hostname === 'minecraft.tomaspisar.cz';
+      const portalHost = ['minecraft.tomaspisar.cz', 'ljr.tomaspisar.cz'].includes(url.hostname)
+        || (bindings.ENVIRONMENT !== 'production' && [bindings.PORTAL_ORIGIN, bindings.ECONOMYSUITE_PORTAL_ORIGIN].includes(url.origin));
+      if ((url.hostname === 'ljr.tomaspisar.cz' && path.startsWith('/api/economysuite/'))
+          || (minecraftHost && path.startsWith('/api/') && !path.startsWith('/api/economysuite/') && !AUTH_PATHS.has(path))) return fail('not_found', 'Not found', 404);
+      if (product === 'economysuite' && path.startsWith('/api/portal/') && !AUTH_PATHS.has(path)) return fail('not_found', 'Not found', 404);
+      if (path.startsWith('/api/portal/') || path.startsWith('/api/economysuite/') || portalHost) env = accountEnv(bindings, product);
+      if (product === 'economysuite' && bindings.ECONOMYSUITE_ACCOUNTS_READY === 'false'
+          && (path.startsWith('/api/portal/') || (path.startsWith('/api/economysuite/') && !/^\/api\/economysuite\/(bridge\/|stripe\/webhook|catalog$|leaderboard$)/.test(path)))) {
+        return fail('account_migration', 'Minecraft account migration is in progress. Please try again shortly.', 503);
+      }
       if (path.startsWith('/api/economysuite/')) {
         if (request.method === 'OPTIONS') return withPortalCors(new Response(null, { status: 204 }), request, env);
         const response = await economySuite(request, env, {
@@ -2145,7 +2151,7 @@ export default {
         return withPortalCors(response, request, env);
       }
       if (request.method === "OPTIONS" && path.startsWith("/api/longjumpreplay/")) return withLongJumpReplayCors(new Response(null, { status: 204 }), request, env);
-      if ((url.hostname === "account.tomaspisar.cz" || (env.ENVIRONMENT !== 'production' && url.origin === env.PORTAL_ORIGIN)) && !path.startsWith('/api/')) {
+      if (portalHost && !path.startsWith('/api/')) {
         const page = await portalPage(request, env, url.pathname);
         if (page) return page;
         return env.ASSETS.fetch(request);

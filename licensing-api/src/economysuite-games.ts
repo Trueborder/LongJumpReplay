@@ -37,7 +37,7 @@ export function outcome(game: string, choice: string, roll: number): { outcome: 
   return null;
 }
 export function gamesEnabled(env: Env): boolean {
-  return ['development', 'staging', 'test'].includes(env.ENVIRONMENT) && env.ECONOMYSUITE_GAMES_ENABLED === 'true' && env.PORTAL_ORIGIN !== 'https://account.tomaspisar.cz';
+  return ['development', 'staging', 'test'].includes(env.ENVIRONMENT) && env.ECONOMYSUITE_GAMES_ENABLED === 'true' && !['https://account.tomaspisar.cz', 'https://minecraft.tomaspisar.cz', 'https://ljr.tomaspisar.cz'].includes(env.PORTAL_ORIGIN);
 }
 export async function gamesRoute(request: Request, env: Env, db: D1Database, customer: string, uuid: string | null, data: Record<string, unknown>): Promise<Response> {
   const url = new URL(request.url), path = url.pathname;

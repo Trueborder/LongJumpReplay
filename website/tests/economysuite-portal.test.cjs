@@ -29,7 +29,7 @@ test('EconomySuite portal exposes live server state and full data refresh', () =
 });
 
 test('EconomySuite header has a prominent LongJumpReplay dashboard switch', () => {
-  assert.match(html, /class="es-product-switch" href="\/dashboard\/overview"/);
+  assert.match(html, /class="es-product-switch" href="https:\/\/ljr\.tomaspisar\.cz\/dashboard\/overview"/);
   assert.match(css, /\.es-product-switch/);
 });
 

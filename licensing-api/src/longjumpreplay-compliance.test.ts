@@ -19,7 +19,7 @@ describe("LongJumpReplay purchase compliance", () => {
   it("passes only safe LongJumpReplay metadata to Stripe Checkout", async () => {
     let body = "";
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => { body = String(init?.body ?? ""); return Response.json({ id: "cs_test", url: "https://checkout.stripe.com/c/pay/test" }); }));
-    const result = await stripeApi("sk_test_secret").createLongJumpReplayCheckout({ priceId: "price_lifetime", mode: "payment", email: "buyer@example.com", orderId: "ljr_order_test", licenseType: "lifetime", successUrl: "https://account.tomaspisar.cz/dashboard/billing", cancelUrl: "https://account.tomaspisar.cz/checkout", policyVersions: LJR_POLICY_VERSIONS });
+    const result = await stripeApi("sk_test_secret").createLongJumpReplayCheckout({ priceId: "price_lifetime", mode: "payment", email: "buyer@example.com", orderId: "ljr_order_test", licenseType: "lifetime", successUrl: "https://ljr.tomaspisar.cz/dashboard/billing", cancelUrl: "https://ljr.tomaspisar.cz/checkout", policyVersions: LJR_POLICY_VERSIONS });
     expect(result.url).toContain("checkout.stripe.com");
     expect(body).toContain("metadata%5Bpurchase_type%5D=longjumpreplay_license");
     expect(body).toContain("metadata%5Border_id%5D=ljr_order_test");
@@ -27,7 +27,7 @@ describe("LongJumpReplay purchase compliance", () => {
   });
 
   it("creates a durable confirmation with order, licence and policy links", () => {
-    const message = longJumpReplayOrderConfirmationEmail({ orderId: "ljr_order_test", productName: "LongJumpReplay", licenseType: "lifetime", priceMinor: 499000, currency: "czk", paidAt: 1, deliveryUrl: "https://account.tomaspisar.cz/dashboard/billing", purchaseUrl: "https://tomaspisar.cz/legal/longjumpreplay-purchases/", eulaUrl: "https://tomaspisar.cz/legal/longjumpreplay-eula/", refundUrl: "https://tomaspisar.cz/legal/longjumpreplay-refunds/", privacyUrl: "https://tomaspisar.cz/products/long-jump-replay/privacy/", supportEmail: "info@tomaspisar.cz" });
+    const message = longJumpReplayOrderConfirmationEmail({ orderId: "ljr_order_test", productName: "LongJumpReplay", licenseType: "lifetime", priceMinor: 499000, currency: "czk", paidAt: 1, deliveryUrl: "https://ljr.tomaspisar.cz/dashboard/billing", purchaseUrl: "https://tomaspisar.cz/legal/longjumpreplay-purchases/", eulaUrl: "https://tomaspisar.cz/legal/longjumpreplay-eula/", refundUrl: "https://tomaspisar.cz/legal/longjumpreplay-refunds/", privacyUrl: "https://tomaspisar.cz/products/long-jump-replay/privacy/", supportEmail: "info@tomaspisar.cz" });
     expect(message.text).toContain("ljr_order_test");
     expect(message.text).toContain("longjumpreplay-eula");
     expect(message.html).toContain("longjumpreplay-refunds");

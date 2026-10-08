@@ -42,21 +42,21 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
       const sql = readFileSync(`migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(/;(?!\s*END\b)/i).map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
       await shared.exec(sql);
     }
-    env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://account.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
+    env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://ljr.tomaspisar.cz', ECONOMYSUITE_PORTAL_ORIGIN: 'https://minecraft.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
   });
   afterEach(async () => { vi.unstubAllGlobals(); await runtime?.dispose(); });
-  const request = (path: string, payload?: unknown) => new Request(`https://account.tomaspisar.cz/api/economysuite/${path}`, payload ? { method: 'POST', body: JSON.stringify(payload) } : undefined);
+  const request = (path: string, payload?: unknown) => new Request(`https://minecraft.tomaspisar.cz/api/economysuite/${path}`, payload ? { method: 'POST', body: JSON.stringify(payload) } : undefined);
   async function bridge(path: string, payload: unknown, nonce = crypto.randomUUID()) {
     const timestamp = Math.floor(Date.now() / 1000).toString(), raw = JSON.stringify(payload), route = `/api/economysuite/bridge/${path}`;
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.ECONOMYSUITE_BRIDGE_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}\n${nonce}\n${route}\n${raw}`)))].map(b => b.toString(16).padStart(2, '0')).join('');
-    return economySuite(new Request(`https://account.tomaspisar.cz${route}`, { method: 'POST', body: raw, headers: { 'X-ES-Time': timestamp, 'X-ES-Nonce': nonce, 'X-ES-Signature': signature } }), env, auth);
+    return economySuite(new Request(`https://minecraft.tomaspisar.cz${route}`, { method: 'POST', body: raw, headers: { 'X-ES-Time': timestamp, 'X-ES-Nonce': nonce, 'X-ES-Signature': signature } }), env, auth);
   }
   async function event(id: string, type: string, value: unknown) {
     const raw = JSON.stringify({ id, type, data: { object: value } }), timestamp = Math.floor(Date.now() / 1000);
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('whsec_test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${raw}`)))].map(b => b.toString(16).padStart(2, '0')).join('');
-    return economySuite(new Request('https://account.tomaspisar.cz/api/economysuite/stripe/webhook', { method: 'POST', body: raw, headers: { 'Stripe-Signature': `t=${timestamp},v1=${signature}` } }), env, auth);
+    return economySuite(new Request('https://minecraft.tomaspisar.cz/api/economysuite/stripe/webhook', { method: 'POST', body: raw, headers: { 'Stripe-Signature': `t=${timestamp},v1=${signature}` } }), env, auth);
   }
   it('fulfills paid sessions once, reconciles cumulative refunds and restores a won dispute', async () => {
     const db = env.ECONOMYSUITE_DB!;
@@ -157,7 +157,7 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
   });
   it('serves the public EconomySuite catalogue without authentication', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: [{ active: true, name: 'Public tokens', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_public', active: true, currency: 'czk', type: 'one_time', unit_amount: 300, metadata: { es_currency: 'tokens', es_amount: '10' } } }], has_more: false })));
-    const response = await economySuite(new Request('https://account.tomaspisar.cz/api/economysuite/catalog'), env, { authenticate: async () => null, mutation: async () => false });
+    const response = await economySuite(new Request('https://minecraft.tomaspisar.cz/api/economysuite/catalog'), env, { authenticate: async () => null, mutation: async () => false });
     expect(response.status).toBe(200);
     expect((await response.json() as { packages: { id: string }[] }).packages[0].id).toBe('price_public');
   });
@@ -175,28 +175,72 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
   });
   it('registers players without a real-name profile and retains the LongJumpReplay setup gate', async () => {
     const timestamp = Math.floor(Date.now() / 1000), setup = 'verified-test-registration';
-    await env.DB.prepare('INSERT INTO portal_registration_challenges(id,email,code_hash,setup_token_hash,purpose,created_at,expires_at,verified_at) VALUES(?,?,?,?,?,?,?,?)').bind('setup', 'owner@example.com', 'verified', await sha256(setup), 'registration', timestamp, timestamp + 300, timestamp).run();
-    const api = async (path: string, payload: unknown) => worker.fetch(new Request(`https://account.tomaspisar.cz${path}`, { method: 'POST', headers: { Origin: env.PORTAL_ORIGIN, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }), env);
+    await env.ECONOMYSUITE_DB!.prepare('INSERT INTO portal_registration_challenges(id,email,code_hash,setup_token_hash,purpose,created_at,expires_at,verified_at) VALUES(?,?,?,?,?,?,?,?)').bind('setup', 'owner@example.com', 'verified', await sha256(setup), 'registration', timestamp, timestamp + 300, timestamp).run();
+    const api = async (path: string, payload: unknown) => worker.fetch(new Request(`https://minecraft.tomaspisar.cz${path}`, { method: 'POST', headers: { Origin: env.ECONOMYSUITE_PORTAL_ORIGIN!, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }), env);
     const password = 'Test-password-123!';
     expect((await api('/api/portal/register/complete', { email: 'owner@example.com', setup_token: setup, password, password_confirmation: password, product: 'economysuite' })).status).toBe(200);
-    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM portal_profiles').first('n')).toBe(0);
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) AS n FROM portal_profiles').first('n')).toBe(0);
     const playerLogin = await api('/api/portal/password/login', { email: 'owner@example.com', password, product: 'economysuite' });
     expect(playerLogin.status).toBe(200);
     expect((await playerLogin.json() as { password_setup_required: boolean }).password_setup_required).toBe(false);
-    const ljrLogin = await api('/api/portal/password/login', { email: 'owner@example.com', password });
-    expect((await ljrLogin.json() as { password_setup_required: boolean }).password_setup_required).toBe(true);
-    const cookie = playerLogin.headers.get('Set-Cookie')!.match(/ljr-portal-session=[^;]+/)![0];
-    const next = await worker.fetch(new Request('https://account.tomaspisar.cz/login?product=economysuite&next=/economysuite/pair', { headers: { Cookie: cookie } }), env);
-    expect(next.headers.get('Location')).toBe('https://account.tomaspisar.cz/economysuite/pair');
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM customers').first('n')).toBe(0);
+    const ljrLogin = await worker.fetch(new Request('https://ljr.tomaspisar.cz/api/portal/password/login', { method: 'POST', headers: { Origin: env.PORTAL_ORIGIN }, body: JSON.stringify({ email: 'owner@example.com', password, product: 'economysuite' }) }), env);
+    expect(ljrLogin.status).toBe(401);
+    const cookie = playerLogin.headers.get('Set-Cookie')!.match(/__Host-es-session=[^;]+/)![0];
+    const next = await worker.fetch(new Request('https://minecraft.tomaspisar.cz/login?product=economysuite&next=/economysuite/pair', { headers: { Cookie: cookie } }), env);
+    expect(next.headers.get('Location')).toBe('https://minecraft.tomaspisar.cz/economysuite/pair');
     const setCookie = playerLogin.headers.get('Set-Cookie')!;
-    const sessionCookie = setCookie.match(/ljr-portal-session=[^;]+/)![0];
-    const csrfCookie = setCookie.match(/ljr-portal-csrf=([^;]+)/)![1];
-    const exported = await worker.fetch(new Request('https://account.tomaspisar.cz/api/portal/data-export', { headers: { Origin: env.PORTAL_ORIGIN, Cookie: sessionCookie } }), env);
+    const sessionCookie = setCookie.match(/__Host-es-session=[^;]+/)![0];
+    const csrfCookie = setCookie.match(/__Host-es-csrf=([^;]+)/)![1];
+    const exported = await worker.fetch(new Request('https://minecraft.tomaspisar.cz/api/portal/data-export', { headers: { Origin: env.ECONOMYSUITE_PORTAL_ORIGIN!, Cookie: sessionCookie } }), env);
     expect(exported.status).toBe(200);
-    expect((await exported.json() as { customer: { email: string } }).customer.email).toBe('owner@example.com');
-    const deletion = await worker.fetch(new Request('https://account.tomaspisar.cz/api/portal/account/deletion-request', { method: 'POST', headers: { Origin: env.PORTAL_ORIGIN, Cookie: `${sessionCookie}; ljr-portal-csrf=${csrfCookie}`, 'X-CSRF-Token': decodeURIComponent(csrfCookie), 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }), env);
+    expect((await exported.json() as { account: { email: string } }).account.email).toBe('owner@example.com');
+    const deletion = await worker.fetch(new Request('https://minecraft.tomaspisar.cz/api/portal/account/deletion-request', { method: 'POST', headers: { Origin: env.ECONOMYSUITE_PORTAL_ORIGIN!, Cookie: `${sessionCookie}; __Host-es-csrf=${csrfCookie}`, 'X-CSRF-Token': decodeURIComponent(csrfCookie), 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }), env);
     expect(deletion.status).toBe(200);
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM privacy_requests WHERE type='deletion'").first('n')).toBe(1);
+    expect(await env.ECONOMYSUITE_DB!.prepare("SELECT COUNT(*) AS n FROM privacy_requests WHERE type='deletion'").first('n')).toBe(1);
+  });
+  it('isolates registrations, passwords, cookies, resets and product APIs on both domains', async () => {
+    const timestamp = Math.floor(Date.now()/1000), email='separate@example.com';
+    const passwords={minecraft:'Minecraft-password-123!',ljr:'Replay-password-456!'};
+    const call=(host:string,path:string,data?:unknown,headers:Record<string,string>={})=>worker.fetch(new Request(`https://${host}.tomaspisar.cz${path}`,{method:data?'POST':'GET',headers:{Origin:`https://${host}.tomaspisar.cz`,...headers},body:data?JSON.stringify(data):undefined}),env);
+    for(const host of ['minecraft','ljr'] as const) {
+      const db=host==='minecraft'?env.ECONOMYSUITE_DB!:env.DB, setup='setup-'+host;
+      await db.prepare('INSERT INTO portal_registration_challenges(id,email,code_hash,setup_token_hash,purpose,created_at,expires_at,verified_at) VALUES(?,?,?,?,?,?,?,?)').bind(setup,email,'verified',await sha256(setup),'registration',timestamp,timestamp+300,timestamp).run();
+      const result=await call(host,'/api/portal/register/complete',{email,setup_token:setup,password:passwords[host],password_confirmation:passwords[host],first_name:'Test',last_name:'Account',product:host==='minecraft'?'longjumpreplay':'economysuite'});
+      expect(result.status).toBe(200);
+      if(host==='minecraft')expect(await env.DB.prepare('SELECT count(*) n FROM customers').first('n')).toBe(0);
+    }
+    const mc=await env.ECONOMYSUITE_DB!.prepare('SELECT id FROM customers WHERE email=?').bind(email).first('id');
+    const ljr=await env.DB.prepare('SELECT id FROM customers WHERE email=?').bind(email).first('id');
+    expect(mc).not.toBe(ljr);
+    const sessions:Record<string,string>={};
+    for(const host of ['minecraft','ljr'] as const) {
+      expect((await call(host,'/api/portal/password/login',{email,password:passwords[host==='minecraft'?'ljr':'minecraft'],product:'economysuite'})).status).toBe(401);
+      const response=await call(host,'/api/portal/password/login',{email,password:passwords[host]});
+      expect(response.status).toBe(200);
+      const cookies=response.headers.get('Set-Cookie')!;
+      expect(cookies).not.toContain('Domain=');expect(cookies).toContain('Secure');expect(cookies).toContain('HttpOnly');
+      sessions[host]=cookies.match(new RegExp(`__Host-${host==='minecraft'?'es':'ljr'}-session=[^;]+`))![0];
+      expect((await call(host,'/api/portal/account',undefined,{Cookie:sessions[host]})).status).toBe(200);
+    }
+    expect((await call('minecraft','/api/portal/account',undefined,{Cookie:sessions.ljr})).status).toBe(401);
+    expect((await call('ljr','/api/portal/account',undefined,{Cookie:sessions.minecraft.replace('__Host-es-session','__Host-ljr-session')})).status).toBe(401);
+    vi.stubGlobal('fetch', vi.fn(async()=>Response.json({id:'synthetic-email'})));
+    expect((await call('minecraft','/api/portal/password/reset/request',{email})).status).toBe(200);
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT count(*) n FROM password_reset_codes').first('n')).toBe(1);
+    expect(await env.DB.prepare('SELECT count(*) n FROM password_reset_codes').first('n')).toBe(0);
+    expect((await call('minecraft','/api/portal/password/reset/request',{email} ,{Origin:'https://ljr.tomaspisar.cz'})).status).toBe(403);
+    expect((await call('minecraft','/api/portal/billing',{})).status).toBe(404);
+    expect((await call('minecraft','/api/license/request-code',{email})).status).toBe(404);
+    expect((await call('ljr','/api/economysuite/account')).status).toBe(404);
+    env.ECONOMYSUITE_ACCOUNTS_READY='false';
+    expect((await call('minecraft','/api/portal/register/complete',{})).status).toBe(503);
+    expect((await call('ljr','/api/portal/account',undefined,{Cookie:sessions.ljr})).status).toBe(200);
+    env.ECONOMYSUITE_ACCOUNTS_READY='true';
+    expect((await call('minecraft','/api/portal/logout',{}, {Cookie:sessions.minecraft})).status).toBe(200);
+    expect((await call('ljr','/api/portal/account',undefined,{Cookie:sessions.ljr})).status).toBe(200);
+    expect((await worker.fetch(new Request('https://account.tomaspisar.cz/login?product=economysuite'),env)).headers.get('Location')).toBe('https://minecraft.tomaspisar.cz/login');
+    expect((await worker.fetch(new Request('https://account.tomaspisar.cz/api/portal/register/complete',{method:'POST',body:'{}'}),env)).status).toBe(410);
   });
   it('only stores the allowlisted gameplay snapshot and never publishes secrets', async () => {
     await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
@@ -230,7 +274,7 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     const raw = JSON.stringify({ id: 'evt_ljr', type: 'checkout.session.completed', data: { object: { metadata: {} } } });
     const timestamp = Math.floor(Date.now() / 1000), key = await crypto.subtle.importKey('raw', new TextEncoder().encode('whsec_test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${raw}`)))].map(b => b.toString(16).padStart(2, '0')).join('');
-    const response = await economySuite(new Request('https://account.tomaspisar.cz/api/economysuite/stripe/webhook', { method: 'POST', body: raw, headers: { 'Stripe-Signature': `t=${timestamp},v1=${signature}` } }), env, auth);
+    const response = await economySuite(new Request('https://minecraft.tomaspisar.cz/api/economysuite/stripe/webhook', { method: 'POST', body: raw, headers: { 'Stripe-Signature': `t=${timestamp},v1=${signature}` } }), env, auth);
     expect(response.status).toBe(200);
     expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) AS count FROM bridge_operations').first('count')).toBe(0);
   });
@@ -300,11 +344,11 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
   });
 
   it('routes the isolated games portal and its script without exposing anonymous player data', async () => {
-    env.ENVIRONMENT='test';env.PORTAL_ORIGIN='https://games-test.example';
-    const page=await worker.fetch(new Request(env.PORTAL_ORIGIN+'/economysuite/games'),env);
+    env.ENVIRONMENT='test';env.ECONOMYSUITE_PORTAL_ORIGIN='https://games-test.example';
+    const page=await worker.fetch(new Request(env.ECONOMYSUITE_PORTAL_ORIGIN+'/economysuite/games'),env);
     expect(page.status).toBe(302);expect(page.headers.get('Location')).toContain('/login?product=economysuite');
     env.ASSETS={fetch:async()=>new Response('fixture games script',{headers:{'Content-Type':'application/javascript'}}),connect:()=>{throw new Error('Unused fixture socket');}};
-    const asset=await worker.fetch(new Request(env.PORTAL_ORIGIN+'/economysuite/games.js'),env);
+    const asset=await worker.fetch(new Request(env.ECONOMYSUITE_PORTAL_ORIGIN+'/economysuite/games.js'),env);
     expect(asset.status).toBe(200);expect(await asset.text()).toBe('fixture games script');
   });
 

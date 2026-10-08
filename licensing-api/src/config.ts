@@ -24,6 +24,10 @@ export interface Env {
   MAIL_FROM: string;
   MAIL_FROM_NAME: string;
   PORTAL_ORIGIN: string;
+  ECONOMYSUITE_PORTAL_ORIGIN?: string;
+  ECONOMYSUITE_ACCOUNTS_READY?: string;
+  // Set by the request router, never selected from a login/registration payload.
+  PORTAL_PRODUCT?: 'economysuite' | 'longjumpreplay';
   PORTAL_SESSION_TTL_DAYS: string;
   STRIPE_PRICE_LIFETIME: string;
   STRIPE_PRICE_SUBSCRIPTION: string;

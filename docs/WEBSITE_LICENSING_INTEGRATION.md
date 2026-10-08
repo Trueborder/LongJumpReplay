@@ -64,8 +64,8 @@ purchase or activation flow.
 ## Where the frontend would connect
 
 The marketing website remains static. The separate customer portal uses
-`account.tomaspisar.cz/login` for OTP authentication and
-`account.tomaspisar.cz/dashboard` for account management. Before a
+`ljr.tomaspisar.cz/login` for OTP authentication and
+`ljr.tomaspisar.cz/dashboard` for account management. Before a
 purchase it shows an empty account with a purchase link; a licence bought with
 the same normalized address appears automatically:
 
@@ -91,7 +91,7 @@ the same normalized address appears automatically:
 ## Also outstanding
 
 The technical licensing flow is now implemented: Stripe creates the licence,
-the customer activates by email, and `account.tomaspisar.cz` provides OTP
+the customer activates by email, and `ljr.tomaspisar.cz` provides OTP
 login, device management, invoices and Stripe billing management. The legal
 release gate remains separate: publishable Terms, seller identification
 (name, address, IČO, VAT status), delivery timing, the 14-day withdrawal and

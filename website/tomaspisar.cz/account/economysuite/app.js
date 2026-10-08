@@ -47,7 +47,7 @@
     invalid_game_input: ['Neplatná sázka nebo volba. Zkontroluj minimum a násobky deseti.', 'Invalid stake or choice. Check the minimum and multiples of ten.']
   });
   async function api(path, data) {
-    const response = await fetch(path, { method: data ? 'POST' : 'GET', credentials: 'include', headers: data ? { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(cookie('ljr-portal-csrf')) } : {}, body: data ? JSON.stringify(data) : undefined });
+    const response = await fetch(path, { method: data ? 'POST' : 'GET', credentials: 'include', headers: data ? { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(cookie('__Host-es-csrf')) } : {}, body: data ? JSON.stringify(data) : undefined });
     const result = await response.json();
     if (!response.ok) {
       const pair = errors[path.startsWith('/api/economysuite/games/') && result.error === 'invalid_input' ? 'invalid_game_input' : result.error];

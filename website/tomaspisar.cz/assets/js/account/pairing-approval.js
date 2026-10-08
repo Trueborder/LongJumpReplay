@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const API = 'https://api.tomaspisar.cz';
+  const API = location.hostname === 'ljr.tomaspisar.cz' ? location.origin : 'https://api.tomaspisar.cz';
   const PENDING_PAIRING_KEY = 'ljr_pending_pairing_v1';
   const $ = (selector) => document.querySelector(selector);
   const loading = $('#pairing-loading');

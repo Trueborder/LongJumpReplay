@@ -32,6 +32,7 @@
   "vars": {
     "ENVIRONMENT": "development",
     "ECONOMYSUITE_GAMES_ENABLED": "false",
+    "ECONOMYSUITE_ACCOUNTS_READY": "true",
     "ECONOMYSUITE_PURCHASES_ENABLED": "false",
     "MAX_DEVICES": "2",
     "VERIFICATION_CODE_TTL_MINUTES": "10",
@@ -41,7 +42,8 @@
     "SUBSCRIPTION_GRACE_DAYS": "7",
     "MAIL_FROM": "info@tomaspisar.cz",
     "MAIL_FROM_NAME": "Novaryn Solutions",
-    "PORTAL_ORIGIN": "https://account.tomaspisar.cz",
+    "PORTAL_ORIGIN": "https://ljr.tomaspisar.cz",
+    "ECONOMYSUITE_PORTAL_ORIGIN": "https://minecraft.tomaspisar.cz",
     "PORTAL_SESSION_TTL_DAYS": "30",
     // Stripe price IDs, resolved to a license type by src/config.ts. Fill these
     // from the Stripe dashboard; unknown price IDs are rejected rather than
@@ -63,6 +65,7 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "ECONOMYSUITE_GAMES_ENABLED": "false",
+        "ECONOMYSUITE_ACCOUNTS_READY": "true",
         "ECONOMYSUITE_PURCHASES_ENABLED": "false",
         "MAX_DEVICES": "2",
         "VERIFICATION_CODE_TTL_MINUTES": "10",
@@ -72,7 +75,8 @@
         "SUBSCRIPTION_GRACE_DAYS": "7",
         "MAIL_FROM": "info@tomaspisar.cz",
         "MAIL_FROM_NAME": "Novaryn Solutions staging",
-        "PORTAL_ORIGIN": "https://account.tomaspisar.cz",
+        "PORTAL_ORIGIN": "https://ljr.tomaspisar.cz",
+        "ECONOMYSUITE_PORTAL_ORIGIN": "https://minecraft.tomaspisar.cz",
         "PORTAL_SESSION_TTL_DAYS": "30",
         "STRIPE_PRICE_LIFETIME": "",
         "STRIPE_PRICE_SUBSCRIPTION": "",
@@ -106,6 +110,7 @@
       "vars": {
         "ENVIRONMENT": "production",
         "ECONOMYSUITE_GAMES_ENABLED": "false",
+        "ECONOMYSUITE_ACCOUNTS_READY": "true",
         "ECONOMYSUITE_PURCHASES_ENABLED": "true",
         "MAX_DEVICES": "2",
         "VERIFICATION_CODE_TTL_MINUTES": "10",
@@ -115,7 +120,8 @@
         "SUBSCRIPTION_GRACE_DAYS": "7",
         "MAIL_FROM": "info@tomaspisar.cz",
         "MAIL_FROM_NAME": "Novaryn Solutions",
-        "PORTAL_ORIGIN": "https://account.tomaspisar.cz",
+        "PORTAL_ORIGIN": "https://ljr.tomaspisar.cz",
+        "ECONOMYSUITE_PORTAL_ORIGIN": "https://minecraft.tomaspisar.cz",
         "PORTAL_SESSION_TTL_DAYS": "30",
         "STRIPE_PRICE_LIFETIME": "price_1U5LRVRzuUbjN0GOz1g4eLth",
         "STRIPE_PRICE_SUBSCRIPTION": "price_1U5NVeRzuUbjN0GO8DTXza5u",
@@ -139,6 +145,8 @@
         }
       ],
       "routes": [
+        { "pattern": "ljr.tomaspisar.cz", "custom_domain": true },
+        { "pattern": "minecraft.tomaspisar.cz", "custom_domain": true },
         {
           "pattern": "api.tomaspisar.cz/*",
           "zone_name": "tomaspisar.cz"

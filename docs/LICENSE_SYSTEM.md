@@ -3,7 +3,7 @@
 Status: **the production Worker, D1 database, email activation API, customer
 portal, Stripe webhook and desktop licence panel are implemented.** The
 production API is live at `api.tomaspisar.cz` and the customer portal is live at
-`account.tomaspisar.cz`. A separate staging D1 database and Worker
+`ljr.tomaspisar.cz`. A separate staging D1 database and Worker
 configuration are prepared; staging still needs test-mode secrets before it is
 useful for a full purchase test.
 
@@ -165,8 +165,8 @@ Liveness only.
 
 ### Customer portal
 
-The portal uses `https://account.tomaspisar.cz/login` for password sign-in and
-`https://account.tomaspisar.cz/dashboard` for the authenticated account. New
+The portal uses `https://ljr.tomaspisar.cz/login` for password sign-in and
+`https://ljr.tomaspisar.cz/dashboard` for the authenticated account. New
 users register at `/register`: email ownership is verified with a one-time
 code, then first name, surname, optional club name, and a password of 12-128
 characters containing a letter, number, and symbol are required. Existing
