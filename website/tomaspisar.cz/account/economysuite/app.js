@@ -39,7 +39,8 @@
   const cookie = name => document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.split('=').slice(1).join('=') || '';
   const errors = { pair_required: ['Nejdřív propoj svůj Minecraft účet.', 'Pair your Minecraft account first.'], invalid_password: ['Heslo není správné.', 'The password is incorrect.'], pair_expired: ['Propojení vypršelo. Použij znovu /web link.', 'Pairing expired. Run /web link again.'], pending_delivery: ['Nejdřív dokonči čekající nákupy a doručení.', 'Finish pending checkouts and deliveries first.'], already_linked: ['Tento účet nebo hráč už je propojený.', 'This account or player is already linked.'], unavailable: ['Tato funkce zatím není dostupná.', 'This feature is not available yet.'], stripe_minimum: ['Stripe vy\u017Eaduje minim\u00E1ln\u00ED platbu 15 K\u010D. Zvol vy\u0161\u0161\u00ED bal\u00ED\u010Dek.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.'], invalid_confirmation: ['Potvrzení není platné.', 'The confirmation is invalid.'] };
   Object.assign(errors, {
-    games_disabled: ['Hry jsou dostupné pouze v testovacím prostředí.', 'Games are available only in the test environment.'],
+    games_disabled: ['Hry jsou vypnuté.', 'Games are disabled.'],
+    server_games_disabled: ['Hry jsou na serveru vypnuté.', 'Games are disabled on the server.'],
     server_offline: ['Server je odpojený. Sázka nebyla přijata.', 'Server disconnected. The bet was not accepted.'],
     unsupported_plugin: ['Server nepodporuje tuto verzi her.', 'The server does not support this version of games.'],
     round_busy: ['Počkej na dokončení kola a alespoň pět sekund mezi sázkami.', 'Wait for your round to finish and at least five seconds between bets.'],

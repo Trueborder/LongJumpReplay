@@ -37,13 +37,15 @@ export function outcome(game: string, choice: string, roll: number): { outcome: 
   return null;
 }
 export function gamesEnabled(env: Env): boolean {
-  return ['development', 'staging', 'test'].includes(env.ENVIRONMENT) && env.ECONOMYSUITE_GAMES_ENABLED === 'true' && !['https://account.tomaspisar.cz', 'https://minecraft.tomaspisar.cz', 'https://ljr.tomaspisar.cz'].includes(env.PORTAL_ORIGIN);
+  if (env.ECONOMYSUITE_GAMES_ENABLED !== 'true') return false;
+  if (env.ENVIRONMENT === 'production') return env.PORTAL_ORIGIN === 'https://minecraft.tomaspisar.cz';
+  return ['development', 'staging', 'test'].includes(env.ENVIRONMENT) && !['https://account.tomaspisar.cz', 'https://minecraft.tomaspisar.cz', 'https://ljr.tomaspisar.cz'].includes(env.PORTAL_ORIGIN);
 }
 export async function gamesRoute(request: Request, env: Env, db: D1Database, customer: string, uuid: string | null, data: Record<string, unknown>): Promise<Response> {
   const url = new URL(request.url), path = url.pathname;
   if (path.endsWith('/config') && request.method === 'GET') {
-    const bridge = await db.prepare("SELECT last_seen,games_version FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number; games_version: string | null }>();
-    return reply({ enabled: gamesEnabled(env), supported: bridge?.games_version === RULES_VERSION, connected: !!bridge && bridge.last_seen > Math.floor(Date.now() / 1000) - 20, rules_version: RULES_VERSION, tables: TABLES, minimum: { coins: 100, tokens: 10 }, step: 10, cooldown: 5 });
+    const bridge = await db.prepare("SELECT last_seen,games_version,games_enabled FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number; games_version: string | null; games_enabled: number }>();
+    return reply({ enabled: gamesEnabled(env), server_enabled: bridge?.games_enabled === 1, supported: bridge?.games_version === RULES_VERSION, connected: !!bridge && bridge.last_seen > Math.floor(Date.now() / 1000) - 20, rules_version: RULES_VERSION, tables: TABLES, minimum: { coins: 100, tokens: 10 }, step: 10, cooldown: 5 });
   }
   if (request.method === 'GET') {
     const id = path.match(/\/rounds\/([a-f0-9-]{36})$/)?.[1];
@@ -65,11 +67,12 @@ export async function gamesRoute(request: Request, env: Env, db: D1Database, cus
     if (['game', 'currency', 'stake', 'choice', 'rules_version'].some(key => existing[key as keyof Round] !== data[key])) return fail('idempotency_conflict', 'This key belongs to a different bet.');
     return reply({ round: existing });
   }
-  if (!gamesEnabled(env)) return fail('games_disabled', 'Games are available only in an isolated test environment.', 503);
-  const bridge = await db.prepare("SELECT last_seen,games_version FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number; games_version: string | null }>();
+  if (!gamesEnabled(env)) return fail('games_disabled', 'Games are disabled.', 503);
+  const bridge = await db.prepare("SELECT last_seen,games_version,games_enabled FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number; games_version: string | null; games_enabled: number }>();
   const timestamp = Math.floor(Date.now() / 1000);
   if (!bridge || bridge.last_seen <= timestamp - 20) return fail('server_offline', 'The server is disconnected.', 503);
   if (bridge.games_version !== RULES_VERSION) return fail('unsupported_plugin', 'The server does not support these rules.', 503);
+  if (bridge.games_enabled !== 1) return fail('server_games_disabled', 'Games are disabled on the server.', 503);
   const id = crypto.randomUUID(), payload = { ...data, expires_at: timestamp + 30, created_at: timestamp };
   try {
     await db.batch([

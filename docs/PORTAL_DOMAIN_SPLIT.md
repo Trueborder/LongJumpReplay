@@ -17,7 +17,7 @@ no login or registration remains there. Signed EconomySuite bridge and payment
 webhook paths remain compatible with already installed plugins and the existing
 Stripe endpoint. New plugin defaults and canonical webhook URLs use `minecraft.`.
 Keeping the old signed webhook avoids editing Stripe products or payment flows.
-Games stay disabled in production.
+Games were disabled at the domain cutover; later explicit launch authorization is documented in ECONOMYSUITE_GAMES_LAUNCH.md.
 
 ## Cutover
 

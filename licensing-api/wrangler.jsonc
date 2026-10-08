@@ -109,7 +109,7 @@
     "production": {
       "vars": {
         "ENVIRONMENT": "production",
-        "ECONOMYSUITE_GAMES_ENABLED": "false",
+        "ECONOMYSUITE_GAMES_ENABLED": "true",
         "ECONOMYSUITE_ACCOUNTS_READY": "true",
         "ECONOMYSUITE_PURCHASES_ENABLED": "true",
         "MAX_DEVICES": "2",

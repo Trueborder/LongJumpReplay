@@ -286,7 +286,7 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
   async function enableGames() {
     env.ENVIRONMENT = 'test'; env.PORTAL_ORIGIN = 'https://games-test.example'; env.ECONOMYSUITE_GAMES_ENABLED = 'true';
     await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
-    await bridge('poll', { games_version: RULES_VERSION });
+    await bridge('poll', { games_version: RULES_VERSION, games_enabled: true });
   }
   it('uses exact integer tables and safe stake boundaries', () => {
     for (const table of Object.values(TABLES)) expect(table.reduce((sum,o)=>sum+o.probability*o.factor,0)).toBe(950);
@@ -298,15 +298,37 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     expect(validInput({...bet(),game:'dice',choice:'10',stake:maxStake('dice','10')+10})).toBe(false);
     for(const choice of ['heads','tails']) expect(Array.from({length:100},(_,i)=>outcome('coin',choice,i)!.factor).reduce((a,b)=>a+b,0)).toBe(950);
   });
-  it('gates production, disconnected servers and unsupported plugins', async () => {
+  it('gates invalid production origins, disconnected servers and unsupported plugins', async () => {
     await enableGames();env.ENVIRONMENT='production';
     expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
     env.ENVIRONMENT='test';await bridge('poll',{});
     expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
-    await bridge('poll',{games_version:RULES_VERSION});
+    await bridge('poll',{games_version:RULES_VERSION,games_enabled:true});
     await env.ECONOMYSUITE_DB!.prepare('UPDATE bridge_status SET last_seen=1').run();
     expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
     expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) n FROM game_rounds').first('n')).toBe(0);
+  });
+  it('requires explicit production and server activation while retaining pending recovery', async () => {
+    await enableGames(); env.ENVIRONMENT='production'; env.PORTAL_ORIGIN='https://minecraft.tomaspisar.cz';
+    env.ECONOMYSUITE_GAMES_ENABLED='false';
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
+    env.ECONOMYSUITE_GAMES_ENABLED='true';
+    await bridge('poll',{games_version:RULES_VERSION});
+    let result=await economySuite(request('games/rounds',bet()),env,auth);
+    expect((await result.json() as {error:string}).error).toBe('server_games_disabled');
+    await bridge('poll',{games_version:RULES_VERSION,games_enabled:'true'});
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
+    await bridge('poll',{games_version:RULES_VERSION,games_enabled:true});
+    const config=await (await economySuite(request('games/config'),env,auth)).json() as {enabled:boolean,server_enabled:boolean};
+    expect(config).toMatchObject({enabled:true,server_enabled:true});
+    const payload=bet(); result=await economySuite(request('games/rounds',payload),env,auth);
+    expect(result.status).toBe(202);
+    const {round}=await result.json() as {round:{id:string}};
+    const poll=await (await bridge('poll',{games_version:RULES_VERSION,games_enabled:false})).json() as {operations:{id:string}[]};
+    expect(poll.operations.map(operation=>operation.id)).toContain(round.id);
+    env.ECONOMYSUITE_GAMES_ENABLED='false';
+    expect((await economySuite(request('games/rounds',payload),env,auth)).status).toBe(200);
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) n FROM game_rounds').first('n')).toBe(1);
   });
   it('enforces CSRF, ownership, one pending round and idempotent concurrent retries', async () => {
     await enableGames();const payload=bet();

@@ -16,7 +16,7 @@ if(!/^eula\s*=\s*true\s*$/im.test(existsSync(join(serverRoot,'eula.txt'))?readFi
   throw new Error('Accept the Minecraft EULA yourself in the isolated server eula.txt before running this rehearsal.');
 }
 for(const file of ['paper.jar','plugins/Vault.jar'])assert.ok(existsSync(join(serverRoot,file)),`Missing ${file}; see GAMES_TESTING.md`);
-const pluginJar=readdirSync(join(pluginRoot,'build/libs')).find(f=>/^EconomySuite-.*\.jar$/.test(f));assert.ok(pluginJar);
+const pluginJar=readdirSync(join(pluginRoot,'build/libs')).filter(f=>/^EconomySuite-.*\.jar$/.test(f)).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).at(-1);assert.ok(pluginJar);
 writeFileSync(join(serverRoot,'plugins',pluginJar),readFileSync(join(pluginRoot,'build/libs',pluginJar)));
 const secret=randomBytes(32).toString('hex'), origin='https://localhost:9443';
 const certPassword=randomBytes(20).toString('hex');
@@ -27,7 +27,7 @@ mkdirSync(join(serverRoot,'plugins/EconomySuite'),{recursive:true});
 writeFileSync(join(serverRoot,'plugins/EconomySuite/config.yml'),`language: en\nwebsite:\n  enabled: true\n  environment: test\n  games-test-enabled: true\n  portal-origin: '${origin}'\n  bridge-secret: '${secret}'\n`);
 writeFileSync(join(serverRoot,'server.properties'),'server-ip=127.0.0.1\nserver-port=25591\nonline-mode=true\nlevel-type=minecraft:flat\ngenerate-structures=false\nview-distance=2\nsimulation-distance=2\nmax-players=1\nspawn-protection=0\nenable-rcon=false\n');
 const bundled=await build({entryPoints:['src/index.ts'],bundle:true,format:'esm',platform:'browser',write:false});
-const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundled.outputFiles[0].text,compatibilityDate:'2026-08-01',d1Databases:['DB','ECONOMYSUITE_DB'],bindings:{ENVIRONMENT:'test',PORTAL_ORIGIN:origin,ECONOMYSUITE_GAMES_ENABLED:'true',ECONOMYSUITE_PURCHASES_ENABLED:'false',ECONOMYSUITE_BRIDGE_SECRET:secret,VERIFICATION_PEPPER:randomBytes(32).toString('hex')}}));
+const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:bundled.outputFiles[0].text,compatibilityDate:'2026-08-01',d1Databases:['DB','ECONOMYSUITE_DB'],bindings:{ENVIRONMENT:'test',PORTAL_ORIGIN:origin,ECONOMYSUITE_PORTAL_ORIGIN:origin,ECONOMYSUITE_GAMES_ENABLED:'true',ECONOMYSUITE_PURCHASES_ENABLED:'false',ECONOMYSUITE_BRIDGE_SECRET:secret,VERIFICATION_PEPPER:randomBytes(32).toString('hex')}}));
 for(const [binding,directory] of [['DB','migrations'],['ECONOMYSUITE_DB','economysuite-migrations']]) {
   const db=await mf.getD1Database(binding);
   for(const migration of readdirSync(directory).filter(f=>f.endsWith('.sql')).sort()) {
@@ -48,7 +48,7 @@ const hash=value=>createHash('sha256').update(value).digest('base64url');
 const fixtures=[];
 async function fixture(game,currency,choice,scenario='normal') {
   const uuid=randomUUID(),customer='games-test-'+randomUUID(),token=randomBytes(32).toString('hex'),csrf=randomBytes(32).toString('hex'),now=Math.floor(Date.now()/1000);
-  await db.batch([
+  await es.batch([
     db.prepare('INSERT INTO customers(id,email,created_at,updated_at) VALUES(?,?,?,?)').bind(customer,customer+'@example.com',now,now),
     db.prepare('INSERT INTO customer_password_credentials(customer_id,password_hash,created_at,updated_at,password_changed_at) VALUES(?,?,?,?,?)').bind(customer,'unused-test-only',now,now,now),
     db.prepare('INSERT INTO portal_sessions(id,customer_id,token_hash,created_at,expires_at,last_seen_at,csrf_token_hash) VALUES(?,?,?,?,?,?,?)').bind(randomUUID(),customer,hash(token),now,now+3600,now,hash(csrf)),
@@ -57,7 +57,7 @@ async function fixture(game,currency,choice,scenario='normal') {
   const entry={uuid,customer,token,csrf,game,currency,choice,scenario};fixtures.push(entry);return entry;
 }
 async function portal(f,path,data) {
-  const response=await mf.dispatchFetch(origin+'/api/economysuite/'+path,{method:data?'POST':'GET',headers:{Cookie:`ljr-portal-session=${f.token}`,Origin:origin,'X-CSRF-Token':f.csrf,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
+  const response=await mf.dispatchFetch(origin+'/api/economysuite/'+path,{method:data?'POST':'GET',headers:{Cookie:`__Host-es-session=${f.token}`,Origin:origin,'X-CSRF-Token':f.csrf,'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
   const result=await response.json();assert.ok(response.ok,`${path}: ${response.status} ${result.error || ''}`);return result;
 }
 // Python writes only the synthetic UUIDs in this named local test database.
@@ -70,7 +70,7 @@ try {
   paper=spawn(java,['-Xms512M','-Xmx1G','-Djava.net.preferIPv4Stack=true',`-Djavax.net.ssl.trustStore=${certFile}`,`-Djavax.net.ssl.trustStorePassword=${certPassword}`,'-jar','paper.jar','--nogui'],{cwd:serverRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});
   paper.stdout.on('data',chunk=>{writeFileSync(log,chunk,{flag:'a'});});paper.stderr.on('data',chunk=>{writeFileSync(log,chunk,{flag:'a'});});
   let ready=false;
-  for(let i=0;i<90;i++){if(paper.exitCode!==null)throw new Error(`Paper exited (${paper.exitCode}); inspect ${log}`);const status=await es.prepare("SELECT games_version FROM bridge_status WHERE server='pantheon'").first();if(status?.games_version==='es-games-1'){ready=true;break;}await delay(1000);}
+  for(let i=0;i<90;i++){if(paper.exitCode!==null)throw new Error(`Paper exited (${paper.exitCode}); inspect ${log}`);const status=await es.prepare("SELECT games_version,games_enabled FROM bridge_status WHERE server='pantheon'").first();if(status?.games_version==='es-games-1' && status.games_enabled===1){ready=true;break;}await delay(1000);}
   assert.ok(ready,`Paper bridge did not connect; inspect ${log}`);
   for(const currency of ['coins','tokens'])for(const [game,choice] of [['coin','heads'],['coin','tails'],['dice','10'],['dice','25'],['dice','50'],['wheel','']])await fixture(game,currency,choice);
   await fixture('wheel','tokens','','pending');await fixture('wheel','tokens','','debt');seedWallets();

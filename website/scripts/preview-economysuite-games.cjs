@@ -11,7 +11,7 @@ const server = http.createServer(async (req,res) => {
   const json = value => {res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
   if(url.pathname.startsWith('/api/')) {
     if(url.pathname.endsWith('/account'))return json({email:'fixture@example.com',link:{uuid:'11111111-1111-4111-8111-111111111111',name:'TestPlayer'},snapshot,synced_at:Math.floor(Date.now()/1000),server_status:'connected',server_online:true});
-    if(url.pathname.endsWith('/config'))return json({enabled:true,connected:true,supported:true,rules_version:'es-games-1',tables});
+    if(url.pathname.endsWith('/config'))return json({enabled:true,server_enabled:true,connected:true,supported:true,rules_version:'es-games-1',tables});
     if(url.pathname.endsWith('/rounds') && req.method==='POST') {
       let raw='';for await(const chunk of req)raw+=chunk;
       const bet=JSON.parse(raw),old=rounds.find(r=>r.idempotency_key===bet.idempotency_key);if(old)return json({round:old});

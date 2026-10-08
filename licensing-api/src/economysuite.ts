@@ -216,7 +216,7 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
   }
   if (path.endsWith('/poll')) {
     const version = data.games_version === RULES_VERSION ? RULES_VERSION : null;
-    await db.prepare("UPDATE bridge_status SET games_version=? WHERE server='pantheon'").bind(version).run();
+    await db.prepare("UPDATE bridge_status SET games_version=?,games_enabled=? WHERE server='pantheon'").bind(version, version && data.games_enabled === true ? 1 : 0).run();
     await db.prepare('DELETE FROM bridge_nonces WHERE expires_at<?').bind(now()).run();
     const links = await db.prepare('SELECT uuid,name FROM player_links').all();
     const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION).all<{ id: string; uuid: string; kind: string; payload: string }>();
