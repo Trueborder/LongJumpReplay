@@ -278,7 +278,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   if (path === '/api/economysuite/leaderboard' && request.method === 'GET') {
     const metric = new URL(request.url).searchParams.get('metric') || 'playtime';
     if (!['playtime', 'blocks_mined', 'tasks_completed', 'duel_wins'].includes(metric)) return error('invalid_input', 'Unknown statistic.');
-    const rows = await db.prepare("SELECT l.uuid,l.name,CAST(json_extract(s.payload, ?) AS INTEGER) AS value FROM player_links l JOIN player_snapshots s ON s.uuid=l.uuid WHERE l.leaderboard=1 ORDER BY value DESC,l.name LIMIT 50").bind(`$.statistics.all_time.${metric}`).all();
+    const rows = await db.prepare("SELECT l.uuid,l.name,CAST(COALESCE(json_extract(s.payload, ?),0) AS INTEGER) AS value FROM player_links l LEFT JOIN player_snapshots s ON s.uuid=l.uuid WHERE l.leaderboard=1 ORDER BY value DESC,l.name LIMIT 50").bind(`$.statistics.all_time.${metric}`).all();
     return reply({ metric, entries: rows.results });
   }
   if (path === '/api/economysuite/pair/inspect' && request.method === 'POST') {

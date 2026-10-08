@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite leaderboard defaults (2026-10-08)
+
+- Migration 0006_leaderboard_default_on.sql changes new player_links.leaderboard to default 1 and enables existing linked players except the protected xpisar10@gmail.com record, which is preserved exactly. The authenticated privacy endpoint still permits explicit opt-out. Rankings return only Minecraft UUID/name and an allowlisted selected statistic; missing snapshots count as zero. Settings copy explains the default in Czech and English; emails, balances and purchases are not exposed.
+
+- Verified: 59 Worker tests, 75 website tests, TypeScript and git diff checks passed. Production migration rehearsed from a private D1 backup and verified after application (4 linked / 4 visible; protected customer/link unchanged). Deployed API 43b7f1fb-abba-4a1e-88c6-1d84f074d99a and website 23446f3a-21dd-4b68-b4c5-e808ca296f56. Live assets return 200 with the updated default-on copy; anonymous rankings remain 401.
+
 ## Separate product account domains (2026-10-08)
 
 - Login keeps the compact card and canonical product switcher; Forgot password, email-code login and registration are collapsed under Show other options. No destination label or explanatory copy is shown.

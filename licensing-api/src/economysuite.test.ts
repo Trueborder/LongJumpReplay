@@ -256,18 +256,45 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     const approved = await (await economySuite(request('pair/approve', { token: start.token }), env, auth)).json() as { confirmation: string };
     expect((await bridge('pair/confirm', { uuid, token: start.token, confirmation: approved.confirmation })).status).toBe(200);
     expect(await env.ECONOMYSUITE_DB!.prepare('SELECT customer_id FROM player_links WHERE uuid=?').bind(uuid).first('customer_id')).toBe('owner');
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT leaderboard FROM player_links WHERE uuid=?').bind(uuid).first('leaderboard')).toBe(1);
     expect((await economySuite(request('pair/approve', { token: start.token }), env, auth)).status).toBe(409);
     const nonce = crypto.randomUUID();
     expect((await bridge('poll', {}, nonce)).status).toBe(200);
     expect((await bridge('poll', {}, nonce)).status).toBe(403);
   });
-  it('keeps profiles private and excludes non-consenting players from rankings', async () => {
+  it('keeps profiles private and excludes players who hide themselves from rankings', async () => {
     await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('other', uuid, 'Other', 1).run();
+    await env.ECONOMYSUITE_DB!.prepare('UPDATE player_links SET leaderboard=0 WHERE customer_id=?').bind('other').run();
     await bridge('sync', { snapshots: [{ uuid, statistics: { all_time: { playtime: 100 } } }] });
     const own = await (await economySuite(request('account'), env, auth)).json() as { snapshot: unknown };
     expect(own.snapshot).toBeNull();
     const ranking = await (await economySuite(request('leaderboard'), env, auth)).json() as { entries: unknown[] };
     expect(ranking.entries).toEqual([]);
+  });
+  it('shows linked players by default before sync and honors their later opt-out', async () => {
+    const db=env.ECONOMYSUITE_DB!;
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner',uuid,'Player',1).run();
+    const ranking=await (await economySuite(request('leaderboard'),env,auth)).json() as {entries:unknown[]};
+    expect(ranking.entries).toEqual([{uuid,name:'Player',value:0}]);
+    expect((await economySuite(request('privacy',{leaderboard:false}),env,auth)).status).toBe(200);
+    const hidden=await (await economySuite(request('leaderboard'),env,auth)).json() as {entries:unknown[]};
+    expect(hidden.entries).toEqual([]);
+    await economySuite(request('privacy',{leaderboard:true}),env,auth);
+    await bridge('sync',{snapshots:[{uuid,coins:900,tokens:200,statistics:{all_time:{playtime:100}}}]});
+    const shown=await (await economySuite(request('leaderboard'),env,auth)).json() as {entries:unknown[]};
+    expect(shown.entries).toEqual([{uuid,name:'Player',value:100}]);
+  });
+  it('backfills existing leaderboard defaults while preserving the protected link exactly', async () => {
+    const db=env.ECONOMYSUITE_DB!;
+    const protectedUuid='22222222-2222-4222-8222-222222222222';
+    await db.prepare('INSERT INTO customers(id,email,created_at,updated_at) VALUES(?,?,1,1)').bind('protected','xpisar10@gmail.com').run();
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at,leaderboard) VALUES(?,?,?,?,0)').bind('protected',protectedUuid,'Protected',7).run();
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at,leaderboard) VALUES(?,?,?,?,0)').bind('owner',uuid,'Player',9).run();
+    const before=await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind('protected').first();
+    const sql=readFileSync('economysuite-migrations/0006_leaderboard_default_on.sql','utf8').replace(/--[^\n]*/g,'').replace(/\r?\n/g,' ');
+    await db.exec(sql);
+    expect(await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind('protected').first()).toEqual(before);
+    expect(await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind('owner').first()).toEqual({customer_id:'owner',uuid,name:'Player',linked_at:9,leaderboard:1});
   });
   it('requires a valid payment signature and ignores LongJumpReplay events', async () => {
     expect((await economySuite(request('stripe/webhook', { id: 'forged' }), env, auth)).status).toBe(400);

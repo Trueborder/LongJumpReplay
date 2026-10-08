@@ -15,7 +15,7 @@ Worker logic is `licensing-api/src/economysuite.ts`; account assets are `website
 | Production | economysuite-player-portal | b0e45bf6-0490-4d6d-9bfa-50d15355c44f |
 | Staging | economysuite-player-portal-staging | 6c571619-685a-4cde-a302-10f88fa20151 |
 
-Migrations live in `licensing-api/economysuite-migrations`. UUID/account uniqueness is enforced by D1. Snapshots contain allowlisted gameplay fields. Rankings require opt-in and return only player identity and one selected metric.
+Migrations live in `licensing-api/economysuite-migrations`. UUID/account uniqueness is enforced by D1. Snapshots contain allowlisted gameplay fields. Rankings show linked players by default and return only Minecraft identity and one selected metric (zero until first sync). Players can opt out in Settings. Migration 0006 turns on existing non-protected links and preserves xpisar10@gmail.com exactly.
 
 ## Secrets and deployment
 
