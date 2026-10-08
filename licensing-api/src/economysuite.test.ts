@@ -6,6 +6,7 @@ import { economySuite, packageFromProduct, targetCurrency } from './economysuite
 import type { Env } from './config';
 import { sha256 } from './crypto';
 import worker from './index';
+import { TABLES, RULES_VERSION, maxStake, validInput, outcome } from './economysuite-games';
 
 describe('EconomySuite currency catalog', () => {
   const product = { active: true, name: 'Coin pack', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 4900, metadata: { es_currency: 'coins', es_amount: '1000' } } };
@@ -34,11 +35,11 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB', 'ES'], compatibilityDate: '2026-08-01' }));
     const db = await runtime.getD1Database('ES'), shared = await runtime.getD1Database('DB');
     for (const migration of readdirSync('economysuite-migrations').filter(name => name.endsWith('.sql')).sort()) {
-      const sql = readFileSync(`economysuite-migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(';').map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
+      const sql = readFileSync(`economysuite-migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(/;(?!\s*END\b)/i).map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
       await db.exec(sql);
     }
     for (const migration of readdirSync('migrations').filter(name => name.endsWith('.sql')).sort()) {
-      const sql = readFileSync(`migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(';').map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
+      const sql = readFileSync(`migrations/${migration}`, 'utf8').replace(/--[^\n]*/g, '').split(/;(?!\s*END\b)/i).map(statement => statement.replace(/\r?\n/g, ' ').trim()).filter(Boolean).join(';\n') + ';';
       await shared.exec(sql);
     }
     env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://account.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
@@ -237,4 +238,74 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     await env.ECONOMYSUITE_DB!.prepare('INSERT INTO pairing_challenges(token_hash,uuid,name,expires_at) VALUES(?,?,?,?)').bind(await sha256('expired'), uuid, 'Player', 1).run();
     expect((await economySuite(request('pair/inspect', { token: 'expired', name: 'Player' }), env, auth)).status).toBe(410);
   });
+  const bet = (key = crypto.randomUUID()) => ({ game: 'coin', currency: 'coins', stake: 100, choice: 'heads', rules_version: RULES_VERSION, idempotency_key: key });
+  async function enableGames() {
+    env.ENVIRONMENT = 'test'; env.PORTAL_ORIGIN = 'https://games-test.example'; env.ECONOMYSUITE_GAMES_ENABLED = 'true';
+    await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
+    await bridge('poll', { games_version: RULES_VERSION });
+  }
+  it('uses exact integer tables and safe stake boundaries', () => {
+    for (const table of Object.values(TABLES)) expect(table.reduce((sum,o)=>sum+o.probability*o.factor,0)).toBe(950);
+    expect(validInput(bet())).toBe(true);
+    expect(validInput({...bet(),stake:90})).toBe(false);
+    expect(validInput({...bet(),currency:'tokens',stake:10})).toBe(true);
+    expect(validInput({...bet(),stake:101})).toBe(false);
+    expect(validInput({...bet(),game:'dice',choice:'10',stake:maxStake('dice','10')})).toBe(true);
+    expect(validInput({...bet(),game:'dice',choice:'10',stake:maxStake('dice','10')+10})).toBe(false);
+    for(const choice of ['heads','tails']) expect(Array.from({length:100},(_,i)=>outcome('coin',choice,i)!.factor).reduce((a,b)=>a+b,0)).toBe(950);
+  });
+  it('gates production, disconnected servers and unsupported plugins', async () => {
+    await enableGames();env.ENVIRONMENT='production';
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
+    env.ENVIRONMENT='test';await bridge('poll',{});
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
+    await bridge('poll',{games_version:RULES_VERSION});
+    await env.ECONOMYSUITE_DB!.prepare('UPDATE bridge_status SET last_seen=1').run();
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(503);
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) n FROM game_rounds').first('n')).toBe(0);
+  });
+  it('enforces CSRF, ownership, one pending round and idempotent concurrent retries', async () => {
+    await enableGames();const payload=bet();
+    expect((await economySuite(request('games/rounds',payload),env,{...auth,mutation:async()=>false})).status).toBe(403);
+    const responses=await Promise.all([economySuite(request('games/rounds',payload),env,auth),economySuite(request('games/rounds',payload),env,auth)]);
+    const a=await responses[0].json() as {round:{id:string}},b=await responses[1].json() as {round:{id:string}};
+    expect(a.round.id).toBe(b.round.id);
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(409);
+    expect((await economySuite(request('games/rounds',{...payload,stake:110}),env,auth)).status).toBe(409);
+    const other={...auth,authenticate:async()=>({customer:{id:'other',email:'other@example.com'},credential:{password_hash:'unused'}})};
+    expect((await economySuite(request('games/rounds/'+a.round.id),env,other)).status).toBe(404);
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) n FROM bridge_operations WHERE kind=\'game_round\'').first('n')).toBe(1);
+    expect((await (await bridge('poll',{})).json() as {operations:unknown[]}).operations).toHaveLength(0);
+  });
+  it('accepts a durable payout after timeout and rejects inconsistent acknowledgments', async () => {
+    await enableGames();const payload=bet();
+    const {round}=await (await economySuite(request('games/rounds',payload),env,auth)).json() as {round:{id:string}};
+    await env.ECONOMYSUITE_DB!.prepare('UPDATE game_rounds SET expires_at=1 WHERE id=?').bind(round.id).run();
+    const result={rules_version:RULES_VERSION,state:'complete',roll:0,outcome:'heads',payout:190,net:90,balance:1090};
+    expect((await bridge('ack',{id:round.id,game_result:{...result,payout:200}})).status).toBe(422);
+    expect((await bridge('ack',{id:round.id,game_result:result})).status).toBe(200);
+    expect((await bridge('ack',{id:round.id,game_result:result})).status).toBe(200);
+    env.ENVIRONMENT='production';
+    const replay=await (await economySuite(request('games/rounds',payload),env,auth)).json() as {round:{payout:number,state:string}};
+    expect(replay.round.payout).toBe(190);expect(replay.round.state).toBe('complete');
+    expect((await (await economySuite(request('games/rounds?filter=wins'),env,auth)).json() as {rounds:unknown[]}).rounds).toHaveLength(1);
+    expect((await (await economySuite(request('export'),env,auth)).json() as {games:unknown[]}).games).toHaveLength(1);
+  });
+  it('retains expiry rejection and enforces cooldown after completion', async () => {
+    await enableGames();const {round}=await (await economySuite(request('games/rounds',bet()),env,auth)).json() as {round:{id:string}};
+    expect((await bridge('ack',{id:round.id,game_result:{rules_version:RULES_VERSION,state:'rejected',error:'expired'}})).status).toBe(200);
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(409);
+    await env.ECONOMYSUITE_DB!.prepare('UPDATE game_rounds SET created_at=created_at-5').run();
+    expect((await economySuite(request('games/rounds',bet()),env,auth)).status).toBe(202);
+  });
+
+  it('routes the isolated games portal and its script without exposing anonymous player data', async () => {
+    env.ENVIRONMENT='test';env.PORTAL_ORIGIN='https://games-test.example';
+    const page=await worker.fetch(new Request(env.PORTAL_ORIGIN+'/economysuite/games'),env);
+    expect(page.status).toBe(302);expect(page.headers.get('Location')).toContain('/login?product=economysuite');
+    env.ASSETS={fetch:async()=>new Response('fixture games script',{headers:{'Content-Type':'application/javascript'}}),connect:()=>{throw new Error('Unused fixture socket');}};
+    const asset=await worker.fetch(new Request(env.PORTAL_ORIGIN+'/economysuite/games.js'),env);
+    expect(asset.status).toBe(200);expect(await asset.text()).toBe('fixture games script');
+  });
+
 });

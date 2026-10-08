@@ -1,5 +1,15 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite isolated portal games (2026-10-08)
+
+- EconomySuite-only `/economysuite/games` adds coin toss, dice (10/25/50 percent) and a six-sector wheel with exactly 95 percent expected return. Payout multipliers include the original stake. Coins/tokens remain separate; pending tokens are excluded by the authoritative plugin.
+- `licensing-api/src/economysuite-games.ts`, EconomySuite D1 migration `0003_games.sql`, and `website/tomaspisar.cz/account/economysuite/games.js` implement session-owned rounds, CSRF/rate limiting, atomic queuing, database concurrency/cooldown guards, structured signed acknowledgment validation, history and exports. The plugin in `C:\Users\xpisa\PROJECTS\EconomySuite` settles with SecureRandom inside the shared SQLite gameplay transaction and persists results before acknowledgments.
+- Feature flags default to false in every checked-in Worker environment. Production rejects new bets even if the flag is enabled; test activation also requires a non-production portal. The plugin defaults to disabled and requires website.environment=test, website.games-test-enabled=true and a non-production HTTPS origin. Do not deploy or enable publicly as part of this test implementation. Existing Stripe prices/products/checkout and the LongJumpReplay product are unchanged.
+- Expired requests remain pending on D1 until a capable plugin explicitly rejects or replays the committed result. Never release a pending round solely on timeout: a payout may already have committed. Browser recovery reuses the original key. Manual account erasure must resolve pending work and include both D1/bridge and plugin history under the existing reviewed privacy-request workflow; see EconomySuite `GAMES_TESTING.md`.
+- Betting animates a neutral coin flip, dice tumble or wheel rotation while waiting; only plugin-confirmed outcomes are revealed. Reduced motion replaces spatial movement with a gentle opacity pulse. Confirmed results do not replay on routine polling.
+- `website/scripts/preview-economysuite-games.cjs` provides synthetic loopback UI data only. Real Paper bridge acceptance is a separate validation step; production launch still requires resolution of legal/minor-access and Minecraft/Stripe restrictions.
+
+
 ## Session retention and editable athlete order (2026-09-15)
 
 - `src/session_storage.py::SessionStore` creates an operator-facing session directory under `Desktop/LongJumpReplay Sessions/<session>_<timestamp>/` with a crash-safe `session.json` manifest and separate recordings, exports, evidence, frames, thumbnails, diagnostics, and `.incomplete` folders. The manifest is written through a temporary file and atomic replace.

@@ -8,8 +8,9 @@
   const feedback = window.LJR_FEEDBACK;
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
-  const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], store: ['Obchod', 'Store'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
+  const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], games: ['Hry', 'Games'], store: ['Obchod', 'Store'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
   const paths = {
+    games: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>',
     overview: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
     statistics: '<path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/>', progress: '<path d="m4 12 5 5L20 6"/>',
     appearance: '<path d="m12 3 1.4 4.1L18 8.5l-4.1 1.4L12.5 14l-1.4-4.1L7 8.5l4.1-1.4L12 3Zm-6 9 .8 2.2L9 15l-2.2.8L6 18l-.8-2.2L3 15l2.2-.8L6 12Zm11 3 1 2.8 3 1-3 1L17 23l-1-3.2-3-1 3-1L17 15Z"/>',
@@ -37,11 +38,19 @@
   const status = (message, failed = false, kind = failed ? 'error' : 'info') => { const element = $('#status'); element.textContent = message; element.dataset.error = String(failed); feedback?.inline(element, message, kind); };
   const cookie = name => document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.split('=').slice(1).join('=') || '';
   const errors = { pair_required: ['Nejdřív propoj svůj Minecraft účet.', 'Pair your Minecraft account first.'], invalid_password: ['Heslo není správné.', 'The password is incorrect.'], pair_expired: ['Propojení vypršelo. Použij znovu /web link.', 'Pairing expired. Run /web link again.'], pending_delivery: ['Nejdřív dokonči čekající nákupy a doručení.', 'Finish pending checkouts and deliveries first.'], already_linked: ['Tento účet nebo hráč už je propojený.', 'This account or player is already linked.'], unavailable: ['Tato funkce zatím není dostupná.', 'This feature is not available yet.'], stripe_minimum: ['Stripe vy\u017Eaduje minim\u00E1ln\u00ED platbu 15 K\u010D. Zvol vy\u0161\u0161\u00ED bal\u00ED\u010Dek.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.'], invalid_confirmation: ['Potvrzení není platné.', 'The confirmation is invalid.'] };
+  Object.assign(errors, {
+    games_disabled: ['Hry jsou dostupné pouze v testovacím prostředí.', 'Games are available only in the test environment.'],
+    server_offline: ['Server je odpojený. Sázka nebyla přijata.', 'Server disconnected. The bet was not accepted.'],
+    unsupported_plugin: ['Server nepodporuje tuto verzi her.', 'The server does not support this version of games.'],
+    round_busy: ['Počkej na dokončení kola a alespoň pět sekund mezi sázkami.', 'Wait for your round to finish and at least five seconds between bets.'],
+    idempotency_conflict: ['Tento identifikátor patří jiné sázce. Obnov stránku.', 'This identifier belongs to a different bet. Reload the page.'],
+    invalid_game_input: ['Neplatná sázka nebo volba. Zkontroluj minimum a násobky deseti.', 'Invalid stake or choice. Check the minimum and multiples of ten.']
+  });
   async function api(path, data) {
     const response = await fetch(path, { method: data ? 'POST' : 'GET', credentials: 'include', headers: data ? { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(cookie('ljr-portal-csrf')) } : {}, body: data ? JSON.stringify(data) : undefined });
     const result = await response.json();
     if (!response.ok) {
-      const pair = errors[result.error];
+      const pair = errors[path.startsWith('/api/economysuite/games/') && result.error === 'invalid_input' ? 'invalid_game_input' : result.error];
       const failure = new Error(pair ? t(...pair) : t('Požadavek se nepodařilo dokončit. Zkus to znovu.', 'The request could not be completed. Please try again.'));
       failure.status = response.status; throw failure;
     }
@@ -210,7 +219,9 @@
     refresh.title = tooltip;
     refresh.setAttribute('aria-label', `${label}. ${tooltip}`);
   }
+  const gameContext = () => ({ t, escape, number, date, panel, currencyIcon, account, table, row, empty, api, render, status });
   function render() {
+    document.body.classList.toggle('es-games', route === 'games');
     document.documentElement.lang = lang;
     document.title = successfulOrder ? `${t('Děkujeme za nákup', 'Thank you for your purchase')} — Pantheon` : `${t(...(names[route] || names.overview))} — Pantheon`;
     $('#language').textContent = lang === 'cs' ? 'EN' : 'CZ'; $('#logout').textContent = t('Odhlásit se', 'Sign out'); $('#logout').hidden = !account;
@@ -221,7 +232,8 @@
     $('#player-identity').innerHTML = `<span class="es-avatar" aria-hidden="true">${escape(account?.link?.name?.slice(0, 2).toUpperCase() || 'P')}</span><div><strong>${escape(account?.link?.name || t('Hráčský účet', 'Player account'))}</strong><small>Pantheon Survival</small></div>`;
     renderConnection();
     let html;
-    if (route === 'store') html = store();
+    if (route === 'games') html = window.ESGames.render(gameContext());
+    else if (route === 'store') html = store();
     else if (route === 'pair') html = pairingPage();
     else if (route === 'purchases') html = purchases();
     else if (route === 'settings') html = account ? settings() : empty();
@@ -233,6 +245,7 @@
   }
   async function action(button, work) { feedback?.busy(button, true); try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) feedback?.busy(button, false); } }
   function bind() {
+    if (route === 'games') window.ESGames.bind(gameContext());
     $('#retry-load')?.addEventListener('click', () => action($('#retry-load'), () => load({ initial: true })));
     document.querySelectorAll('.cosmetic-combined-form select').forEach(select => select.addEventListener('change', () => {
       const cosmetics = account.snapshot.cosmetics || {};
@@ -301,6 +314,7 @@
     catch (failure) { if (failure.status === 401 && !['store', 'pair'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) accountFailure = failure; }
     if (accountFailure && !['store', 'pair'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); return; }
     try {
+      if (route === 'games' && account) await window.ESGames.load(api, account);
       if (route === 'store') { const catalog = await api('/api/economysuite/catalog'); packages = catalog.packages; purchasesEnabled = catalog.purchases_enabled; }
       if (route === 'purchases' && account) orders = (await api('/api/economysuite/orders')).orders;
       if (route === 'statistics' && account) rankings = (await api(`/api/economysuite/leaderboard?metric=${metric}`)).entries;
@@ -315,6 +329,7 @@
     if (document.hidden) return;
     try {
       const latest = await api('/api/economysuite/account'); account = latest; renderConnection();
+      if (route === 'games') await window.ESGames.poll(gameContext());
       if (refreshBaseline !== null && Number(latest.synced_at || 0) > refreshBaseline) { refreshBaseline = null; await load(); status(t('Data byla obnovena ze serveru.', 'Data refreshed from the server.')); return; }
       if (refreshBaseline !== null && Date.now() - refreshStarted > 45000) { refreshBaseline = null; renderConnection(); status(t('Server zatím nová data neposlal. Zkus obnovení později.', 'The server has not sent fresh data yet. Try again later.'), true); }
       if (successfulOrder) { orders = (await api('/api/economysuite/orders')).orders; render(); }

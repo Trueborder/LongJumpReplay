@@ -353,11 +353,11 @@ function portalRedirect(request: Request, location: string): Response {
 
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
-  if (['/economysuite/app.js', '/economysuite/app.css'].includes(path)) return env.ASSETS.fetch(request);
+  if (['/economysuite/app.js', '/economysuite/app.css', '/economysuite/games.js'].includes(path)) return env.ASSETS.fetch(request);
   const product = new URL(request.url).searchParams.get('product');
   if (path === '/economysuite' || path.startsWith('/economysuite/')) {
     const category = path.split('/')[2] || 'overview';
-    if (!['overview', 'statistics', 'progress', 'appearance', 'store', 'purchases', 'settings', 'pair'].includes(category) || path.split('/').filter(Boolean).length > 2) return new Response('Not found', { status: 404 });
+    if (!['overview', 'statistics', 'progress', 'appearance', 'store', 'purchases', 'settings', 'pair', 'games'].includes(category) || path.split('/').filter(Boolean).length > 2) return new Response('Not found', { status: 404 });
     const auth = await authenticatedPortal(request, env);
     // Pairing captures a fragment before authentication; the shell is public,
     // while every player data endpoint independently validates ownership.
@@ -376,7 +376,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
   if (['/login', '/login/', '/register', '/register/'].includes(path) && product === 'economysuite') {
     if (auth?.credential) {
       const next = new URL(request.url).searchParams.get('next') || '';
-      return portalRedirect(request, /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair)$/.test(next) ? next : '/economysuite/overview');
+      return portalRedirect(request, /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(next) ? next : '/economysuite/overview');
     }
     const asset = await env.ASSETS.fetch(new Request(new URL(path.startsWith('/register') ? '/register/' : '/login/', request.url), request));
     return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
@@ -2113,7 +2113,7 @@ async function portalDataExport(request: Request, env: Env): Promise<Response> {
     listLjrOrdersForCustomer(env.DB, auth.customer.id),
   ]);
   await env.DB.prepare("INSERT INTO privacy_requests(id,customer_id,type,created_at,detail) VALUES(?,?,?,?,'self_service_export')").bind(crypto.randomUUID(), auth.customer.id, "export", now()).run();
-  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices, orders: orders.map(publicLjrOrder), policy_versions: LJR_POLICY_VERSIONS });
+  return json({ exported_at: now(), customer: { id: auth.customer.id, email: auth.customer.email }, profile, licenses, devices, orders: orders.map(publicLjrOrder), policy_versions: LJR_POLICY_VERSIONS, ...(env.ECONOMYSUITE_DB ? { economysuite_games: (await env.ECONOMYSUITE_DB.prepare('SELECT * FROM game_rounds WHERE customer_id=? ORDER BY created_at').bind(auth.customer.id).all()).results } : {}) });
 }
 
 async function portalDeletionRequest(request: Request, env: Env): Promise<Response> {
@@ -2145,7 +2145,7 @@ export default {
         return withPortalCors(response, request, env);
       }
       if (request.method === "OPTIONS" && path.startsWith("/api/longjumpreplay/")) return withLongJumpReplayCors(new Response(null, { status: 204 }), request, env);
-      if (url.hostname === "account.tomaspisar.cz" && !path.startsWith('/api/')) {
+      if ((url.hostname === "account.tomaspisar.cz" || (env.ENVIRONMENT !== 'production' && url.origin === env.PORTAL_ORIGIN)) && !path.startsWith('/api/')) {
         const page = await portalPage(request, env, url.pathname);
         if (page) return page;
         return env.ASSETS.fetch(request);

@@ -1,3 +1,4 @@
+import { gamesRoute, gameAcknowledgment, RULES_VERSION } from './economysuite-games';
 import type { Env } from './config';
 import { generateToken, sha256, timingSafeEqual, verifyPassword } from './crypto';
 import { now, rateLimit } from './db';
@@ -214,12 +215,16 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
     return reply({ synced: true });
   }
   if (path.endsWith('/poll')) {
+    const version = data.games_version === RULES_VERSION ? RULES_VERSION : null;
+    await db.prepare("UPDATE bridge_status SET games_version=? WHERE server='pantheon'").bind(version).run();
     await db.prepare('DELETE FROM bridge_nonces WHERE expires_at<?').bind(now()).run();
     const links = await db.prepare('SELECT uuid,name FROM player_links').all();
-    const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' ORDER BY created_at,rowid LIMIT 30").all<{ id: string; uuid: string; kind: string; payload: string }>();
+    const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION).all<{ id: string; uuid: string; kind: string; payload: string }>();
     return reply({ links: links.results, operations: operations.results.map(o => ({ ...o, payload: JSON.parse(o.payload) })) });
   }
   if (path.endsWith('/ack')) {
+    const gameAck = await gameAcknowledgment(db, data);
+    if (gameAck) return gameAck;
     const op = await db.prepare("SELECT order_id,revision FROM bridge_operations WHERE id=? AND state='pending'").bind(s(data.id)).first<{ order_id: string | null; revision: number }>();
     if (!op) return reply({ acknowledged: true });
     const success = data.success === true, statements = [db.prepare('UPDATE bridge_operations SET state=?,result=?,completed_at=? WHERE id=?').bind(success ? 'complete' : 'failed', s(data.message).slice(0, 300), now(), s(data.id))];
@@ -242,6 +247,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   if (!(await rateLimit(env.DB, `es:${player.customer.id}`, 60, 90))) return error('rate_limited', 'Please try again shortly.', 429);
   const link = await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind(player.customer.id).first<Link>();
   const data = request.method === 'POST' ? await body(request) : {};
+  if (path.startsWith('/api/economysuite/games/')) return gamesRoute(request, env, db, player.customer.id, link?.uuid ?? null, data);
   if (path === '/api/economysuite/account' && request.method === 'GET') {
     const snapshot = link ? await db.prepare('SELECT payload,synced_at FROM player_snapshots WHERE uuid=?').bind(link.uuid).first<{ payload: string; synced_at: number }>() : null;
     const heartbeat = await db.prepare("SELECT last_seen FROM bridge_status WHERE server='pantheon'").first<{ last_seen: number }>();
@@ -257,7 +263,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   }
   if (path === '/api/economysuite/export' && request.method === 'GET') {
     const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_reference,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
-    return reply({ exported_at: now(), account: { email: player.customer.email, link }, orders: orders.results });
+    return reply({ exported_at: now(), account: { email: player.customer.email, link }, orders: orders.results, games: (await db.prepare('SELECT * FROM game_rounds WHERE customer_id=? ORDER BY created_at').bind(player.customer.id).all()).results });
   }
   if (path === '/api/economysuite/confirmation/retry' && request.method === 'POST') {
     const orderId = s(data.order_id);

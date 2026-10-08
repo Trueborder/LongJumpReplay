@@ -82,3 +82,22 @@ body.es-portal{padding-top:0}
 @keyframes es-page-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}@keyframes es-content-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes es-backdrop-in{from{opacity:0}to{opacity:1}}@keyframes es-modal-in{from{opacity:0;transform:translateY(7px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(prefers-reduced-motion:reduce){.es-header,.es-sidebar,.es-main,#content > .es-panel,#content > .es-grid > .es-panel,#content > .es-thanks,.es-onboarding-step{animation:es-fade-in 180ms ease both}.es-modal:not([hidden]) .es-modal-card{animation:es-fade-in 180ms ease both}.es-progress[role=progressbar] span{transition:opacity 160ms ease}.es-portal button,.es-button,.es-product-switch,#navigation a{transition:opacity 160ms ease,border-color 160ms ease,background-color 160ms ease,color 160ms ease}.es-portal button:not(:disabled):active,.es-button:active,.es-product-switch:active,#navigation a:active{transform:none}}
 @keyframes es-fade-in{from{opacity:0}to{opacity:1}}
+
+.es-game-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.es-game-form label{display:grid;gap:8px}.es-game-form input,.es-game-form select{width:100%;min-height:44px}.es-game-form p,.es-game-form button{grid-column:1/-1}.es-game-form button:disabled{opacity:.55;cursor:not-allowed}.es-wheel-wrap{position:relative;width:min(220px,80%);margin:24px auto}.es-wheel-pointer{position:absolute;top:-20px;left:calc(50% - 8px);z-index:1;color:var(--es-ink)}.es-game-wheel{width:100%;aspect-ratio:1;border-radius:50%;background:conic-gradient(#b74b55 0% 5%,#b47351 5% 25%,#bca14e 25% 45%,#56748a 45% 70%,#4c917e 70% 90%,#8772b2 90% 100%);border:4px solid var(--es-line);transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}#game-result{font-weight:600;padding:16px;border:1px solid var(--es-line);border-radius:8px}.es-game-form :focus-visible{outline:2px solid var(--es-green);outline-offset:3px}@media(max-width:600px){.es-game-form{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){.es-game-wheel{transition:none}}
+
+.es-game-form input,.es-game-form select{border:1px solid var(--es-line);border-radius:8px;padding:10px;background:#fff;color:var(--es-ink)}.es-wheel-swatch{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px}.es-wheel-swatch[data-sector="0"]{background:#b74b55}.es-wheel-swatch[data-sector="1"]{background:#b47351}.es-wheel-swatch[data-sector="2"]{background:#bca14e}.es-wheel-swatch[data-sector="3"]{background:#56748a}.es-wheel-swatch[data-sector="4"]{background:#4c917e}.es-wheel-swatch[data-sector="5"]{background:#8772b2}
+.es-games #content > .es-panel{animation:none}
+.es-game-stage{display:grid;place-items:center;min-height:160px;margin:24px 0;perspective:600px}
+.es-game-coin,.es-game-dice{display:grid;place-items:center;width:100px;height:100px;font-size:24px;font-weight:800;color:var(--es-ink)}
+.es-game-coin{border-radius:50%;border:6px double #c88417;background:#f4be2c;box-shadow:0 6px 0 #b88628}
+.es-game-dice{border-radius:18px;border:3px solid var(--es-line);background:var(--es-soft);font-variant-numeric:tabular-nums;box-shadow:0 6px 0 #cfdacf}
+.es-game-stage[data-phase=waiting] .es-game-coin{animation:es-coin-wait 900ms linear infinite}
+.es-game-stage[data-phase=waiting] .es-game-dice{animation:es-dice-wait 900ms var(--ease-in-out) infinite}
+.es-game-stage[data-phase=waiting] .es-game-wheel{animation:es-spin 1800ms linear infinite}
+.es-game-stage.is-revealing #game-piece{animation:es-game-reveal 280ms var(--ease-out) both}
+.es-game-wheel{transition:transform 1200ms var(--ease-out)}
+@keyframes es-coin-wait{to{transform:rotateY(360deg)}}
+@keyframes es-dice-wait{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-12px) rotate(12deg)}}
+@keyframes es-game-reveal{from{opacity:.3;transform:translateY(-8px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes es-game-wait-fade{50%{opacity:.65}}
+@media(prefers-reduced-motion:reduce){.es-game-stage[data-phase=waiting] .es-game-coin,.es-game-stage[data-phase=waiting] .es-game-dice,.es-game-stage[data-phase=waiting] .es-game-wheel{animation:es-game-wait-fade 1800ms ease-in-out infinite}.es-game-stage.is-revealing #game-piece{animation:es-fade-in 180ms ease both}.es-game-wheel{transition:none}}
