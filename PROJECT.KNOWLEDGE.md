@@ -1,5 +1,13 @@
 # Long Jump Replay — Project Knowledge
 
+## Public legal pages layout repair (2026-10-11)
+
+- All 16 `/legal/` pages now load the public homepage's `pages/legacy.css` foundation before `components.css`. Its missing reset, flex navigation and automatic section margins caused the broken, left-aligned layout. New `pages/legal.css` is scoped to legal pages and follows the existing cream, teal, amber, condensed-heading and rounded-surface design.
+- Every legal document uses the public header and a reachable mobile menu. Five LongJumpReplay documents were missing the header, footer and shared script entirely; purchase terms were missing the script. These now use the existing public-site shell. Documents have a centered 900px reading surface, back links, safe long-text wrapping and native collapsible contents with heading anchors where there are at least four sections.
+- The bilingual legal directory groups all 15 documents into website/privacy, LongJumpReplay and EconomySuite. The previously omitted LongJumpReplay refund document is linked. Document wording, policy versions and legal/business placeholders are preserved; this visual repair does not resolve the outstanding legal facts or change any account, payment, licensing or plugin behavior.
+- Validation: 86 website tests pass, including regression coverage for legal stylesheet order, published assets, complete directory links, mobile-menu availability and contents anchors. Browser checks across all 16 routes at desktop and 390px found centered layouts with no content overflow; 320px directory, menu interaction and keyboard contents expansion were also checked. Public Worker deployment dry run and `git diff --check` pass.
+- Public Worker deployment `e90de8aa-0929-402b-8077-fdedea006c82` is live. All 16 production legal routes return HTTP 200 with the new stylesheet; browser checks confirm centered production pages and the 390px EULA layout. Account/licensing Worker and plugin were not deployed.
+
 ## EconomySuite appearance submission fix (2026-10-11)
 
 - The combined appearance form snapshots prefix, color and title selections before awaiting any request. Native events clear currentTarget after dispatch; reading it after the first cosmetic request caused the remaining requests to crash on Safari and other browsers. Snapshotting also preserves the submitted choices if polling replaces the form or a selection changes in flight.

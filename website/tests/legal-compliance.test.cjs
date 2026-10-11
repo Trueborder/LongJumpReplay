@@ -10,7 +10,7 @@ test('all legal routes render and link to the legal index', () => {
   for (const route of legal) {
     const file = route === 'index' ? path.join(root, 'legal', 'index.html') : path.join(root, 'legal', route, 'index.html');
     const html = fs.readFileSync(file, 'utf8');
-    assert.match(html, /<body class="legal-page">/);
+    assert.match(html, /<body class="legal-page(?: legal-document)?">/);
     assert.match(html, /<main id="main">/);
     if (route !== 'index') assert.match(html, /href="\/legal\/"/);
     if (route !== 'privacy') assert.match(html, /href="\/legal\/privacy\/"/);
