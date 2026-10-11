@@ -292,10 +292,19 @@
       cosmetics[select.name] = cosmetics[select.name].map(entry => ({ ...entry, selected: entry.id === select.value }));
       $('#combined-appearance-preview').innerHTML = combinedPreview(cosmetics);
     }));
-    $('#appearance-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => {
-      for (const type of ['prefix', 'color', 'title']) await api('/api/economysuite/cosmetics', { type, id: event.currentTarget.elements[type].value });
-      status(t('Vzhled čeká na potvrzení serverem.', 'Appearance is waiting for server confirmation.'));
-    }); });
+    $('#appearance-form')?.addEventListener('submit', event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button');
+      if (button.disabled) return;
+      // currentTarget is cleared after event dispatch; snapshot every selection
+      // before the first await, including when polling replaces the form.
+      const selections = ['prefix', 'color', 'title'].map(type => ({ type, id: form.elements[type].value }));
+      action(button, async () => {
+        for (const selection of selections) await api('/api/economysuite/cosmetics', selection);
+        status(t('Vzhled čeká na potvrzení serverem.', 'Appearance is waiting for server confirmation.'));
+      });
+    });
     const openPurchaseDialog = button => {
       const pack = packages.find(item => item.id === button.dataset.price);
       if (!pack) return;

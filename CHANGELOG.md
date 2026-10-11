@@ -2,6 +2,7 @@
 
 ## EconomySuite portal — 2026-10-11
 
+- Fixes applying appearance failing after the first request; all three cosmetic choices are captured before submission, with duplicate-submit protection.
 - Keeps a compact header visible while scrolling on desktop and mobile.
 - Moves the LongJumpReplay switch and language control to the bottom of the navigation menu, while keeping sign-out in the header.
 - Adds an accessible account-settings icon and tighter EconomySuite / Novaryn Solutions branding.

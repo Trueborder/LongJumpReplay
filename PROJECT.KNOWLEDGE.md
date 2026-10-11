@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite appearance submission fix (2026-10-11)
+
+- The combined appearance form snapshots prefix, color and title selections before awaiting any request. Native events clear currentTarget after dispatch; reading it after the first cosmetic request caused the remaining requests to crash on Safari and other browsers. Snapshotting also preserves the submitted choices if polling replaces the form or a selection changes in flight.
+- Duplicate submissions are ignored while the button is busy. The existing server-authoritative cosmetic endpoints and queued confirmation copy remain unchanged; failures restore the button and do not announce a fully queued appearance. Regression tests simulate currentTarget becoming null and an API failure. The script cache key is bumped for deployment.
+- Validation: 83 website tests pass. Production deployment 44e74502-ac5e-4d3c-935a-9dfdb8d76723 serves the corrected JavaScript with HTTP 200, and the authenticated appearance form renders existing selections. Live submission was not performed: automation approval rejected production cosmetic mutations without explicit test authorization. Plugin-applied results are therefore not claimed as verified.
+
 ## EconomySuite compact sticky header (2026-10-11)
 
 - The EconomySuite header stays at the top while scrolling, with a 64px desktop / 60px mobile single-row layout and tighter Pantheon / EconomySuite • Novaryn Solutions branding. The account icon links to the existing account settings route; sign-out remains in the header.

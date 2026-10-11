@@ -7,7 +7,8 @@ const vm = require('node:vm');
 const script = fs.readFileSync(path.join(__dirname, '../tomaspisar.cz/account/economysuite/app.js'), 'utf8');
 const flush = () => new Promise(setImmediate);
 
-function harness() {
+function harness(options = {}) {
+  const optionsForFailure = options.failCosmetic;
   const nodes = new Map();
   const classes = () => ({ add() {}, remove() {}, toggle() {} });
   for (const key of ['#navigation-dialog', '#menu-toggle', '.es-sidebar', '.es-layout', '#mobile-navigation-content', '#close-navigation', '#language', '#logout', '#support', '#navigation-title', '#navigation', '#page-title', '#page-description', '#player-identity', '#connection', '.es-live-actions', '#refresh-data', '#content', '#navigation [aria-current="page"]']) {
@@ -27,6 +28,12 @@ function harness() {
   for (const key of ['#language-label', '#account-link']) nodes.set(key, {
     attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }
   });
+  if (options.appearance) {
+    const button = { disabled: false, isConnected: true, attributes: {},
+      setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; } };
+    nodes.set('#appearance-form', { handlers: {}, elements: { prefix: { value: 'vip' }, color: { value: 'green' }, title: { value: 'miner' } },
+      addEventListener(name, listener) { this.handlers[name] = listener; }, querySelector: () => button });
+  }
   const notices = [];
   const calls = [];
   let interval, clock = 100000;
@@ -48,7 +55,8 @@ function harness() {
     URLSearchParams, Intl, Date: class extends Date { static now() { return clock; } },
     setInterval: callback => { interval = callback; },
     fetch: async (url, options) => {
-      calls.push({ url, method: options.method });
+      calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : undefined });
+      if (url.endsWith('/cosmetics') && calls.at(-1).body.type === optionsForFailure) return { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) };
       const data = url.endsWith('/account') ? account : url.endsWith('/refresh') ? { operation_id: 'refresh-1' } : { packages: [], purchases_enabled: true };
       return { ok: true, json: async () => data };
     }
@@ -112,4 +120,31 @@ test('refresh timeout becomes an error toast and permits another attempt', async
   assert.equal(h.notices.length, 1);
   assert.equal(h.notices[0].kind, 'error');
   assert.equal(h.nodes.get('#refresh-data').disabled, false);
+});
+
+test('appearance snapshots all selections before currentTarget is cleared and blocks duplicate submits', async () => {
+  const h = harness({ appearance: true }); await flush();
+  const form = h.nodes.get('#appearance-form'), button = form.querySelector('button');
+  const event = { currentTarget: form, preventDefault() {} };
+  form.handlers.submit(event);
+  form.handlers.submit(event); // The first submission has already disabled the button.
+  event.currentTarget = null; // Native event dispatch clears this before the next await resumes.
+  form.elements.color.value = 'red'; form.elements.title.value = 'changed-by-poll';
+  await flush(); await flush();
+  assert.deepEqual(h.calls.filter(call => call.url.endsWith('/cosmetics')).map(call => call.body), [
+    { type: 'prefix', id: 'vip' }, { type: 'color', id: 'green' }, { type: 'title', id: 'miner' }
+  ]);
+  assert.equal(button.disabled, false);
+  assert.equal(h.notices.length, 1);
+  assert.match(h.notices[0].message, /Vzhled čeká na potvrzení serverem/);
+});
+
+test('appearance API failure restores the button and never claims the whole appearance was queued', async () => {
+  const h = harness({ appearance: true, failCosmetic: 'color' }); await flush();
+  const form = h.nodes.get('#appearance-form'), event = { currentTarget: form, preventDefault() {} };
+  form.handlers.submit(event); event.currentTarget = null;
+  await flush(); await flush();
+  assert.equal(h.calls.filter(call => call.url.endsWith('/cosmetics')).length, 2);
+  assert.equal(form.querySelector('button').disabled, false);
+  assert.equal(h.notices.length, 1); assert.equal(h.notices[0].kind, 'error');
 });
