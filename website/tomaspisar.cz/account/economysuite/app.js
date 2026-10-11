@@ -256,6 +256,10 @@
     document.documentElement.lang = lang;
     document.title = successfulOrder ? `${t('Děkujeme za nákup', 'Thank you for your purchase')} — Pantheon` : `${t(...(names[route] || names.overview))} — Pantheon`;
     $('#language').textContent = lang === 'cs' ? 'EN' : 'CZ'; $('#logout').textContent = t('Odhlásit se', 'Sign out'); $('#logout').hidden = !account;
+    $('#language-label').textContent = t('Jazyk', 'Language');
+    $('#language').setAttribute('aria-label', t('Přepnout do angličtiny', 'Switch to Czech'));
+    $('#account-link').setAttribute('aria-label', t('Nastavení účtu', 'Account settings'));
+    $('#account-link').title = t('Nastavení účtu', 'Account settings');
     $('#support').textContent = t('Podpora', 'Support');
     menuToggle.setAttribute('aria-label', t('Otevřít navigaci', 'Open navigation'));
     $('#navigation-title').textContent = t('Hráčský účet', 'Player account');

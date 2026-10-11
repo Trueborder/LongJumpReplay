@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite compact sticky header (2026-10-11)
+
+- The EconomySuite header stays at the top while scrolling, with a 64px desktop / 60px mobile single-row layout and tighter Pantheon / EconomySuite • Novaryn Solutions branding. The account icon links to the existing account settings route; sign-out remains in the header.
+- LongJumpReplay switching and the bilingual language control now live at the bottom of the shared sidebar/mobile drawer. They use the same DOM nodes when navigation moves across the 650px breakpoint, preserving handlers and language persistence. The 320px layout keeps touch targets without a second header row. No authentication, payment, plugin or LongJumpReplay dashboard behavior changes.
+- Validation: all 81 website tests pass; browser checks at desktop, 390px and 320px confirmed the layout, drawer controls and sticky header after scrolling. Production account Worker deployment e881467f-a1f6-4b27-8fd6-555bb61833ac serves the cache-bumped assets; the authenticated live store confirms the account link and relocated controls. No public-site Worker deployment was needed.
+
 ## EconomySuite mobile navigation and toast feedback (2026-10-11)
 
 - The EconomySuite portal uses a header menu button and native modal navigation drawer at widths up to 650px. The same sidebar and links move back into the desktop layout above that breakpoint; the drawer supports keyboard focus, Escape, backdrop dismissal, and Czech/English labels. Product switching and sign-out remain visible in the header.

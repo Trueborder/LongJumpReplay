@@ -1,5 +1,11 @@
 # LongJumpReplay changelog
 
+## EconomySuite portal — 2026-10-11
+
+- Keeps a compact header visible while scrolling on desktop and mobile.
+- Moves the LongJumpReplay switch and language control to the bottom of the navigation menu, while keeping sign-out in the header.
+- Adds an accessible account-settings icon and tighter EconomySuite / Novaryn Solutions branding.
+
 ## 6.2.10 - 2026-09-13
 
 - Makes the startup splash fade visibly into view while keeping a shorter

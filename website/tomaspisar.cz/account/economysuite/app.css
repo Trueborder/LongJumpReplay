@@ -45,7 +45,23 @@
 @media(max-width:650px){.es-header{align-items:flex-start}.es-brand{font-size:17px}.es-header-actions{width:100%;justify-content:space-between}.es-product-switch{flex:1;justify-content:center}.es-live-actions{justify-self:start;margin-top:14px}.es-connection{margin-top:0}.es-connection-control{min-width:0;max-width:100%;}.es-connection-control::after{right:auto;left:0}.es-thanks{grid-template-columns:1fr;padding:21px}}
 [hidden]{display:none!important}
 /* Mobile navigation uses the same links as the desktop sidebar, in a modal drawer. */
-.es-header-brand{display:flex;align-items:center;gap:12px;min-width:0}
+.es-header{position:sticky;top:0;z-index:100;height:64px;min-height:64px;padding:0 5vw;flex-wrap:nowrap;gap:12px;animation:none!important}
+.es-header-brand{display:flex;align-items:center;gap:8px;min-width:0}
+.es-brand{min-width:0;gap:9px;font-size:18px}
+.es-brand-text{min-width:0}
+.es-brand small{font-size:10px;letter-spacing:.15px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.es-mark{width:32px;height:32px;flex:none;box-shadow:3px 3px 0 #d5e2cd}
+.es-header-actions{width:auto;flex:none;gap:8px}
+.es-account-link{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--es-line);border-radius:9px;text-decoration:none;background:#fff}
+.es-account-link:hover{background:var(--es-soft);border-color:var(--es-green)}
+.es-account-link .es-icon{width:20px;height:20px}
+.es-header-actions #logout{min-height:40px;padding:8px 12px;white-space:nowrap}
+.es-sidebar{display:flex;flex-direction:column}
+.es-menu-utilities{display:grid;gap:12px;margin-top:auto;padding:18px 0 0;border-top:1px solid var(--es-line)}
+.es-menu-utilities .es-product-switch{width:100%;min-height:44px;justify-content:center;flex:none;font-size:12px}
+.es-language-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 4px;font-size:13px;color:#637369}
+.es-language-row button{min-width:48px;min-height:44px;padding:8px 12px}
+html:has(.es-portal){scroll-padding-top:76px}
 .es-portal .es-menu-toggle{display:none;align-items:center;justify-content:center;width:44px;height:44px;padding:0;flex:none;border-color:transparent;background:transparent}
 .es-menu-toggle .es-icon{width:24px;height:24px}
 .es-nav-dialog{position:fixed;inset:0 auto 0 0;margin:0;width:min(360px,calc(100vw - 32px));max-width:none;height:100dvh;max-height:100dvh;padding:0;border:0;border-right:1px solid var(--es-line);border-radius:0 18px 18px 0;background:var(--es-paper);color:var(--es-ink);overflow-y:auto;overscroll-behavior:contain;box-shadow:12px 0 40px rgba(24,51,45,.18)}
@@ -55,7 +71,7 @@
 .es-nav-product{font-size:10px;font-weight:750;letter-spacing:1.6px;color:var(--es-green)}
 .es-nav-dialog-header h2{font:750 20px/1.3 var(--font-body,system-ui,sans-serif);text-transform:none;letter-spacing:-.3px;margin:5px 0 0}
 .es-nav-dialog-header button{display:grid;place-items:center;width:44px;height:44px;padding:0;background:transparent}
-.es-nav-dialog .es-sidebar{display:block;padding:22px 16px;border:0;animation:none}
+.es-nav-dialog .es-sidebar{display:flex;min-height:calc(100dvh - 110px);padding:22px 16px;border:0;animation:none}
 .es-nav-dialog .es-identity{display:flex;padding:0 10px 22px}
 .es-nav-dialog .es-support{display:block;margin-top:14px;border-top:1px solid var(--es-line);padding:18px 14px}
 .es-nav-dialog #navigation{flex-direction:column;gap:6px;overflow:visible}
@@ -76,17 +92,20 @@ body.es-portal .toast-region{top:calc(env(safe-area-inset-top,0px) + 16px);z-ind
 @keyframes es-navigation-enter{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
 @media(max-width:650px){
   .es-portal .es-menu-toggle{display:inline-flex}
-  .es-header-brand{width:100%}
-  .es-brand{min-width:0;font-size:18px}
-  .es-brand small{font-size:10px;letter-spacing:.8px;line-height:1.5}
+  .es-header{height:60px;min-height:60px;padding:0 12px;align-items:center;gap:8px;flex-wrap:nowrap}
+  .es-header-brand{width:auto;flex:1;gap:5px}
+  .es-brand{min-width:0;font-size:16px;gap:7px}
+  .es-brand small{font-size:9px;letter-spacing:0;line-height:1.3}
+  .es-mark{width:28px;height:28px}
   .es-layout > .es-sidebar{display:none}
-  .es-header-actions{gap:8px}
-  .es-header-actions button{min-height:44px;padding:10px 12px}
+  .es-header-actions{width:auto;justify-content:flex-end;gap:5px}
+  .es-header-actions #logout{min-height:44px;padding:8px;font-size:12px}
+  .es-account-link{width:44px;height:44px}
   .es-product-switch{min-height:44px;padding:10px 12px}
   .es-connection-control{min-height:44px}
   body.es-portal .toast-region{left:12px;right:12px;width:auto}
 }
-@media(max-width:360px){.es-header{padding:14px}.es-header-actions{gap:6px;font-size:12px}.es-header-actions button,.es-product-switch{padding:10px}}
+@media(max-width:380px){.es-header{padding:0 8px;gap:4px}.es-header .es-mark{display:none}.es-header-actions #logout{font-size:11px;padding:6px}.es-header-brand{gap:2px}}
 @media(prefers-reduced-motion:reduce){.es-nav-dialog[open]{animation:none}}
 @media(prefers-reduced-motion:reduce){.es-skeleton,.es-portal button[aria-busy=true]::before{animation:none!important}}
 .es-purchase-consent{display:grid;gap:.75rem;margin:1rem 0 1.5rem;padding:1rem 1.2rem;border:1px solid #d6dbe4;border-left:3px solid #7c3aed;background:#fff}

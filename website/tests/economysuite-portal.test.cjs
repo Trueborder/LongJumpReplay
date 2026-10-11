@@ -49,9 +49,20 @@ test('EconomySuite action notifications are toasts and refresh waits for its ack
   assert.match(css, /\.es-portal \.toast:not\(\.is-leaving\)\{opacity:1;transform:none\}/);
 });
 
-test('EconomySuite header has a prominent LongJumpReplay dashboard switch', () => {
+test('compact sticky header keeps account and logout while secondary controls live in navigation', () => {
+  const header = html.match(/<header class="es-header">([\s\S]*?)<\/header>/)[1];
+  const sidebar = html.match(/<aside class="es-sidebar">([\s\S]*?)<\/aside>/)[1];
+  assert.match(header, /id="logout"/);
+  assert.match(header, /id="account-link"[^>]*href="\/economysuite\/settings"[^>]*aria-label=/);
+  assert.doesNotMatch(header, /id="language"|es-product-switch/);
+  assert.match(sidebar, /es-menu-utilities/);
+  assert.match(sidebar, /id="language"/);
   assert.match(html, /class="es-product-switch" href="https:\/\/ljr\.tomaspisar\.cz\/dashboard\/overview"/);
-  assert.match(css, /\.es-product-switch/);
+  assert.match(css, /\.es-header\{position:sticky;top:0;z-index:100;height:64px/);
+  assert.match(css, /\.es-header\{height:60px;min-height:60px/);
+  assert.match(css, /\.es-menu-utilities\{[^}]*margin-top:auto/);
+  assert.match(css, /\.es-header-brand\{width:auto;flex:1/);
+  assert.match(html, /EconomySuite • Novaryn Solutions/);
 });
 
 test('purchase return renders instructions and Minecraft currency icons', () => {

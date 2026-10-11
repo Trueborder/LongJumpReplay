@@ -24,6 +24,9 @@ function harness() {
     nodes.set(key, node);
   }
   const media = { matches: true, addEventListener(name, listener) { this.change = listener; } };
+  for (const key of ['#language-label', '#account-link']) nodes.set(key, {
+    attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }
+  });
   const notices = [];
   const calls = [];
   let interval, clock = 100000;
@@ -83,6 +86,23 @@ test('refresh updates one toast only after the matching operation completes', as
   assert.equal(h.nodes.get('#connection').dataset.state, 'connected');
   assert.equal(h.nodes.get('#refresh-data').disabled, false);
   assert.equal(h.nodes.get('#refresh-data').attributes['aria-busy'], undefined);
+});
+
+test('relocated language control still translates account access and survives drawer resizing', async () => {
+  const h = harness(); await flush();
+  const language = h.nodes.get('#language');
+  assert.equal(h.nodes.get('#language-label').textContent, 'Jazyk');
+  assert.equal(h.nodes.get('#account-link').attributes['aria-label'], 'Nastavení účtu');
+  language.handlers.click();
+  assert.equal(h.nodes.get('#language-label').textContent, 'Language');
+  assert.equal(language.attributes['aria-label'], 'Switch to Czech');
+  assert.equal(h.nodes.get('#account-link').title, 'Account settings');
+  assert.equal(h.nodes.get('#logout').textContent, 'Sign out');
+  h.media.matches = false; h.media.change();
+  h.media.matches = true; h.media.change();
+  assert.equal(h.nodes.get('#language'), language);
+  language.handlers.click();
+  assert.equal(h.nodes.get('#language-label').textContent, 'Jazyk');
 });
 
 test('refresh timeout becomes an error toast and permits another attempt', async () => {
