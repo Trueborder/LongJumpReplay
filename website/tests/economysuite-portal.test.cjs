@@ -46,6 +46,7 @@ test('EconomySuite action notifications are toasts and refresh waits for its ack
   assert.match(script, /latest\.refresh_operation\?\.id === refreshOperation/);
   assert.match(script, /latest\.refresh_operation\.state === 'complete'/);
   assert.doesNotMatch(script, /Refresh queued\./);
+  assert.match(css, /\.es-portal \.toast:not\(\.is-leaving\)\{opacity:1;transform:none\}/);
 });
 
 test('EconomySuite header has a prominent LongJumpReplay dashboard switch', () => {

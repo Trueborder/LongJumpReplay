@@ -65,6 +65,9 @@
 body.es-navigation-open{overflow:hidden}
 body.es-portal .toast-region{top:calc(env(safe-area-inset-top,0px) + 16px);z-index:2000}
 .es-portal .toast{--text:var(--es-ink);--muted:#586e61;--surface:#fff;--apple-border-strong:var(--es-line);font-family:var(--font-body,system-ui,sans-serif)}
+/* Promise updates replace the shared toast's class list. Keep active portal
+   notifications visible after updates, while preserving dismissal transitions. */
+.es-portal .toast:not(.is-leaving){opacity:1;transform:none}
 .es-portal .toast-title{font-family:inherit;letter-spacing:0;text-transform:none}
 .es-portal .toast-message{font-size:14px}
 .es-portal .toast-close{padding:0;border:0;background:transparent}
