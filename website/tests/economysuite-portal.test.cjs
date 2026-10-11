@@ -23,9 +23,29 @@ test('EconomySuite portal exposes live server state and full data refresh', () =
   assert.match(css, /\.es-connection\[data-state=connecting\]/);
   assert.match(css, /\.es-connection\[data-state=disconnected\]/);
   assert.match(css, /\.es-connection-control:hover::after/);
-  assert.match(css, /transform-origin:center/);
+  assert.doesNotMatch(html, /es-refresh-icon/);
+  assert.match(css, /\.es-refresh\[aria-busy=true\]::before\{display:none!important\}/);
   assert.match(css, /body\.es-portal\{padding-top:0\}/);
   assert.match(css, /@keyframes es-connection-pulse/);
+});
+
+test('mobile navigation uses an accessible drawer instead of clipped scrolling tabs', () => {
+  assert.match(html, /id="menu-toggle"[^>]*aria-controls="navigation-dialog"[^>]*aria-expanded="false"/);
+  assert.match(html, /<dialog id="navigation-dialog"[^>]*aria-labelledby="navigation-title"/);
+  assert.match(script, /navigationDialog\.showModal\(\)/);
+  assert.match(script, /mobileNavigation\.addEventListener\('change', positionNavigation\)/);
+  assert.match(script, /mobile-navigation-content'\)\.append\(sidebar\)/);
+  assert.match(css, /\.es-nav-dialog #navigation\{flex-direction:column/);
+  assert.match(css, /\.es-nav-dialog #navigation a\{min-height:48px/);
+});
+
+test('EconomySuite action notifications are toasts and refresh waits for its acknowledgment', () => {
+  assert.doesNotMatch(html, /id="status"/);
+  assert.doesNotMatch(script, /feedback\?\.inline/);
+  assert.match(script, /feedback\?\.toast\[kind\]/);
+  assert.match(script, /latest\.refresh_operation\?\.id === refreshOperation/);
+  assert.match(script, /latest\.refresh_operation\.state === 'complete'/);
+  assert.doesNotMatch(script, /Refresh queued\./);
 });
 
 test('EconomySuite header has a prominent LongJumpReplay dashboard switch', () => {

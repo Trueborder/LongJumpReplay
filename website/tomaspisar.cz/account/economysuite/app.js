@@ -4,7 +4,7 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let lang = localStorage.getItem('es-language') === 'en' ? 'en' : 'cs';
   let account = null, packages = [], purchasesEnabled = false, orders = [], rankings = [], metric = 'playtime', purchaseFilter = 'paid', pendingPurchase = null;
-  let refreshBaseline = null, refreshStarted = 0;
+  let refreshBaseline = null, refreshStarted = 0, refreshOperation = '', finishRefresh = null;
   const feedback = window.LJR_FEEDBACK;
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
@@ -35,7 +35,37 @@
     }).join('');
   }
   const preview = (type, entry) => chatPreview(`${entry?.value ?? entry?.display ?? ''}${type === 'prefix' ? ' ' : ''}${account.link.name}${type === 'color' ? t(': Ukázka zprávy', ': Example message') : ''}`);
-  const status = (message, failed = false, kind = failed ? 'error' : 'info') => { const element = $('#status'); element.textContent = message; element.dataset.error = String(failed); feedback?.inline(element, message, kind); };
+  const status = (message, failed = false, kind = failed ? 'error' : 'info') => feedback?.toast[kind]?.(message);
+  const mobileNavigation = matchMedia('(max-width: 650px)');
+  const navigationDialog = $('#navigation-dialog');
+  const menuToggle = $('#menu-toggle');
+  const sidebar = $('.es-sidebar');
+  const closeNavigation = () => { if (navigationDialog.open) navigationDialog.close(); };
+  function positionNavigation() {
+    closeNavigation();
+    if (mobileNavigation.matches) $('#mobile-navigation-content').append(sidebar);
+    else $('.es-layout').prepend(sidebar);
+  }
+  menuToggle.addEventListener('click', () => {
+    navigationDialog.showModal();
+    menuToggle.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('es-navigation-open');
+    ($('#navigation [aria-current="page"]') || $('#close-navigation')).focus();
+  });
+  $('#close-navigation').addEventListener('click', closeNavigation);
+  navigationDialog.addEventListener('click', event => {
+    if (event.target !== navigationDialog) return;
+    const bounds = navigationDialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeNavigation();
+  });
+  navigationDialog.addEventListener('close', () => {
+    menuToggle.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('es-navigation-open');
+    if (mobileNavigation.matches) menuToggle.focus();
+    else $('#navigation [aria-current="page"]')?.focus();
+  });
+  mobileNavigation.addEventListener('change', positionNavigation);
+  positionNavigation();
   const cookie = name => document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.split('=').slice(1).join('=') || '';
   const errors = { pair_required: ['Nejdřív propoj svůj Minecraft účet.', 'Pair your Minecraft account first.'], invalid_password: ['Heslo není správné.', 'The password is incorrect.'], pair_expired: ['Propojení vypršelo. Použij znovu /web link.', 'Pairing expired. Run /web link again.'], pending_delivery: ['Nejdřív dokonči čekající nákupy a doručení.', 'Finish pending checkouts and deliveries first.'], already_linked: ['Tento účet nebo hráč už je propojený.', 'This account or player is already linked.'], unavailable: ['Tato funkce zatím není dostupná.', 'This feature is not available yet.'], stripe_minimum: ['Stripe vy\u017Eaduje minim\u00E1ln\u00ED platbu 15 K\u010D. Zvol vy\u0161\u0161\u00ED bal\u00ED\u010Dek.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.'], invalid_confirmation: ['Potvrzení není platné.', 'The confirmation is invalid.'] };
   Object.assign(errors, {
@@ -227,6 +257,10 @@
     document.title = successfulOrder ? `${t('Děkujeme za nákup', 'Thank you for your purchase')} — Pantheon` : `${t(...(names[route] || names.overview))} — Pantheon`;
     $('#language').textContent = lang === 'cs' ? 'EN' : 'CZ'; $('#logout').textContent = t('Odhlásit se', 'Sign out'); $('#logout').hidden = !account;
     $('#support').textContent = t('Podpora', 'Support');
+    menuToggle.setAttribute('aria-label', t('Otevřít navigaci', 'Open navigation'));
+    $('#navigation-title').textContent = t('Hráčský účet', 'Player account');
+    $('#close-navigation').setAttribute('aria-label', t('Zavřít navigaci', 'Close navigation'));
+    $('#navigation').setAttribute('aria-label', t('Hráčský účet', 'Player account'));
     $('#page-title').textContent = successfulOrder ? t('Děkujeme za nákup', 'Thank you for your purchase') : t(...(names[route] || names.overview));
     $('#page-description').textContent = successfulOrder ? t('Tady můžeš sledovat potvrzení platby i doručení na server.', 'Track payment confirmation and server delivery here.') : t('Tvůj Pantheon účet. Postup ve hře, vzhled a nákupy na jednom místě.', 'Your Pantheon account. Game progress, appearance, and purchases in one place.');
     $('#navigation').innerHTML = Object.entries(names).filter(([key]) => key !== 'pair').map(([key, labels]) => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${icon(key)}<span>${escape(t(...labels))}</span></a>`).join('');
@@ -287,25 +321,32 @@
     }); });
     $('#purchase-dialog')?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); closePurchaseDialog(); } });
     $('#purchase-filter')?.addEventListener('change', event => { purchaseFilter = event.target.value; render(); });
-    $('#privacy-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { await api('/api/economysuite/privacy', { leaderboard: $('#leaderboard-opt-in').checked }); status(t('Soukromí uloženo.', 'Privacy saved.')); }); });
-    $('#unlink-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { await api('/api/economysuite/unlink', { password: $('#unlink-password').value }); await load(); status(t('Hráč byl odpojen.', 'Player unlinked.')); }); });
-    $('#password-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { if ($('#new-password').value !== $('#confirm-password').value) throw new Error(t('Hesla se neshodují.', 'Passwords do not match.')); await api('/api/portal/password/change', { current_password: $('#current-password').value, new_password: $('#new-password').value }); event.target.reset(); status(t('Heslo změněno.', 'Password changed.')); }); });
-    $('#export-data')?.addEventListener('click', event => action(event.currentTarget, async () => { const result = await api('/api/portal/data-export'); const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'tomaspisar-data-export.json'; link.click(); URL.revokeObjectURL(url); status(t('Export byl připraven.', 'Your export is ready.')); }));
-    $('#deletion-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { const approve = window.LJR_FEEDBACK?.['confirm'] ? await window.LJR_FEEDBACK['confirm']({ title: t('Výmaz účtu', 'Account deletion'), description: t('Žádost se zaznamená a provozovatel ji posoudí s ohledem na platby, účetnictví a bezpečnost.', 'The request will be recorded and reviewed with payment, accounting, and security retention in mind.'), confirmLabel: t('Požádat o výmaz', 'Request deletion'), cancelLabel: t('Zrušit', 'Cancel'), destructive: true }) : true; if (!approve) return; await api('/api/portal/account/deletion-request', { password: $('#deletion-password').value }); event.target.reset(); status(t('Žádost o výmaz byla zaznamenána.', 'Deletion request recorded.')); }); });
+    $('#privacy-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { await api('/api/economysuite/privacy', { leaderboard: $('#leaderboard-opt-in').checked }); status(t('Soukromí uloženo.', 'Privacy saved.'), false, 'success'); }); });
+    $('#unlink-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { await api('/api/economysuite/unlink', { password: $('#unlink-password').value }); await load(); status(t('Hráč byl odpojen.', 'Player unlinked.'), false, 'success'); }); });
+    $('#password-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { if ($('#new-password').value !== $('#confirm-password').value) throw new Error(t('Hesla se neshodují.', 'Passwords do not match.')); await api('/api/portal/password/change', { current_password: $('#current-password').value, new_password: $('#new-password').value }); event.target.reset(); status(t('Heslo změněno.', 'Password changed.'), false, 'success'); }); });
+    $('#export-data')?.addEventListener('click', event => action(event.currentTarget, async () => { const result = await api('/api/portal/data-export'); const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'tomaspisar-data-export.json'; link.click(); URL.revokeObjectURL(url); status(t('Export byl připraven.', 'Your export is ready.'), false, 'success'); }));
+    $('#deletion-form')?.addEventListener('submit', event => { event.preventDefault(); action(event.currentTarget.querySelector('button'), async () => { const approve = window.LJR_FEEDBACK?.['confirm'] ? await window.LJR_FEEDBACK['confirm']({ title: t('Výmaz účtu', 'Account deletion'), description: t('Žádost se zaznamená a provozovatel ji posoudí s ohledem na platby, účetnictví a bezpečnost.', 'The request will be recorded and reviewed with payment, accounting, and security retention in mind.'), confirmLabel: t('Požádat o výmaz', 'Request deletion'), cancelLabel: t('Zrušit', 'Cancel'), destructive: true }) : true; if (!approve) return; await api('/api/portal/account/deletion-request', { password: $('#deletion-password').value }); event.target.reset(); status(t('Žádost o výmaz byla zaznamenána.', 'Deletion request recorded.'), false, 'success'); }); });
     $('#ranking-metric')?.addEventListener('change', async event => { metric = event.target.value; try { rankings = (await api('/api/economysuite/leaderboard?metric=' + metric)).entries; render(); } catch (failure) { status(failure.message, true); } });
     $('#approve-pair')?.addEventListener('click', event => action(event.currentTarget, async () => { const result = await api('/api/economysuite/pair/approve', { token: pairingToken }); pairConfirmation = result.command; sessionStorage.setItem('es-pair-confirmation', pairConfirmation); sessionStorage.removeItem('es-pair'); pairingToken = ''; render(); }));
-    $('#copy-pair-command')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(pairConfirmation); status(t('Příkaz byl zkopírován. Vlož ho do Minecraftu.', 'Command copied. Paste it into Minecraft.')); } catch { status(t('Kopírování se nepodařilo. Označ příkaz ručně.', 'Copying failed. Select the command manually.'), true); } });
+    $('#copy-pair-command')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(pairConfirmation); status(t('Příkaz byl zkopírován. Vlož ho do Minecraftu.', 'Command copied. Paste it into Minecraft.'), false, 'success'); } catch { status(t('Kopírování se nepodařilo. Označ příkaz ručně.', 'Copying failed. Select the command manually.'), true); } });
   }
   $('#refresh-data').addEventListener('click', async () => {
     const button = $('#refresh-data');
     if (!account?.link || refreshBaseline !== null) return;
     refreshBaseline = Number(account?.synced_at || 0); refreshStarted = Date.now(); renderConnection(); feedback?.busy(button, true);
     try {
-      const refreshWork = api('/api/economysuite/refresh', {});
-      await (feedback?.promise ? feedback.promise(refreshWork, { loading: t('Odesílám obnovení…', 'Requesting refresh…'), success: t('Obnovení bylo zařazeno.', 'Refresh queued.'), error: t('Obnovení se nepodařilo spustit.', 'Refresh could not be started.') }) : refreshWork);
-      status(account?.server_status === 'disconnected' ? t('Obnovení čeká, až se server připojí.', 'Refresh is queued until the server connects.') : t('Načítám čerstvá data přímo ze serveru…', 'Loading fresh data directly from the server…'));
-    } catch (failure) { refreshBaseline = null; renderConnection(); status(failure.message, true); }
-    finally { feedback?.busy(button, false); }
+      const refreshWork = api('/api/economysuite/refresh', {}).then(result => {
+        refreshOperation = result.operation_id;
+        return new Promise((resolve, reject) => { finishRefresh = { resolve, reject }; });
+      });
+      await (feedback?.promise ? feedback.promise(refreshWork, {
+        loading: t('Obnovuji data ze serveru…', 'Refreshing data from the server…'),
+        success: t('Data byla obnovena ze serveru.', 'Data refreshed from the server.'),
+        error: failure => failure.message
+      }) : refreshWork);
+      if (!feedback?.promise) status(t('Data byla obnovena ze serveru.', 'Data refreshed from the server.'), false, 'success');
+    } catch (failure) { if (!feedback?.promise) status(failure.message, true); }
+    finally { refreshBaseline = null; refreshOperation = ''; finishRefresh = null; feedback?.busy(button, false); renderConnection(); }
   });
   async function load(options = {}) {
     const initial = options.initial ?? !account;
@@ -313,14 +354,14 @@
     let accountFailure = null;
     try { account = await api('/api/economysuite/account'); }
     catch (failure) { if (failure.status === 401 && !['store', 'pair'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) accountFailure = failure; }
-    if (accountFailure && !['store', 'pair'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); return; }
+    if (accountFailure && !['store', 'pair'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); if (options.refresh) throw accountFailure; status(accountFailure.message, true); return; }
     try {
       if (route === 'games' && account) await window.ESGames.load(api, account);
       if (route === 'store') { const catalog = await api('/api/economysuite/catalog'); packages = catalog.packages; purchasesEnabled = catalog.purchases_enabled; }
       if (route === 'purchases' && account) orders = (await api('/api/economysuite/orders')).orders;
       if (route === 'statistics' && account) rankings = (await api(`/api/economysuite/leaderboard?metric=${metric}`)).entries;
       if (route === 'pair' && account && pairingToken) pairing = await api('/api/economysuite/pair/inspect', { token: pairingToken });
-    } catch (failure) { $('#content').innerHTML = loadError(failure); $('#content').setAttribute('aria-busy', 'false'); bind(); return; }
+    } catch (failure) { $('#content').innerHTML = loadError(failure); $('#content').setAttribute('aria-busy', 'false'); bind(); if (options.refresh) throw failure; status(failure.message, true); return; }
     render();
   }
   $('#language').addEventListener('click', () => { lang = lang === 'cs' ? 'en' : 'cs'; localStorage.setItem('es-language', lang); render(); });
@@ -331,9 +372,14 @@
     try {
       const latest = await api('/api/economysuite/account'); account = latest; renderConnection();
       if (route === 'games') await window.ESGames.poll(gameContext());
-      if (refreshBaseline !== null && Number(latest.synced_at || 0) > refreshBaseline) { refreshBaseline = null; await load(); status(t('Data byla obnovena ze serveru.', 'Data refreshed from the server.')); return; }
-      if (refreshBaseline !== null && Date.now() - refreshStarted > 45000) { refreshBaseline = null; renderConnection(); status(t('Server zatím nová data neposlal. Zkus obnovení později.', 'The server has not sent fresh data yet. Try again later.'), true); }
+      if (finishRefresh && latest.refresh_operation?.id === refreshOperation && latest.refresh_operation.state === 'complete') {
+        try { await load({ refresh: true }); finishRefresh.resolve(); }
+        catch (failure) { finishRefresh.reject(failure); }
+        return;
+      }
+      if (finishRefresh && latest.refresh_operation?.id === refreshOperation && latest.refresh_operation.state === 'failed') finishRefresh.reject(new Error(t('Server nedokázal obnovit data. Zkus to znovu.', 'The server could not refresh the data. Try again.')));
+      if (finishRefresh && Date.now() - refreshStarted > 45000) finishRefresh.reject(new Error(t('Server zatím nová data neposlal. Zkus obnovení později.', 'The server has not sent fresh data yet. Try again later.')));
       if (successfulOrder) { orders = (await api('/api/economysuite/orders')).orders; render(); }
-    } catch { refreshBaseline = null; const connection = $('#connection'); connection.dataset.state = 'disconnected'; connection.closest('.es-live-actions').dataset.state = 'disconnected'; connection.innerHTML = `<span class="es-connection-dot" aria-hidden="true"></span><span class="es-connection-label">${escape(t('Server je odpojený', 'Server disconnected'))}</span>`; const refresh = $('#refresh-data'); const tooltip = t('Server neodpovídá. Zkus obnovit znovu.', 'The server is not responding. Try refreshing again.'); refresh.dataset.tooltip = tooltip; refresh.title = tooltip; refresh.setAttribute('aria-label', `${t('Server je odpojený', 'Server disconnected')}. ${tooltip}`); refresh.disabled = !account?.link; }
+    } catch { if (account) account.server_status = 'disconnected'; finishRefresh?.reject(new Error(t('Server neodpovídá. Zkus obnovit znovu.', 'The server is not responding. Try refreshing again.'))); renderConnection(); }
   }, 5000);
 })();

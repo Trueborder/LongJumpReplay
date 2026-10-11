@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite mobile navigation and toast feedback (2026-10-11)
+
+- The EconomySuite portal uses a header menu button and native modal navigation drawer at widths up to 650px. The same sidebar and links move back into the desktop layout above that breakpoint; the drawer supports keyboard focus, Escape, backdrop dismissal, and Czech/English labels. Product switching and sign-out remain visible in the header.
+- The clickable server-status pill retains its colored status dot and connecting pulse, with no separate refresh/loading circle. EconomySuite action notifications use the existing shared toast API; structural dashboard states, purchase agreements, and destructive-action confirmations remain in their relevant views.
+- Refresh uses one promise toast until the matching refresh operation is acknowledged by the plugin and dashboard data reloads. Unrelated snapshots do not count as successful refreshes; failures/timeouts restore the control for retry. Portal asset cache versions are bumped, with no licensing, payment, database, plugin, or LongJumpReplay dashboard changes.
+
 ## EconomySuite `/web link` registration flow (2026-10-08)
 
 - `/web link` in EconomySuite 2.29.2 sends numbered Czech/English chat steps with clickable aqua bold buttons for the Minecraft formatting guide and direct player-account registration. Pairing URLs and tokens are never displayed in chat. The registration URL includes the short-lived pair token in its fragment; `assets/js/account/account.js` stores it in sessionStorage on the Minecraft registration route so it survives account creation and sign-in before `/economysuite/pair` resumes. Existing players can use the login switcher.
