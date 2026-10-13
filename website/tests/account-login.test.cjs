@@ -37,10 +37,10 @@ test('login composition keeps one focused card with a product switcher and no ex
   assert.doesNotMatch(login, /class="account-intro login-context"/);
   assert.doesNotMatch(login, /login-destination-label|Signing in to/);
   assert.match(login, /data-login-product="longjumpreplay" href="https:\/\/ljr\.tomaspisar\.cz\/login"/);
-  assert.match(login, /data-login-product="economysuite" href="https:\/\/minecraft\.tomaspisar\.cz\/login"/);
+  assert.match(login, /data-login-product="economysuite" href="https:\/\/account\.pantheon\.tomaspisar\.cz\/login"/);
   assert.match(account, /link\.dataset\.loginProduct === loginProduct/);
   assert.match(login, /id="form-title"/);
-  assert.match(account, /location\.hostname === 'minecraft\.tomaspisar\.cz'/);
+  assert.match(account, /location\.hostname === 'account\.pantheon\.tomaspisar\.cz'/);
   assert.match(styles, /\.portal-login-page \.account-login-grid \{[^}]*place-items: center;/);
 
   assert.match(styles, /#login-status:empty/);

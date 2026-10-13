@@ -1,7 +1,19 @@
 import type { Env } from './config';
 
 export const LJR_ORIGIN = 'https://ljr.tomaspisar.cz';
-export const MINECRAFT_ORIGIN = 'https://minecraft.tomaspisar.cz';
+export const MINECRAFT_ORIGIN = 'https://account.pantheon.tomaspisar.cz';
+export const LEGACY_MINECRAFT_HOST = 'minecraft.tomaspisar.cz';
+export function isMinecraftHost(host: string): boolean {
+  return host === new URL(MINECRAFT_ORIGIN).hostname || host === LEGACY_MINECRAFT_HOST;
+}
+
+/** Redirect web pages, but never redirect signed bridge or payment POST requests. */
+export function legacyMinecraftLocation(request: Request): string | null {
+  const url = new URL(request.url);
+  if (url.hostname !== LEGACY_MINECRAFT_HOST || url.pathname.startsWith('/api/')) return null;
+  url.host = new URL(MINECRAFT_ORIGIN).host;
+  return url.toString();
+}
 export type PortalProduct = 'economysuite' | 'longjumpreplay';
 export const AUTH_PATHS = new Set([
   '/api/portal/account', '/api/portal/request-code', '/api/portal/verify-code',
@@ -14,7 +26,7 @@ export const AUTH_PATHS = new Set([
 /** Origin/host determines the account boundary. Body/query product selectors cannot cross it. */
 export function requestProduct(request: Request, env: Env): PortalProduct {
   const url = new URL(request.url);
-  if (url.hostname === 'minecraft.tomaspisar.cz') return 'economysuite';
+  if (isMinecraftHost(url.hostname)) return 'economysuite';
   if (url.hostname === 'ljr.tomaspisar.cz') return 'longjumpreplay';
   if (url.pathname.startsWith('/api/economysuite/')) return 'economysuite';
   if (url.hostname === 'api.tomaspisar.cz' && request.headers.get('Origin') === (env.ECONOMYSUITE_PORTAL_ORIGIN || MINECRAFT_ORIGIN)) return 'economysuite';

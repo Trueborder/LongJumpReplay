@@ -1,9 +1,9 @@
 (() => {
-  const API = ['ljr.tomaspisar.cz', 'minecraft.tomaspisar.cz'].includes(location.hostname) ? location.origin : 'https://api.tomaspisar.cz';
+  const API = ['ljr.tomaspisar.cz', 'account.pantheon.tomaspisar.cz'].includes(location.hostname) ? location.origin : 'https://api.tomaspisar.cz';
   const { deriveDashboardEntitlement, deriveDevicePortalState } = window.LJR_ACCOUNT_STATE;
   const page = document.body.dataset.portalPage;
   const productParams = new URLSearchParams(window.location.search);
-  const playerProduct = location.hostname === 'minecraft.tomaspisar.cz';
+  const playerProduct = location.hostname === 'account.pantheon.tomaspisar.cz';
   document.querySelector('link[rel=canonical]')?.setAttribute('href', location.origin + location.pathname);
   const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
   if (playerProduct && page === 'register') {

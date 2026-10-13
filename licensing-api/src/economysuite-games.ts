@@ -1,4 +1,5 @@
 import type { Env } from './config';
+import { MINECRAFT_ORIGIN } from './portal-domains';
 
 export const RULES_VERSION = 'es-games-1';
 export const SAFE = Number.MAX_SAFE_INTEGER;
@@ -38,8 +39,8 @@ export function outcome(game: string, choice: string, roll: number): { outcome: 
 }
 export function gamesEnabled(env: Env): boolean {
   if (env.ECONOMYSUITE_GAMES_ENABLED !== 'true') return false;
-  if (env.ENVIRONMENT === 'production') return env.PORTAL_ORIGIN === 'https://minecraft.tomaspisar.cz';
-  return ['development', 'staging', 'test'].includes(env.ENVIRONMENT) && !['https://account.tomaspisar.cz', 'https://minecraft.tomaspisar.cz', 'https://ljr.tomaspisar.cz'].includes(env.PORTAL_ORIGIN);
+  if (env.ENVIRONMENT === 'production') return env.PORTAL_ORIGIN === MINECRAFT_ORIGIN;
+  return ['development', 'staging', 'test'].includes(env.ENVIRONMENT) && !['https://account.tomaspisar.cz', 'https://minecraft.tomaspisar.cz', MINECRAFT_ORIGIN, 'https://ljr.tomaspisar.cz'].includes(env.PORTAL_ORIGIN);
 }
 export async function gamesRoute(request: Request, env: Env, db: D1Database, customer: string, uuid: string | null, data: Record<string, unknown>): Promise<Response> {
   const url = new URL(request.url), path = url.pathname;

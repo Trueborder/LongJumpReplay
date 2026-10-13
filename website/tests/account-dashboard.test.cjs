@@ -55,8 +55,8 @@ test('mobile dashboard keeps the sign-out action visible', () => {
 });
 
 test('LongJumpReplay dashboard exposes the EconomySuite switch', () => {
-  assert.match(html, /class="dashboard-product-switch button button-primary" href="https:\/\/minecraft\.tomaspisar\.cz\/economysuite\/overview"/);
-  assert.match(html, /class="dashboard-product-switch button button-primary" href="https:\/\/minecraft\.tomaspisar\.cz\/economysuite\/overview"[\s\S]*?data-en="Open EconomySuite" data-cs="Otevřít EconomySuite"/);
+  assert.match(html, /class="dashboard-product-switch button button-primary" href="https:\/\/account\.pantheon\.tomaspisar\.cz\/economysuite\/overview"/);
+  assert.match(html, /class="dashboard-product-switch button button-primary" href="https:\/\/account\.pantheon\.tomaspisar\.cz\/economysuite\/overview"[\s\S]*?data-en="Open EconomySuite" data-cs="Otevřít EconomySuite"/);
   assert.match(css, /\.dashboard-product-switch-row/);
 });
 

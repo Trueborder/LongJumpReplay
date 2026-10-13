@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## PANTHEON domain migration (2026-10-13)
+
+- EconomySuite's canonical account origin is now `https://account.pantheon.tomaspisar.cz`; LongJumpReplay stays at `ljr.tomaspisar.cz`. The existing separate D1 database and host-only account cookies are preserved; users sign in again on the new hostname.
+- Old `minecraft.tomaspisar.cz` web paths redirect with 308 while retaining paths and queries. API requests are not redirected, preserving signed bridge and Stripe webhook compatibility. New host detection, frontend links, email branding and production-game origin checks use the canonical origin.
+- Minecraft DNS uses DNS-only aliases to Exaroton's dynamic address and SRV owner after the owner confirmed the temporary test address works. Map delegation belongs only to `map.pantheon.tomaspisar.cz`, leaving the parent available for the account Worker and GitBook wiki.
+- No account/database migration, payment catalog change or desktop application change is included. All 61 Worker tests (30-second test bound), 86 website tests, TypeScript, deployment dry runs and git diff checks pass. API deployment `70ce6b3e-98c4-41a7-8af5-d4bdf8dbc5a7` and public asset deployment `616c8b9b-dda5-47fd-ada5-6f26dda2777f` are live. The new portal has a valid HTTPS certificate and renders the correct Pantheon login; the new map renders all six world links over HTTPS. Authenticated live login/purchases were not performed. GitBook domain setup is blocked by its ended trial pending owner approval for a plan decision.
+
 ## Public legal pages layout repair (2026-10-11)
 
 - All 16 `/legal/` pages now load the public homepage's `pages/legacy.css` foundation before `components.css`. Its missing reset, flex navigation and automatic section margins caused the broken, left-aligned layout. New `pages/legal.css` is scoped to legal pages and follows the existing cream, teal, amber, condensed-heading and rounded-surface design.

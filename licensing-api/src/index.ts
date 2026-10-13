@@ -1,4 +1,4 @@
-import { AUTH_PATHS, accountEnv, requestProduct, sessionCookieName, csrfCookieName, retiredAccountLocation } from './portal-domains';
+import { AUTH_PATHS, accountEnv, requestProduct, sessionCookieName, csrfCookieName, retiredAccountLocation, isMinecraftHost, legacyMinecraftLocation } from './portal-domains';
 /**
  * LongJumpReplay licensing API.
  *
@@ -2125,14 +2125,16 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
+      const legacyMinecraft = legacyMinecraftLocation(request);
+      if (legacyMinecraft) return new Response(null, { status: 308, headers: { Location: legacyMinecraft, 'Cache-Control': 'no-store' } });
       const legacyBridge = url.hostname === 'account.tomaspisar.cz' && /^\/api\/economysuite\/(bridge\/|stripe\/webhook)/.test(path);
       if (url.hostname === 'account.tomaspisar.cz' && !legacyBridge) {
         if (path.startsWith('/api/')) return fail('retired_domain', 'Use the product account domain.', 410);
         return new Response(null, { status: 301, headers: { Location: retiredAccountLocation(request), 'Cache-Control': 'no-store' } });
       }
       const product = requestProduct(request, bindings);
-      const minecraftHost = url.hostname === 'minecraft.tomaspisar.cz';
-      const portalHost = ['minecraft.tomaspisar.cz', 'ljr.tomaspisar.cz'].includes(url.hostname)
+      const minecraftHost = isMinecraftHost(url.hostname);
+      const portalHost = minecraftHost || url.hostname === 'ljr.tomaspisar.cz'
         || (bindings.ENVIRONMENT !== 'production' && [bindings.PORTAL_ORIGIN, bindings.ECONOMYSUITE_PORTAL_ORIGIN].includes(url.origin));
       if ((url.hostname === 'ljr.tomaspisar.cz' && path.startsWith('/api/economysuite/'))
           || (minecraftHost && path.startsWith('/api/') && !path.startsWith('/api/economysuite/') && !AUTH_PATHS.has(path))) return fail('not_found', 'Not found', 404);

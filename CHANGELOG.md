@@ -1,5 +1,11 @@
 # LongJumpReplay changelog
 
+## PANTHEON account domain — 2026-10-13
+
+- Moves the EconomySuite account portal to `account.pantheon.tomaspisar.cz` while keeping existing accounts and player data.
+- Redirects old portal web links without redirecting signed plugin bridge or payment webhook requests.
+- Updates product switching, account email branding and frontend origin detection; LongJumpReplay keeps its own account domain.
+
 ## EconomySuite portal — 2026-10-11
 
 - Fixes applying appearance failing after the first request; all three cosmetic choices are captured before submission, with duplicate-submit protection.

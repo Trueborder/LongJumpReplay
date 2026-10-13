@@ -209,7 +209,7 @@ export async function sendVerificationCode(
   if (env.PORTAL_PRODUCT === 'economysuite') {
     message.subject = message.subject.replaceAll('LongJumpReplay', 'EconomySuite');
     message.text = message.text.replaceAll('LongJumpReplay', 'EconomySuite').replaceAll('LONGJUMPREPLAY', 'ECONOMYSUITE');
-    message.html = message.html.replaceAll('LongJumpReplay', 'EconomySuite').replaceAll('LONGJUMPREPLAY', 'ECONOMYSUITE').replaceAll('ljr.tomaspisar.cz', 'minecraft.tomaspisar.cz');
+    message.html = message.html.replaceAll('LongJumpReplay', 'EconomySuite').replaceAll('LONGJUMPREPLAY', 'ECONOMYSUITE').replaceAll('ljr.tomaspisar.cz', 'account.pantheon.tomaspisar.cz');
   }
   await mailer(env).send(to, message);
 }

@@ -2,7 +2,9 @@
 
 ## Routes and ownership
 
-`https://minecraft.tomaspisar.cz/login` and `/register` use independent Minecraft accounts in `ECONOMYSUITE_DB`. LongJumpReplay uses `https://ljr.tomaspisar.cz/login` and its licensing database. Registration, password changes, OTP/reset codes and sessions do not cross products. Minecraft setup requires a password; LongJumpReplay also requires a real-name profile. See [domain migration](PORTAL_DOMAIN_SPLIT.md).
+`https://account.pantheon.tomaspisar.cz/login` and `/register` use independent Minecraft accounts in `ECONOMYSUITE_DB`. LongJumpReplay uses `https://ljr.tomaspisar.cz/login` and its licensing database. Registration, password changes, OTP/reset codes and sessions do not cross products. Minecraft setup requires a password; LongJumpReplay also requires a real-name profile. See [domain migration](PORTAL_DOMAIN_SPLIT.md).
+
+The former `minecraft.tomaspisar.cz` web pages redirect to the new account domain. Signed bridge and payment API requests remain compatible at the old hostname; the existing Stripe webhook is intentionally unchanged. No database migration is needed for this hostname change. Host-only cookies require a fresh sign-in on the new domain.
 
 The player dashboard has `/economysuite/overview`, `/statistics`, `/progress`, `/appearance`, `/store`, `/purchases`, `/settings` and `/pair`. Prefix each suffix with `/economysuite`. Store and pairing shells are public; private data and every player mutation require a session, and mutations require the existing origin/CSRF checks. Pairing tokens arrive in URL fragments, are stored briefly in session storage, and are stripped from the URL.
 

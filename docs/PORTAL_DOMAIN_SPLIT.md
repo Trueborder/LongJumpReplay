@@ -1,7 +1,9 @@
 # Independent product accounts
 
 LongJumpReplay: https://ljr.tomaspisar.cz/login and `/register`; `/dashboard/*`.
-EconomySuite: https://minecraft.tomaspisar.cz/login and `/register`; `/economysuite/*`.
+EconomySuite: https://account.pantheon.tomaspisar.cz/login and `/register`; `/economysuite/*`.
+
+The 2026-10-13 PANTHEON hostname change preserves the already-separated databases described below. Old `minecraft.tomaspisar.cz` pages redirect with 308; its API paths stay compatible with installed plugins and existing payment webhooks. This hostname-only change must not rerun the historical account-copy cutover below.
 
 The licensing Worker serves both hosts, but authentication uses separate D1
 databases. Minecraft auth tables are in `economysuite-player-portal` alongside
