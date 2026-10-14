@@ -1,5 +1,8 @@
 (() => {
   'use strict';
+  // Keyboard actions stay immediate; pointer motion never delays the action.
+  document.addEventListener('keydown', () => { document.documentElement.dataset.motionInput = 'keyboard'; }, true);
+  document.addEventListener('pointerdown', () => { document.documentElement.dataset.motionInput = 'pointer'; }, true);
   const $ = s => document.querySelector(s);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let lang = localStorage.getItem('es-language') === 'en' ? 'en' : 'cs';

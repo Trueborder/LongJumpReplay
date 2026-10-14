@@ -1,5 +1,10 @@
 # Long Jump Replay — Project Knowledge
 
+## PANTHEON restrained motion (2026-10-14)
+
+- EconomySuite extends its existing motion tokens in `app.css`: reversible native navigation drawer transitions, pointer press feedback, immediate keyboard actions and reduced-motion fallbacks. Dashboard panels and pairing steps no longer replay entrance animations when data or filters re-render. Loading placeholders use opacity rather than animated background painting. Styles stay in the existing served asset allowlist; no Worker routing changes are needed.
+- No API, authentication, payment, plugin, or LongJumpReplay dashboard behavior is changed. All 89 website tests pass and the production dry run passed. Deployment `9615d160-bcfc-40b1-ad85-3d4951f269bf` is live. Chrome checks at 390px confirmed served motion styles, 220/180ms pointer drawer transitions, zero-duration keyboard dismissal and stationary dashboard panels. Reduced-motion is tested structurally; real-device/frame-time profiling was not performed.
+
 ## PANTHEON domain migration (2026-10-13)
 
 - EconomySuite's canonical account origin is now `https://account.pantheon.tomaspisar.cz`; LongJumpReplay stays at `ljr.tomaspisar.cz`. The existing separate D1 database and host-only account cookies are preserved; users sign in again on the new hostname.

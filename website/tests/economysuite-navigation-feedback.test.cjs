@@ -37,6 +37,7 @@ function harness(options = {}) {
   const notices = [];
   const calls = [];
   let interval, clock = 100000;
+  const documentHandlers = {}, documentElement = { dataset: {} };
   const account = { link: { uuid: 'test-player', name: 'TestPlayer' }, snapshot: {}, synced_at: 10, server_status: 'connected', refresh_operation: null };
   const feedback = {
     toast: Object.fromEntries(['info', 'error', 'success', 'warning'].map(kind => [kind, message => notices.push({ kind, message })])),
@@ -48,7 +49,7 @@ function harness(options = {}) {
     }
   };
   vm.runInNewContext(script, {
-    document: { querySelector: key => nodes.get(key) || null, querySelectorAll: () => [], body: { classList: classes() }, documentElement: {}, cookie: '', hidden: false },
+    document: { addEventListener: (name, listener) => { documentHandlers[name] = listener; }, querySelector: key => nodes.get(key) || null, querySelectorAll: () => [], body: { classList: classes() }, documentElement, cookie: '', hidden: false },
     window: { LJR_FEEDBACK: feedback }, matchMedia: () => media,
     localStorage: { getItem: () => null, setItem() {} }, sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
     location: { pathname: '/economysuite/store', search: '', hash: '', replace() {}, assign() {} },
@@ -61,8 +62,20 @@ function harness(options = {}) {
       return { ok: true, json: async () => data };
     }
   });
-  return { nodes, media, notices, calls, account, tick: () => interval(), advance: ms => { clock += ms; } };
+  return { nodes, media, notices, calls, account, documentHandlers, documentElement, tick: () => interval(), advance: ms => { clock += ms; } };
 }
+
+test('motion input follows keyboard and pointer without delaying navigation', async () => {
+  const h = harness(); await flush();
+  h.documentHandlers.keydown();
+  assert.equal(h.documentElement.dataset.motionInput, 'keyboard');
+  h.nodes.get('#menu-toggle').handlers.click();
+  assert.equal(h.nodes.get('#navigation-dialog').open, true);
+  h.documentHandlers.pointerdown();
+  assert.equal(h.documentElement.dataset.motionInput, 'pointer');
+  h.nodes.get('#close-navigation').handlers.click();
+  assert.equal(h.nodes.get('#navigation-dialog').open, false);
+});
 
 test('mobile drawer restores focus and moves the same navigation back on desktop', async () => {
   const h = harness(); await flush();

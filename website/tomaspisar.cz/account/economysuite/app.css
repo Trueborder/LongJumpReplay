@@ -162,3 +162,30 @@ body.es-portal{padding-top:0}
 @keyframes es-game-reveal{from{opacity:.3;transform:translateY(-8px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes es-game-wait-fade{50%{opacity:.65}}
 @media(prefers-reduced-motion:reduce){.es-game-stage[data-phase=waiting] .es-game-coin,.es-game-stage[data-phase=waiting] .es-game-dice,.es-game-stage[data-phase=waiting] .es-game-wheel{animation:es-game-wait-fade 1800ms ease-in-out infinite}.es-game-stage.is-revealing #game-piece{animation:es-fade-in 180ms ease both}.es-game-wheel{transition:none}}
+/* Extend the portal's existing motion tokens. Never replay reading surfaces
+   when polling, language changes or filters re-render dashboard data. */
+#content > .es-panel,#content > .es-grid > .es-panel,#content > .es-thanks,.es-onboarding-step{animation:none}
+.es-command:focus-visible{transform:none}
+.es-skeleton{animation:es-loading-fade 1350ms ease-in-out infinite}
+@keyframes es-loading-fade{50%{opacity:.65}}
+.es-account-link{transition:transform 160ms var(--ease-out)}
+html[data-motion-input=pointer] .es-account-link:active{transform:scale(.97);transition-duration:100ms}
+html[data-motion-input=pointer] .es-portal button:not(:disabled):active{transition-duration:100ms}
+/* Native dialog retains focus trapping, Escape and backdrop behavior. The
+   browser owns enter/exit lifetime; no timeout, input lock or extra library. */
+@supports(transition-behavior:allow-discrete){
+  .es-nav-dialog{opacity:0;transform:translateX(-20px);transition:transform 220ms var(--ease-drawer),opacity 180ms var(--ease-out),display 220ms allow-discrete,overlay 220ms allow-discrete}
+  .es-nav-dialog[open]{animation:none;opacity:1;transform:translateX(0)}
+  .es-nav-dialog::backdrop{opacity:0;transition:opacity 180ms var(--ease-out),display 220ms allow-discrete,overlay 220ms allow-discrete}
+  .es-nav-dialog[open]::backdrop{opacity:1}
+  @starting-style{.es-nav-dialog[open]{opacity:0;transform:translateX(-20px)}.es-nav-dialog[open]::backdrop{opacity:0}}
+}
+html[data-motion-input=keyboard] :is(.es-nav-dialog,.es-modal-card,.es-modal-backdrop,.es-portal button,.es-button,.es-product-switch,.es-account-link,#navigation a){transition:none!important;animation:none!important;transform:none!important}
+html[data-motion-input=keyboard] .es-nav-dialog::backdrop{transition:none!important}
+@media(prefers-reduced-motion:reduce){
+  .es-skeleton{animation:none!important}
+  .es-portal button:not(:disabled):hover,.es-button:hover,.es-product-switch:hover,#navigation a:hover,.es-account-link:active{transform:none!important}
+  .es-nav-dialog{transform:none!important;transition:opacity 160ms ease,display 160ms allow-discrete,overlay 160ms allow-discrete}
+  .es-nav-dialog[open]{animation:none}
+  @starting-style{.es-nav-dialog[open]{transform:none!important}}
+}
