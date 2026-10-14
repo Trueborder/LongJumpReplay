@@ -14,6 +14,8 @@ test('account messages contain UTF-8 text rather than mojibake', () => {
   assert.match(script, /'Ověřit kód'/);
   assert.match(script, /'Ověřit e-mail'/);
   assert.match(script, /'Vytvořit účet'/);
+  assert.match(script, /copy\.cs\.passwordRules = 'Použijte 12–128 znaků včetně písmene, čísla a symbolu\.'/);
+  assert.match(script, /'Dokončit nastavení účtu'/);
 });
 
 test('every login mode assigns the correct Czech button label at runtime', () => {
@@ -44,4 +46,25 @@ test('dynamic auth labels preserve both translations when the language changes',
     element.textContent = element.dataset.en;
     assert.equal(element.textContent, 'Sign in');
   }
+});
+
+test('password login displays the corrected Czech pending message before the mock response', async () => {
+  const body = script.match(/const loginWithPassword = async \(\) => \{([\s\S]*?)\n    \};/);
+  assert.ok(body);
+  const signingIn = script.match(/signingIn: '(Přihlašuji…)'/)[1];
+  const statuses = [], busy = [];
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  const context = vm.createContext({
+    $: selector => ({ value: selector === '#email' ? 'test@example.invalid' : 'local-test-password' }),
+    state: {}, t: key => key === 'signingIn' ? signingIn : key,
+    setStatus: message => statuses.push(message), setLoginBusy: value => busy.push(value),
+    api: () => response, redirectAfterAuth() {},
+  });
+  const pending = vm.runInContext(`(async () => {${body[1]} })()`, context);
+  assert.deepEqual(statuses, ['Přihlašuji…']);
+  assert.deepEqual(busy, [true]);
+  finish({ password_setup_required: false });
+  await pending;
+  assert.deepEqual(busy, [true, false]);
 });

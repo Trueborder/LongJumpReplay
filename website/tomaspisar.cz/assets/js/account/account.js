@@ -134,10 +134,10 @@
   copy.en.passwordMismatch = 'The passwords do not match.';
   copy.en.profileRequired = 'Enter your first name and surname.';
   copy.en.passwordRules = 'Use 12-128 characters, including a letter, number and symbol.';
-  copy.cs.passwordLength = 'Pouzijte 12-128 znaku vcetne pismene, cisla a symbolu.';
+  copy.cs.passwordLength = 'Použijte 12–128 znaků včetně písmene, čísla a symbolu.';
   copy.cs.passwordMismatch = 'Hesla se neshoduji.';
-  copy.cs.profileRequired = 'Zadejte jmeno a prijmeni.';
-  copy.cs.passwordRules = 'Pouzijte 12-128 znaku vcetne pismene, cisla a symbolu.';
+  copy.cs.profileRequired = 'Zadejte jméno a příjmení.';
+  copy.cs.passwordRules = 'Použijte 12–128 znaků včetně písmene, čísla a symbolu.';
   const t = (key) => copy[state.lang][key] || copy.en[key] || key;
   const strongPassword = (value) => Array.from(value).length >= 12 && Array.from(value).length <= 128
     && /\p{L}/u.test(value) && /\p{N}/u.test(value) && /[\p{P}\p{S}]/u.test(value);
@@ -296,7 +296,7 @@
       $('#migration-password').required = Boolean(result.password_required);
       $('#migration-password-confirmation').required = Boolean(result.password_required);
       $('#login-mode-actions').hidden = true; $('#reset-actions').hidden = true; $('#change-email').hidden = true; $('#resend-code').hidden = true;
-      setText('#login-submit', 'Finish account setup', 'Dokoncit nastaveni uctu');
+      setText('#login-submit', 'Finish account setup', 'Dokončit nastavení účtu');
       setStatus(state.lang === 'cs' ? 'Dokoncete prosim profil a heslo.' : 'Finish your profile and password.', '#login-status');
       (playerProduct ? $('#migration-password') : $('#migration-first-name')).focus();
     };
