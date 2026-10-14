@@ -96,7 +96,7 @@ export interface StripeApi {
   getInvoices(customerId: string): Promise<Record<string, any>[]>;
   createBillingPortalSession(customerId: string, returnUrl: string): Promise<string>;
   createAdditionalComputerCheckout(input: { customerId: string; licenseId: string; quantity: number; pricesCzk: number[]; successUrl: string; cancelUrl: string }): Promise<string>;
-  createLongJumpReplayCheckout(input: { priceId: string; mode: "payment" | "subscription"; email: string; orderId: string; licenseType: string; successUrl: string; cancelUrl: string; policyVersions: Record<string, string> }): Promise<{ id: string; url: string }>;
+  createLongJumpReplayCheckout(input: { priceId: string; mode: "payment" | "subscription"; email?: string; orderId: string; licenseType: string; successUrl: string; cancelUrl: string; policyVersions: Record<string, string> }): Promise<{ id: string; url: string }>;
 }
 
 /**
@@ -168,7 +168,6 @@ export function stripeApi(secretKey: string): StripeApi {
         mode: input.mode,
         "line_items[0][price]": input.priceId,
         "line_items[0][quantity]": "1",
-        customer_email: input.email,
         client_reference_id: input.orderId,
         success_url: input.successUrl,
         cancel_url: input.cancelUrl,
@@ -181,9 +180,11 @@ export function stripeApi(secretKey: string): StripeApi {
         "metadata[refund_policy_version]": input.policyVersions.refund,
         "metadata[privacy_policy_version]": input.policyVersions.privacy,
         "metadata[consent_version]": input.policyVersions.consent,
-        "payment_intent_data[metadata][purchase_type]": "longjumpreplay_license",
-        "payment_intent_data[metadata][order_id]": input.orderId,
       };
+      if (input.email) values.customer_email = input.email;
+      const metadataTarget = input.mode === "subscription" ? "subscription_data" : "payment_intent_data";
+      values[`${metadataTarget}[metadata][purchase_type]`] = "longjumpreplay_license";
+      values[`${metadataTarget}[metadata][order_id]`] = input.orderId;
       const data = await postForm("checkout/sessions", values);
       if (typeof data.id !== "string" || typeof data.url !== "string" || !data.url.startsWith("https://checkout.stripe.com/")) throw new Error("Stripe did not return a Checkout URL");
       return { id: data.id, url: data.url };

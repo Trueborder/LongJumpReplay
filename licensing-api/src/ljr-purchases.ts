@@ -72,7 +72,7 @@ export async function updateLjrOrderCheckout(db: D1Database, orderId: string, se
 }
 
 export async function updateLjrOrder(db: D1Database, orderId: string, fields: Record<string, unknown>): Promise<void> {
-  const allowed = new Set(["customer_id","stripe_customer_id","payment_intent_id","stripe_subscription_id","license_id","status","delivery_status","confirmation_status","receipt_reference","refund_status","dispute_status","entitlement_status","paid_at"]);
+  const allowed = new Set(["email","customer_id","stripe_customer_id","payment_intent_id","stripe_subscription_id","license_id","status","delivery_status","confirmation_status","receipt_reference","refund_status","dispute_status","entitlement_status","paid_at"]);
   const entries = Object.entries(fields).filter(([key]) => allowed.has(key));
   if (!entries.length) return;
   const values = entries.map(([key]) => `${key}=?`).join(",");

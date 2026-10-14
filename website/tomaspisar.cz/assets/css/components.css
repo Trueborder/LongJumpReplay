@@ -483,6 +483,26 @@ html.motion-ready .reveal.is-visible { opacity: 1; transform: none; }
 .inline-message[data-state="error"], .status[data-state="error"], .form-status[data-state="error"] { color: var(--coral); }
 .feedback-modal { width: min(500px, calc(100% - 2rem)); margin: auto; padding: clamp(1.3rem, 4vw, 2rem); border: 1px solid var(--apple-border-strong); border-radius: 22px; color: var(--text); background: var(--surface); box-shadow: 0 28px 80px rgba(45, 62, 65, .24); }
 .feedback-modal::backdrop { background: rgba(17, 25, 28, .24); backdrop-filter: blur(5px); }
+.purchase-open { overflow: hidden; }
+.purchase-modal { width: min(620px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; }
+.purchase-modal[open] { animation: purchase-enter 220ms cubic-bezier(.23, 1, .32, 1); }
+.purchase-modal[open]::backdrop { animation: purchase-backdrop 220ms ease-out; }
+.purchase-close { display: block; min-height: 44px; margin: -.5rem -.5rem .5rem auto; padding: .5rem .75rem; border: 0; border-radius: 10px; color: var(--muted); background: transparent; font: 500 .72rem var(--mono); cursor: pointer; }
+.purchase-close:hover { color: var(--text); background: var(--surface-2); }
+.purchase-summary { margin: 1.25rem 0; padding: 1rem; border: 1px solid var(--apple-border); border-radius: 14px; background: var(--surface-2); }
+.purchase-summary > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+#purchase-price { font-size: 1.35rem; font-weight: 600; }
+.purchase-summary p { font-size: .8rem; }
+.purchase-consents { display: grid; gap: .85rem; margin: 0; padding: 0; border: 0; }
+.purchase-consents legend { margin-bottom: .8rem; color: var(--muted); font: 500 .65rem var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.purchase-consents label { display: grid; grid-template-columns: 20px 1fr; align-items: start; gap: .7rem; cursor: pointer; font-size: .85rem; line-height: 1.5; }
+.purchase-consents input { width: 18px; height: 18px; margin: .16rem 0 0; accent-color: var(--cyan-strong); }
+.purchase-modal a { text-decoration: underline; text-underline-offset: 3px; }
+.purchase-modal .purchase-note { margin-top: .85rem; font-size: .75rem; }
+.purchase-modal .feedback-modal-actions .button { width: 100%; }
+@keyframes purchase-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes purchase-backdrop { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .purchase-modal[open], .purchase-modal[open]::backdrop { animation: none; } }
 .feedback-modal-kicker { color: var(--muted); font: 500 .63rem var(--mono); letter-spacing: .1em; }
 .feedback-modal h2 { margin: .55rem 0 .7rem; font: 600 clamp(1.8rem, 4vw, 2.6rem)/1 var(--display); letter-spacing: -.01em; }
 .feedback-modal p { margin: 0; color: var(--muted); line-height: 1.6; }

@@ -24,6 +24,7 @@ const dashboardPath = (path: string): boolean => {
 
 /** Resolve the public portal URLs while keeping auth policy out of asset code. */
 export function portalPageRoute(path: string, authenticated: boolean, setupRequired = false, lastProduct: "economysuite" | "longjumpreplay" | null = null): PortalPageRoute {
+  if (path === "/checkout" || path === "/checkout/") return { kind: "redirect", location: "https://tomaspisar.cz/products/long-jump-replay/#buy" };
   if (path === "/") {
     return { kind: "redirect", location: authenticated ? (setupRequired ? "/register?mode=migration" : lastProduct === "economysuite" ? "/economysuite/overview" : "/dashboard/overview") : "/login" };
   }

@@ -32,4 +32,20 @@ describe("LongJumpReplay purchase compliance", () => {
     expect(message.text).toContain("longjumpreplay-eula");
     expect(message.html).toContain("longjumpreplay-refunds");
   });
+
+  it.each(["payment", "subscription"] as const)("collects email in Stripe and uses valid %s metadata", async (mode) => {
+    let body = new URLSearchParams();
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      body = new URLSearchParams(String(init?.body ?? ""));
+      return Response.json({ id: "cs_test", url: "https://checkout.stripe.com/c/pay/test" });
+    }));
+    await stripeApi("sk_test_secret").createLongJumpReplayCheckout({ priceId: "price_test", mode,
+      orderId: "ljr_order_test", licenseType: mode === "payment" ? "lifetime" : "subscription",
+      successUrl: "https://ljr.tomaspisar.cz/dashboard/billing", cancelUrl: "https://tomaspisar.cz/products/long-jump-replay/#buy", policyVersions: LJR_POLICY_VERSIONS });
+    expect(body.has("customer_email")).toBe(false);
+    expect(body.get("line_items[0][price]")).toBe("price_test");
+    const target = mode === "subscription" ? "subscription_data" : "payment_intent_data";
+    expect(body.get(`${target}[metadata][order_id]`)).toBe("ljr_order_test");
+    if (mode === "subscription") expect(body.has("payment_intent_data[metadata][order_id]")).toBe(false);
+  });
 });

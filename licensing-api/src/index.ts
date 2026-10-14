@@ -352,6 +352,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
 
     return new Response(asset.body, { status: asset.status, headers });
   }
+  if (product === 'longjumpreplay' && (path === '/checkout' || path === '/checkout/')) return portalRedirect(request, 'https://tomaspisar.cz/products/long-jump-replay/#buy');
   const isPortalPage = ["/", "/login", "/login/", "/register", "/register/", "/dashboard", "/dashboard/", "/approve/pairing", "/approve/pairing/"].includes(path)
     || path.startsWith("/dashboard/");
   if (!isPortalPage) return null;
@@ -1991,7 +1992,7 @@ async function longJumpReplayCheckout(request: Request, env: Env): Promise<Respo
   const email = normaliseEmail(str(data.email));
   const priceId = str(data.price_id);
   const idempotencyKey = str(data.idempotency_key || request.headers.get("X-Idempotency-Key"));
-  if (!EMAIL_PATTERN.test(email) || !idempotencyKey || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) return fail("invalid_input", "Zadejte platný e-mail a identifikátor objednávky.", 422);
+  if ((email && !EMAIL_PATTERN.test(email)) || !idempotencyKey || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) return fail("invalid_input", "Neplatné údaje objednávky.", 422);
   if (data.accepted_purchase_terms !== true || data.immediate_delivery_requested !== true || data.withdrawal_rights_acknowledged !== true) return fail("legal_acceptance_required", "Před platbou potvrďte podmínky nákupu, okamžitou aktivaci a příslušné poučení o odstoupení.", 422);
   if (!env.STRIPE_SECRET_KEY || ![env.STRIPE_PRICE_LIFETIME, env.STRIPE_PRICE_SUBSCRIPTION].includes(priceId)) return fail("invalid_product", "Tento produkt není dostupný.", 422);
   const existing = await findLjrOrderByIdempotency(env.DB, idempotencyKey);
@@ -2025,7 +2026,7 @@ async function longJumpReplayCheckout(request: Request, env: Env): Promise<Respo
     const session = await stripeApi(env.STRIPE_SECRET_KEY).createLongJumpReplayCheckout({
       priceId, mode: licenseType === "subscription" ? "subscription" : "payment", email, orderId: order.id, licenseType,
       successUrl: `${env.PORTAL_ORIGIN}/dashboard/billing?order=${encodeURIComponent(order.id)}`,
-      cancelUrl: `${env.PORTAL_ORIGIN}/checkout?product=longjumpreplay&cancelled=1`, policyVersions: LJR_POLICY_VERSIONS,
+      cancelUrl: "https://tomaspisar.cz/products/long-jump-replay/#buy", policyVersions: LJR_POLICY_VERSIONS,
     });
     await updateLjrOrderCheckout(env.DB, order.id, session.id);
     await appendLjrOrderEvent(env.DB, order.id, "checkout_created", null, { stripe_session_id: session.id });
@@ -2044,6 +2045,7 @@ async function handleLjrCheckoutCompleted(env: Env, event: StripeEvent): Promise
   if (order.license_id && order.status === "paid") return;
   if (session.payment_status && session.payment_status !== "paid") { await updateLjrOrder(env.DB, order.id, { status: "payment_failed" }); return; }
   const email = normaliseEmail(String(session.customer_details?.email ?? session.customer_email ?? order.email));
+  if (!EMAIL_PATTERN.test(email)) throw new Error("Paid checkout has no valid delivery email");
   const customer = await upsertCustomer(env.DB, email, session.customer ?? null);
   const subscriptionId = session.subscription ?? null;
   let license = order.license_id ? await findLicenseById(env.DB, order.license_id) : null;
@@ -2053,7 +2055,7 @@ async function handleLjrCheckoutCompleted(env: Env, event: StripeEvent): Promise
     try { periodEnd = (await stripeApi(env.STRIPE_SECRET_KEY).getSubscription(subscriptionId)).current_period_end ?? null; } catch { /* subscription event will resync */ }
   }
   if (!license) license = await createLicense(env.DB, { customerId: customer.id, type: order.license_type, maxDevices: settings(env).maxDevices, stripeCustomerId: session.customer ?? null, stripeSubscriptionId: subscriptionId, stripePriceId: order.stripe_price_id, currentPeriodEnd: periodEnd });
-  await updateLjrOrder(env.DB, order.id, { customer_id: customer.id, stripe_customer_id: session.customer ?? null, payment_intent_id: session.payment_intent ?? null, stripe_subscription_id: subscriptionId, license_id: license.id, status: "paid", delivery_status: "delivered", entitlement_status: "active", paid_at: now(), receipt_reference: session.invoice ?? session.payment_intent ?? null });
+  await updateLjrOrder(env.DB, order.id, { email, customer_id: customer.id, stripe_customer_id: session.customer ?? null, payment_intent_id: session.payment_intent ?? null, stripe_subscription_id: subscriptionId, license_id: license.id, status: "paid", delivery_status: "delivered", entitlement_status: "active", paid_at: now(), receipt_reference: session.invoice ?? session.payment_intent ?? null });
   await appendLjrOrderEvent(env.DB, order.id, "licence_delivered", event.id, { license_id: license.id });
   try {
     await mailer(env).send(email, longJumpReplayOrderConfirmationEmail({ orderId: order.id, productName: order.product_name, licenseType: order.license_type, priceMinor: order.displayed_price_minor, currency: order.currency, paidAt: now(), deliveryUrl: `${env.PORTAL_ORIGIN}/dashboard/billing`, purchaseUrl: "https://tomaspisar.cz/legal/longjumpreplay-purchases/", eulaUrl: "https://tomaspisar.cz/legal/longjumpreplay-eula/", refundUrl: "https://tomaspisar.cz/legal/longjumpreplay-refunds/", privacyUrl: "https://tomaspisar.cz/products/long-jump-replay/privacy/", supportEmail: LJR_SUPPORT_EMAIL, receiptReference: session.invoice ?? session.payment_intent ?? null }));

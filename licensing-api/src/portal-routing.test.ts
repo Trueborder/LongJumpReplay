@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { portalPageRoute } from "./portal-routing";
 
 describe("customer portal page routing", () => {
+  it("retires the duplicate checkout selection page", () => {
+    for (const path of ["/checkout", "/checkout/"]) {
+      expect(portalPageRoute(path, false)).toEqual({ kind: "redirect", location: "https://tomaspisar.cz/products/long-jump-replay/#buy" });
+    }
+  });
   it("sends the account root to the correct first screen", () => {
     expect(portalPageRoute("/", false)).toEqual({ kind: "redirect", location: "/login" });
     expect(portalPageRoute("/", true)).toEqual({ kind: "redirect", location: "/dashboard/overview" });
