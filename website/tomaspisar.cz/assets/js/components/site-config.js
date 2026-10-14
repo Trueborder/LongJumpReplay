@@ -26,7 +26,7 @@ window.SITE_CONFIG = {
     relayLab: {
       key: "relaylab",
       name: "RelayLab",
-      route: "/products/relaylab/",
+      route: "https://relaylab.tomaspisar.cz/",
       platform: "Web",
       status: "Available"
     }

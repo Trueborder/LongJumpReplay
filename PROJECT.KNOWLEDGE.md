@@ -1,5 +1,13 @@
 # Long Jump Replay — Project Knowledge
 
+## RelayLab domain migration (2026-10-14)
+
+- RelayLab's canonical URL is `https://relaylab.tomaspisar.cz/`. The public `longjumpreplay` Worker serves its existing HTML at the new host root, with shared assets and same-origin swimming API routes. Public navigation points back to tomaspisar.cz.
+- `/products/relaylab`, `/software/relaylab` and `/swimming/relaylab` permanently redirect to the new domain, preserving suffixes and queries. Catalog links, site config, canonical/Open Graph URL and sitemaps use the new origin.
+- Wrangler declares all three public Worker custom domains and runs the Worker before assets so root rewriting and old-page redirects cannot be bypassed by static HTML. RelayLab has its own robots/sitemap; other public page paths on its host redirect to the main site.
+
+- Validation: all 97 website tests, JavaScript syntax, deployment dry run and diff checks pass; application self-test passes. Public Worker version `b9f3e0ba-06d2-4d25-a0e6-449d775e9301` is live. HTTPS app/assets/API return 200, all three legacy RelayLab entry points return 301, and browser search shows real swimmer suggestions on the new hostname.
+
 ## Shared account text encoding repair (2026-10-14)
 
 - Corrected mis-encoded UTF-8 strings in `website/tomaspisar.cz/assets/js/account/account.js`, including the Czech login button, OTP/reset buttons, registration labels and login status messages. The shared script serves both LongJumpReplay and Pantheon accounts; authentication and API behavior are unchanged.

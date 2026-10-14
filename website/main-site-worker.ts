@@ -2,6 +2,21 @@ interface SiteEnv {
   ASSETS: Fetcher;
 }
 
+const RELAYLAB_ORIGIN = 'https://relaylab.tomaspisar.cz';
+const PUBLIC_ORIGIN = 'https://tomaspisar.cz';
+const RELAYLAB_PATHS = ['/products/relaylab', '/software/relaylab', '/swimming/relaylab'];
+
+function migrationDestination(origin: string, pathname: string, search: string): URL {
+  const destination = new URL(origin);
+  destination.pathname = pathname;
+  destination.search = search;
+  return destination;
+}
+
+function permanentRedirect(destination: URL): Response {
+  return new Response(null, { status: 301, headers: { location: destination.toString(), 'cache-control': 'public, max-age=3600' } });
+}
+
 const SWIMMING_API = 'https://vysledky.czechswimming.cz/cz.zma.csps.portal.rest/api/public';
 const SWIMMING_ORIGIN = 'https://vysledky.czechswimming.cz';
 
@@ -50,7 +65,7 @@ async function upstream(path: string, cacheSeconds: number): Promise<Response> {
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const response = await fetch(`${SWIMMING_API}${path}`, {
-      headers: { accept: 'application/json', 'user-agent': 'RelayLab/1.0 (+https://tomaspisar.cz)' },
+      headers: { accept: 'application/json', 'user-agent': 'RelayLab/1.0 (+https://relaylab.tomaspisar.cz)' },
       signal: controller.signal
     });
     if (!response.ok) return response;
@@ -150,6 +165,25 @@ async function handleSwimmingApi(request: Request, url: URL): Promise<Response> 
 export default {
   async fetch(request: Request, env: SiteEnv): Promise<Response> {
     const url = new URL(request.url);
+    // Run before asset lookup so the old HTML and the new host's root cannot bypass routing.
+    for (const prefix of RELAYLAB_PATHS) {
+      if (url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)) {
+        const suffix = url.pathname.slice(prefix.length).replace(/^\/index\.html$/, '/');
+        return permanentRedirect(migrationDestination(RELAYLAB_ORIGIN, suffix || '/', url.search));
+      }
+    }
+    if (url.hostname === 'relaylab.tomaspisar.cz') {
+      if (url.pathname === '/') {
+        const assetUrl = new URL('/products/relaylab/', url.origin);
+        return env.ASSETS.fetch(new Request(assetUrl, request));
+      }
+      if (url.pathname === '/index.html') return permanentRedirect(new URL(`/${url.search}`, RELAYLAB_ORIGIN));
+      if (url.pathname === '/robots.txt') return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${RELAYLAB_ORIGIN}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      if (url.pathname === '/sitemap.xml') return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${RELAYLAB_ORIGIN}/</loc></url></urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8' } });
+      if (!url.pathname.startsWith('/assets/') && !url.pathname.startsWith('/api/swimming/')) {
+        return permanentRedirect(migrationDestination(PUBLIC_ORIGIN, url.pathname, url.search));
+      }
+    }
     if (url.pathname.startsWith('/api/swimming/')) return handleSwimmingApi(request, url);
     const redirectTarget = legacyRouteRedirect(url.pathname) || REDIRECTS[url.pathname];
     if (redirectTarget) {
