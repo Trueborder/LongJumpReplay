@@ -81,7 +81,7 @@
   };
   const copy = {
     en: {
-      passwordLength: 'Use a password with at least 12 characters.', signingIn: 'Signing inâ€¦', resetSent: 'If the account can reset a password, a code is on the way. It is valid for 10 minutes.',
+      passwordLength: 'Use a password with at least 12 characters.', signingIn: 'Signing in…', resetSent: 'If the account can reset a password, a code is on the way. It is valid for 10 minutes.',
       expiredCode: 'This code has expired. Request a new one.', verified: 'Verified. Opening your account…',
       sending: 'Sending code…', checking: 'Checking code…', sent: 'A code is on the way. It is valid for 10 minutes.',
       invalidEmail: 'Enter a valid email address.', invalidCode: 'Enter the six-digit code from your email.',
@@ -103,7 +103,7 @@
       pairingRequired: 'Enter the six-digit code shown by LongJumpReplay or open the QR link.', pairingFound: 'Computer found. Choose an active licence with an available slot.', pairingApproved: 'Approved. The app can finish activation now.', pairingNoCapacity: 'No active licence has an available computer slot.', pairingExpired: 'This pairing request is missing or expired.', pairingSameMachine: 'Already used by this computer', pairingAvailable: 'available slot', pairingApprove: 'Approve and activate'
     },
     cs: {
-      passwordLength: 'PouÅ¾ijte heslo dlouhÃ© alespoÅˆ 12 znakÅ¯.', signingIn: 'PÅ™ihlaÅ¡ujiâ€¦', resetSent: 'Pokud lze heslo obnovit, kÃ³d je na cestÄ›. PlatÃ­ 10 minut.',
+      passwordLength: 'Použijte heslo dlouhé alespoň 12 znaků.', signingIn: 'Přihlašuji…', resetSent: 'Pokud lze heslo obnovit, kód je na cestě. Platí 10 minut.',
       expiredCode: 'Kód vypršel. Požádejte o nový.', verified: 'Ověřeno. Otevírám účet…',
       sending: 'Odesílám kód…', checking: 'Ověřuji kód…', sent: 'Kód je na cestě. Platí 10 minut.',
       invalidEmail: 'Zadejte platnou e-mailovou adresu.', invalidCode: 'Zadejte šestimístný kód z e-mailu.',
@@ -242,7 +242,7 @@
       const pendingPairing = readPendingPairing();
       window.setTimeout(() => window.location.replace(pendingPairing ? `/approve/pairing#pair=${encodeURIComponent(pendingPairing)}` : '/dashboard/overview'), 180);
     };
-    const setText = (selector, en, cs) => { const element = $(selector); if (element) element.textContent = state.lang === 'cs' ? cs : en; };
+    const setText = (selector, en, cs) => { const element = $(selector); if (element) { element.dataset.en = en; element.dataset.cs = cs; element.textContent = state.lang === 'cs' ? cs : en; } };
     const setMode = (mode) => {
       loginState.mode = mode;
       loginState.codeSent = false;
@@ -261,7 +261,7 @@
       $('#resend-code').hidden = true;
       $('#password').required = mode === 'password';
       $('#code').required = false;
-      setText('#login-submit', mode === 'otp' ? 'Continue' : mode === 'reset' ? 'Send reset code' : 'Sign in', mode === 'otp' ? 'PokraÄovat' : mode === 'reset' ? 'Poslat kÃ³d pro obnovu' : 'PÅ™ihlÃ¡sit se');
+      setText('#login-submit', mode === 'otp' ? 'Continue' : mode === 'reset' ? 'Send reset code' : 'Sign in', mode === 'otp' ? 'Pokračovat' : mode === 'reset' ? 'Poslat kód pro obnovu' : 'Přihlásit se');
       setStatus('', '#login-status');
       (mode === 'password' ? $('#password') : $('#email')).focus();
     };
@@ -272,7 +272,7 @@
       try {
         await api('/api/portal/request-code', { method: 'POST', body: JSON.stringify({ email }) });
         loginState.codeSent = true; $('#password-step').hidden = true; $('#code-field').hidden = false; $('#change-email').hidden = false; $('#resend-code').hidden = false; $('#login-mode-actions').hidden = true; $('#reset-actions').hidden = false;
-        setText('#login-submit', 'Verify code', 'OvÄ›Å™it kÃ³d'); setStatus(t('sent'), '#login-status'); $('#code').focus();
+        setText('#login-submit', 'Verify code', 'Ověřit kód'); setStatus(t('sent'), '#login-status'); $('#code').focus();
       } catch (error) { setStatus(error, '#login-status', 'error'); } finally { setLoginBusy(false); }
     };
     const verifyOtp = async () => {
@@ -614,7 +614,7 @@
     if (!form) return;
     const migration = new URLSearchParams(window.location.search).get('mode') === 'migration';
     const registrationState = { step: 'email', codeSent: false, setupToken: '', passwordRequired: true };
-    const setText = (selector, en, cs) => { const element = $(selector); if (element) element.textContent = state.lang === 'cs' ? cs : en; };
+    const setText = (selector, en, cs) => { const element = $(selector); if (element) { element.dataset.en = en; element.dataset.cs = cs; element.textContent = state.lang === 'cs' ? cs : en; } };
     const busy = (value) => { const button = $('#register-submit'); if (button) { button.disabled = value; button.setAttribute('aria-busy', String(value)); } };
     const step = (value) => {
       registrationState.step = value;
@@ -623,7 +623,7 @@
       $('#register-details-step').hidden = value !== 'details';
       $('#register-change-email').hidden = value === 'email' || value === 'details';
       $('#register-resend-code').hidden = value !== 'code';
-      setText('#register-submit', value === 'email' ? 'Continue' : value === 'code' ? 'Verify email' : 'Create account', value === 'email' ? 'Continue' : value === 'code' ? 'OvÄ›Å™it e-mail' : 'VytvoÅ™it ÃºÄet');
+      setText('#register-submit', value === 'email' ? 'Continue' : value === 'code' ? 'Verify email' : 'Create account', value === 'email' ? 'Pokračovat' : value === 'code' ? 'Ověřit e-mail' : 'Vytvořit účet');
       if (value === 'email') $('#register-email').focus();
       if (value === 'code') $('#register-code').focus();
       if (value === 'details') (playerProduct ? $('#register-password') : $('#register-first-name')).focus();

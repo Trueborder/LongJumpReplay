@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## Shared account text encoding repair (2026-10-14)
+
+- Corrected mis-encoded UTF-8 strings in `website/tomaspisar.cz/assets/js/account/account.js`, including the Czech login button, OTP/reset buttons, registration labels and login status messages. The shared script serves both LongJumpReplay and Pantheon accounts; authentication and API behavior are unchanged.
+- Dynamic login/registration button labels update both language data attributes, preventing a language switch from restoring stale text for a different form step.
+- Regression tests reject mojibake and execute the login mode handler to check the Czech labels for password, OTP and reset flows. Production verification must check the served JavaScript and rendered Czech button, not just the static HTML label.
+- All 92 website tests, JavaScript syntax and diff checks pass; the public Worker deployment dry run passes. Live deployment was blocked by the approval check pending explicit owner approval, so the corrected strings are not yet confirmed live.
+
 ## PANTHEON restrained motion (2026-10-14)
 
 - EconomySuite extends its existing motion tokens in `app.css`: reversible native navigation drawer transitions, pointer press feedback, immediate keyboard actions and reduced-motion fallbacks. Dashboard panels and pairing steps no longer replay entrance animations when data or filters re-render. Loading placeholders use opacity rather than animated background painting. Styles stay in the existing served asset allowlist; no Worker routing changes are needed.
