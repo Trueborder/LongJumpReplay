@@ -6,13 +6,87 @@
   const playerProduct = location.hostname === 'account.pantheon.tomaspisar.cz';
   document.querySelector('link[rel=canonical]')?.setAttribute('href', location.origin + location.pathname);
   const playerNext = /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games)$/.test(productParams.get('next') || '') ? productParams.get('next') : '/economysuite/overview';
+  function compactPlayerRegistration() {
+    document.body.classList.add('player-register-page');
+    const card = document.querySelector('.register-card');
+    const bar = document.createElement('div');
+    bar.className = 'login-card-bar';
+    const home = document.createElement('a');
+    home.className = 'login-home-link';
+    home.href = 'https://tomaspisar.cz/';
+    home.setAttribute('aria-label', 'Novaryn Solutions');
+    home.append(document.querySelector('.site-header .brand-mark'));
+    bar.append(home, document.querySelector('[data-lang-toggle]'));
+    card.prepend(bar);
+    const oldHeading = document.querySelector('#register-form-title');
+    const heading = document.createElement('h1');
+    heading.id = oldHeading.id;
+    heading.dataset.en = 'Create account';
+    heading.dataset.cs = 'Vytvořit účet';
+    heading.textContent = document.documentElement.lang === 'cs' ? heading.dataset.cs : heading.dataset.en;
+    oldHeading.replaceWith(heading);
+    const product = document.createElement('p');
+    product.className = 'register-product-label';
+    product.textContent = 'Pantheon / EconomySuite';
+    heading.before(product);
+    document.querySelector('.account-login').setAttribute('aria-labelledby', heading.id);
+  }
+  function showPlayerPairingGuide() {
+    let pending;
+    try { pending = JSON.parse(sessionStorage.getItem('es-pair') || 'null'); } catch { /* no pending pairing */ }
+    const incoming = new URLSearchParams(location.hash.slice(1)).get('pair') || new URLSearchParams(location.search).get('pair');
+    const valid = token => /^[A-Za-z0-9_-]{20,256}$/.test(token || '');
+    if (!valid(incoming) && !(valid(pending?.token) && Number(pending.expires) > Date.now())) return;
+    const translated = (tag, cs, en) => {
+      const node = document.createElement(tag);
+      node.dataset.cs = cs;
+      node.dataset.en = en;
+      node.textContent = document.documentElement.lang === 'cs' ? cs : en;
+      return node;
+    };
+    document.body.classList.add('player-pairing-page');
+    const guide = document.createElement('aside');
+    guide.className = 'register-pairing-guide';
+    guide.setAttribute('aria-labelledby', 'register-pairing-title');
+    const title = translated('h2', 'Propojení účtu', 'Pair your account');
+    title.id = 'register-pairing-title';
+    const steps = document.createElement('ol');
+    steps.className = 'es-onboarding-steps';
+    const instructions = [
+      ['Otevři portál a přihlas se', 'Open the portal and sign in', 'Zadej e-mail a vytvoř si účet. Už máš účet? Použij odkaz na přihlášení.', 'Enter your email and create an account. Already registered? Use the sign-in link.'],
+      ['Potvrď svého hráče', 'Confirm your player', 'Po přihlášení zkontroluj Minecraft jméno a potvrď, že patří tobě.', 'After signing in, check the Minecraft name and confirm it belongs to you.'],
+      ['Dokonči propojení ve hře', 'Finish in Minecraft', 'Zkopíruj příkaz z portálu a odešli ho v chatu Minecraftu.', 'Copy the command from the portal and send it in Minecraft chat.']
+    ];
+    instructions.forEach(([cs, en, csDetail, enDetail], index) => {
+      const step = document.createElement('li');
+      step.className = 'es-onboarding-step' + (index === 0 ? ' is-active' : '');
+      if (index === 0) step.setAttribute('aria-current', 'step');
+      const number = document.createElement('span');
+      number.className = 'es-onboarding-number';
+      number.setAttribute('aria-hidden', 'true');
+      number.textContent = String(index + 1);
+      const copy = document.createElement('div');
+      if (index === 0) {
+        const next = translated('span', 'Další krok', 'Next step');
+        next.className = 'es-next-label';
+        copy.append(next);
+      }
+      copy.append(translated('strong', cs, en), translated('span', csDetail, enDetail));
+      step.append(number, copy);
+      steps.append(step);
+    });
+    guide.append(title, steps);
+    document.querySelector('.account-login-grid').append(guide);
+  }
   if (playerProduct && page === 'register') {
+    compactPlayerRegistration();
     const pairingToken = new URLSearchParams(window.location.hash.slice(1)).get('pair');
     if (pairingToken && /^[A-Za-z0-9_-]{20,256}$/.test(pairingToken)) {
       sessionStorage.setItem('es-pair', JSON.stringify({ token: pairingToken, expires: Date.now() + 300000 }));
       history.replaceState({}, '', location.pathname + location.search);
     }
   }
+  if (playerProduct && ['login', 'register'].includes(page)) showPlayerPairingGuide();
   if (page === 'login') {
     const loginProduct = playerProduct ? 'economysuite' : 'longjumpreplay';
     document.querySelectorAll('[data-login-product]').forEach((link) => {

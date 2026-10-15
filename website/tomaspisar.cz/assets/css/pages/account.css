@@ -779,3 +779,30 @@
   from { opacity: 0; transform: translateY(12px) scale(.985); }
   to { opacity: 1; transform: none; }
 }
+
+/* Pantheon registration reuses the focused login card and its language control. */
+.player-register-page > .site-header,
+.player-register-page > .site-footer,
+.player-register-page .login-context { display: none; }
+.player-register-page .account-login { display: grid; }
+.player-register-page .account-login-grid { gap: 0; }
+.player-register-page .register-product-label { margin: 0 0 .65rem; color: #496168; font: 500 .72rem/1.5 var(--mono); }
+.player-register-page #register-status:empty { display: none; }
+
+/* The pairing guide occupies the free right margin; the auth card stays centered. */
+.player-pairing-page .account-login-grid { position: relative; }
+.register-pairing-guide { position: absolute; left: calc(50% + 278px); top: 50%; transform: translateY(-50%); width: min(320px, calc(50vw - 298px)); padding: 22px; border: 1px solid #d5ded3; border-radius: 16px; background: #fffefa; color: #16383a; box-shadow: 0 12px 32px rgba(21,49,57,.06); }
+.register-pairing-guide h2 { margin: 0 0 18px; font-size: 1.6rem; line-height: 1.15; }
+.register-pairing-guide .es-onboarding-steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; }
+.register-pairing-guide .es-onboarding-step { display: grid; grid-template-columns: 30px 1fr; gap: 11px; align-items: start; padding: 10px 0; color: #637369; }
+.register-pairing-guide .es-onboarding-step strong,.register-pairing-guide .es-onboarding-step span { display: block; }
+.register-pairing-guide .es-onboarding-step strong { font-size: 13px; line-height: 1.45; }
+.register-pairing-guide .es-onboarding-step div > span { margin-top: 4px; font-size: 12px; line-height: 1.5; }
+.register-pairing-guide .es-onboarding-number { display: grid!important; width: 30px; height: 30px; place-items: center; border: 1px solid #cfdacf; border-radius: 50%; font-size: 12px; font-weight: 800; }
+.register-pairing-guide .es-onboarding-step.is-active { padding: 12px; margin: 0 -10px; border: 1px solid #8ab7a1; border-left: 4px solid #21694f; border-radius: 12px; background: #edf6ee; color: #21694f; box-shadow: 0 0 0 3px rgba(33,105,79,.06),0 0 20px rgba(33,105,79,.1); }
+.register-pairing-guide .is-active .es-onboarding-number { border-color: #21694f; background: #e5f0e2; box-shadow: 0 0 0 4px rgba(33,105,79,.08); }
+.register-pairing-guide .es-next-label { margin: 0 0 4px!important; color: #21694f; font-size: 10px!important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 1160px) {
+  .register-pairing-guide { position: static; width: min(100%, 500px); margin: 24px auto 0; transform: none; }
+  .player-pairing-page .account-login-grid { display: flex; flex-direction: column; align-items: center; }
+}

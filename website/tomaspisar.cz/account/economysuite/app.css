@@ -165,6 +165,10 @@ body.es-portal{padding-top:0}
 /* Extend the portal's existing motion tokens. Never replay reading surfaces
    when polling, language changes or filters re-render dashboard data. */
 #content > .es-panel,#content > .es-grid > .es-panel,#content > .es-thanks,.es-onboarding-step{animation:none}
+.es-onboarding-step.is-active{padding:14px;border:1px solid #8ab7a1;border-left:4px solid var(--es-green);border-radius:12px;background:#edf6ee;box-shadow:0 0 0 3px rgba(33,105,79,.06)}
+.es-onboarding-step .es-next-label{margin:0 0 5px;color:#21694f;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.es-onboarding-card.is-next{border:2px solid var(--es-green);box-shadow:0 0 0 4px rgba(33,105,79,.08)}
+.es-onboarding-card.is-next #copy-pair-command{color:#fff;background:var(--es-green);border-color:var(--es-green);font-weight:700}
 .es-command:focus-visible{transform:none}
 .es-skeleton{animation:es-loading-fade 1350ms ease-in-out infinite}
 @keyframes es-loading-fade{50%{opacity:.65}}

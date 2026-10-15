@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## Pantheon registration and pairing clarity (2026-10-15)
+
+- EconomySuite registration uses the existing centered login card, logo and working CZ/EN control without the public header, hero or product selector. The shared account script scopes this presentation to player registration; LongJumpReplay registration and authentication stay unchanged.
+- Pairing presents three numbered steps, marks the current step with `aria-current="step"` and a green next-step label, and highlights the matching action card. Completion removes the next-step highlight. Existing fragment/session pairing tokens and account authorization remain unchanged.
+- A valid incoming or unexpired session pairing token also shows the same three-step guide beside registration/sign-in. The auth card stays centered independently; the guide moves below it on narrower screens. Its translated text participates in the existing CZ/EN switch.
+- Regression tests execute the compact registration and pairing guide in both languages. Local browser fixtures verify registration and the player-approval/command stages without creating accounts or binding real players.
+
 ## RelayLab domain migration (2026-10-14)
 
 - RelayLab's canonical URL is `https://relaylab.tomaspisar.cz/`. The public `longjumpreplay` Worker serves its existing HTML at the new host root, with shared assets and same-origin swimming API routes. Public navigation points back to tomaspisar.cz.

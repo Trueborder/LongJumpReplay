@@ -6,7 +6,7 @@ const base = path.join(__dirname,'../tomaspisar.cz/account/economysuite');
 const css = fs.readFileSync(path.join(base,'app.css'),'utf8').split('/* Extend the portal')[1];
 test('portal loads scoped motion in its existing stylesheet and disables repeated data entrances',()=>{
   const html=fs.readFileSync(path.join(base,'index.html'),'utf8');
-  assert.ok(html.includes('/economysuite/app.css?v=20261014-motion'));
+  assert.ok(html.includes('/economysuite/app.css?v=20261015-onboarding'));
   assert.match(css,/#content[^\n]+animation:none/);
   assert.match(css,/\.es-command:focus-visible\{transform:none\}/);
 });
