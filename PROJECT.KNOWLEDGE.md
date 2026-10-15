@@ -5,7 +5,7 @@
 - EconomySuite registration uses the existing centered login card, logo and working CZ/EN control without the public header, hero or product selector. The shared account script scopes this presentation to player registration; LongJumpReplay registration and authentication stay unchanged.
 - Pairing presents three numbered steps, marks the current step with `aria-current="step"` and a green next-step label, and highlights the matching action card. Completion removes the next-step highlight. Existing fragment/session pairing tokens and account authorization remain unchanged.
 - A valid incoming or unexpired session pairing token also shows the same three-step guide beside registration/sign-in. The auth card stays centered independently; the guide moves below it on narrower screens. Its translated text participates in the existing CZ/EN switch.
-- The current step has a gentle two-second alternating glow in the auth guide and portal. Only a decorative pseudo-element's opacity animates; content stays still, completed steps do not pulse, and reduced-motion uses a static glow.
+- The current step has a clearly visible green outline, halo and tint pulsing over 1.6 seconds in the auth guide and portal. Only a decorative pseudo-element's opacity animates; content stays still, completed steps do not pulse, and reduced-motion uses a static glow.
 - Regression tests execute the compact registration and pairing guide in both languages. Local browser fixtures verify registration and the player-approval/command stages without creating accounts or binding real players.
 
 ## RelayLab domain migration (2026-10-14)

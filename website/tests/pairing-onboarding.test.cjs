@@ -85,7 +85,7 @@ test('current-step glow animates only its decorative opacity and respects reduce
   for (const file of ['assets/css/pages/account.css', 'account/economysuite/app.css']) {
     const css = fs.readFileSync(path.join(root, file), 'utf8');
     assert.match(css, /\.is-active::after\s*\{[^}]*pointer-events:\s*none[^}]*animation:\s*pairing-next-glow/);
-    assert.match(css, /@keyframes pairing-next-glow\s*\{\s*from\s*\{\s*opacity:\s*\.15;?\s*\}\s*to\s*\{\s*opacity:\s*\.85;?\s*\}\s*\}/);
+    assert.match(css, /@keyframes pairing-next-glow\s*\{\s*from\s*\{\s*opacity:\s*\.12;?\s*\}\s*to\s*\{\s*opacity:\s*1;?\s*\}\s*\}/);
     assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*[^}]*\.is-active::after\s*\{\s*animation:\s*none/);
   }
 });

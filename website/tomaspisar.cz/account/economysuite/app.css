@@ -167,8 +167,8 @@ body.es-portal{padding-top:0}
 #content > .es-panel,#content > .es-grid > .es-panel,#content > .es-thanks,.es-onboarding-step{animation:none}
 .es-onboarding-step.is-active{padding:14px;border:1px solid #8ab7a1;border-left:4px solid var(--es-green);border-radius:12px;background:#edf6ee;box-shadow:0 0 0 3px rgba(33,105,79,.06)}
 .es-onboarding-step.is-active{position:relative}
-.es-onboarding-step.is-active::after{content:'';position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;box-shadow:0 0 0 3px rgba(33,105,79,.15),0 0 22px rgba(33,105,79,.25);animation:pairing-next-glow 2s cubic-bezier(.77,0,.175,1) infinite alternate}
-@keyframes pairing-next-glow{from{opacity:.15}to{opacity:.85}}
+.es-onboarding-step.is-active::after{content:'';position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;box-shadow:0 0 0 4px rgba(23,145,84,.5),0 0 32px rgba(23,145,84,.55),inset 0 0 0 2px rgba(23,145,84,.3);background:rgba(39,174,96,.09);animation:pairing-next-glow 1.6s cubic-bezier(.77,0,.175,1) infinite alternate}
+@keyframes pairing-next-glow{from{opacity:.12}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.es-onboarding-step.is-active::after{animation:none;opacity:.35}}
 .es-onboarding-step .es-next-label{margin:0 0 5px;color:#21694f;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .es-onboarding-card.is-next{border:2px solid var(--es-green);box-shadow:0 0 0 4px rgba(33,105,79,.08)}
