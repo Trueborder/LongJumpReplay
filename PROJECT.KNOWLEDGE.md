@@ -2,6 +2,7 @@
 
 ## Pantheon registration and pairing clarity (2026-10-15)
 
+- Temporary owner-requested visual testing link: the single `/preview/pairing-*` rule in `website/tomaspisar.cz/_redirects` redirects to the real Pantheon registration page with a synthetic fragment. It creates no pairing challenge and cannot bind a player. Keep it until the owner asks for removal; then remove only this redirect rule, redeploy the public Worker, verify its URL returns 404 and clean the task-created fixture files. The exact URL and cleanup checklist are recorded in `outputs/temporary-pairing-preview.json`; preserve unrelated outputs and the rollback JAR.
 - EconomySuite registration uses the existing centered login card, logo and working CZ/EN control without the public header, hero or product selector. The shared account script scopes this presentation to player registration; LongJumpReplay registration and authentication stay unchanged.
 - Pairing presents three numbered steps, marks the current step with `aria-current="step"` and a green next-step label, and highlights the matching action card. Completion removes the next-step highlight. Existing fragment/session pairing tokens and account authorization remain unchanged.
 - A valid incoming or unexpired session pairing token also shows the same three-step guide beside registration/sign-in. The auth card stays centered independently; the guide moves below it on narrower screens. Its translated text participates in the existing CZ/EN switch.
