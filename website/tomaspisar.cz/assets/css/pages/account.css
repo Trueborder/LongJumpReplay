@@ -802,6 +802,10 @@
 .register-pairing-guide .es-onboarding-step.is-active { padding: 12px; margin: 0 -10px; border: 1px solid #8ab7a1; border-left: 4px solid #21694f; border-radius: 12px; background: #edf6ee; color: #21694f; box-shadow: 0 0 0 3px rgba(33,105,79,.06),0 0 20px rgba(33,105,79,.1); }
 .register-pairing-guide .is-active .es-onboarding-number { border-color: #21694f; background: #e5f0e2; box-shadow: 0 0 0 4px rgba(33,105,79,.08); }
 .register-pairing-guide .es-next-label { margin: 0 0 4px!important; color: #21694f; font-size: 10px!important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.register-pairing-guide .is-active { position: relative; }
+.register-pairing-guide .is-active::after { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 3px rgba(33,105,79,.15),0 0 22px rgba(33,105,79,.25); animation: pairing-next-glow 2s cubic-bezier(.77,0,.175,1) infinite alternate; }
+@keyframes pairing-next-glow { from { opacity: .15; } to { opacity: .85; } }
+@media (prefers-reduced-motion: reduce) { .register-pairing-guide .is-active::after { animation: none; opacity: .35; } }
 @media (max-width: 1160px) {
   .register-pairing-guide { position: static; width: min(100%, 500px); margin: 24px auto 0; transform: none; }
   .player-pairing-page .account-login-grid { display: flex; flex-direction: column; align-items: center; }
