@@ -1,5 +1,13 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite daily website reward (2026-10-17)
+
+- EconomySuite 2.41.1 adds a free 1–5-token claim in the account overview and store. It is separate from Minecraft `/daily`, requires a verified linked player and authenticated/CSRF-protected POST, and needs neither a purchase nor a rank. Normal gameplay token eligibility remains authoritative; earned tokens wait in the existing pending wallet when necessary.
+- Apply `licensing-api/economysuite-migrations/0008_web_daily_rewards.sql` after previous migrations. A unique Minecraft UUID/Prague calendar-day claim and transactional outbox preserve the first random amount under concurrent requests, retries and account relinking. Reset is midnight Europe/Prague, including DST, not a rolling 24-hour cooldown.
+- New `web_daily` operations use the existing signed outbound bridge and are only polled by `web_daily_version: 1` plugins. Offline/older servers leave them queued. SQLite credit, token ledger, per-day evidence and operation acknowledgment share a transaction. No Stripe products, rank-time rules, active-play counters or in-game calendar grants are changed.
+- The website polls delivery status without replacing other forms. The existing 10-line game checklist merges `Hra` and `Web` onto one short daily row with independent click actions. The same combined state feeds the rotating bossbar and disappears only once both are claimed. Unavailable/stale remote data remains unknown, not falsely complete.
+- Validation and activation instructions are in `docs/ECONOMYSUITE_WEB_DAILY_2.41.1.md`. Local checks are not a Paper/client test or production deployment. Existing rank sales remain opt-in and were not enabled by this update.
+
 ## EconomySuite weekly supporter ranks (2026-10-17)
 
 - EconomySuite 2.41.0 adds VIP/VIP+/MVP as distinct seven-day rank products, with 39/69/99 Kč one-time prices. The existing account store and payment bridge are reused; LongJumpReplay licensing and currency fulfillment are unchanged. Time starts at the verified payment timestamp, including offline time; higher ranks pause lower-tier remaining time.

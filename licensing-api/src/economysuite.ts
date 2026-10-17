@@ -1,4 +1,5 @@
 import { rankProduct, rankDelivery, RANK_WEEK_SECONDS, type RankId } from './economysuite-ranks';
+import { dailyStatus, claimDaily, rewardDay } from './economysuite-daily';
 import { gamesRoute, gameAcknowledgment, RULES_VERSION } from './economysuite-games';
 import type { Env } from './config';
 import { generateToken, sha256, timingSafeEqual, verifyPassword } from './crypto';
@@ -224,11 +225,14 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
   if (path.endsWith('/poll')) {
     const version = data.games_version === RULES_VERSION ? RULES_VERSION : null;
     await db.prepare("UPDATE bridge_status SET ranks_version=? WHERE server='pantheon'").bind(data.ranks_version === 1 ? 1 : 0).run();
+    await db.prepare("UPDATE bridge_status SET web_daily_version=? WHERE server='pantheon'").bind(data.web_daily_version === 1 ? 1 : 0).run();
     await db.prepare("UPDATE bridge_status SET games_version=?,games_enabled=? WHERE server='pantheon'").bind(version, version && data.games_enabled === true ? 1 : 0).run();
     await db.prepare('DELETE FROM bridge_nonces WHERE expires_at<?').bind(now()).run();
     const links = await db.prepare('SELECT uuid,name FROM player_links').all();
-    const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) AND (kind!='rank_purchase' OR ?=1) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION, data.ranks_version === 1 ? 1 : 0).all<{ id: string; uuid: string; kind: string; payload: string }>();
-    return reply({ links: links.results, operations: operations.results.map(o => ({ ...o, payload: JSON.parse(o.payload) })) });
+    const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) AND (kind!='rank_purchase' OR ?=1) AND (kind!='web_daily' OR ?=1) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION, data.ranks_version === 1 ? 1 : 0, data.web_daily_version === 1 ? 1 : 0).all<{ id: string; uuid: string; kind: string; payload: string }>();
+    const day = rewardDay(now());
+    const daily = await db.prepare('SELECT l.uuid,r.day,o.state FROM player_links l LEFT JOIN web_daily_rewards r ON r.uuid=l.uuid AND r.day=? LEFT JOIN bridge_operations o ON o.id=r.operation_id').bind(day).all();
+    return reply({ links: links.results, web_daily_day: day, web_daily: daily.results, operations: operations.results.map(o => ({ ...o, payload: JSON.parse(o.payload) })) });
   }
   if (path.endsWith('/ack')) {
     const gameAck = await gameAcknowledgment(db, data);
@@ -255,6 +259,10 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   if (!(await rateLimit(env.DB, `es:${player.customer.id}`, 60, 90))) return error('rate_limited', 'Please try again shortly.', 429);
   const link = await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind(player.customer.id).first<Link>();
   const data = request.method === 'POST' ? await body(request) : {};
+  if (path === '/api/economysuite/daily/claim' && request.method === 'POST') {
+    if (!link) return error('pair_required', 'Pair your Minecraft account first.', 409);
+    return reply({ daily_reward: await claimDaily(db, link.uuid, player.customer.id, now()) });
+  }
   if (path.startsWith('/api/economysuite/games/')) return gamesRoute(request, env, db, player.customer.id, link?.uuid ?? null, data);
   if (path === '/api/economysuite/account' && request.method === 'GET') {
     const snapshot = link ? await db.prepare('SELECT payload,synced_at FROM player_snapshots WHERE uuid=?').bind(link.uuid).first<{ payload: string; synced_at: number }>() : null;
@@ -263,7 +271,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     const refresh = link ? await db.prepare("SELECT id,state,result,created_at,completed_at FROM bridge_operations WHERE uuid=? AND kind='refresh' ORDER BY created_at DESC LIMIT 1").bind(link.uuid).first() : null;
     const heartbeatAge = heartbeat ? Math.max(0, now() - heartbeat.last_seen) : null;
     const serverStatus = heartbeatAge === null || heartbeatAge >= 90 ? 'disconnected' : heartbeatAge >= 20 ? 'connecting' : 'connected';
-    return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
+    return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, daily_reward: link ? await dailyStatus(db, link.uuid, now()) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
   }
   if (path === '/api/economysuite/orders' && request.method === 'GET') {
     const orders = await db.prepare('SELECT id,player_name,currency_type,product_type,rank_id,rank_paid_at,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,receipt_reference,order_confirmation_sent_at,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
@@ -271,7 +279,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   }
   if (path === '/api/economysuite/export' && request.method === 'GET') {
     const orders = await db.prepare('SELECT id,player_name,currency_type,product_type,rank_id,rank_paid_at,currency_amount,price_minor,state,revision,delivered_revision,receipt_reference,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
-    return reply({ exported_at: now(), account: { email: player.customer.email, link }, orders: orders.results, games: (await db.prepare('SELECT * FROM game_rounds WHERE customer_id=? ORDER BY created_at').bind(player.customer.id).all()).results });
+    return reply({ exported_at: now(), account: { email: player.customer.email, link }, orders: orders.results, web_daily_rewards: (await db.prepare('SELECT uuid,day,tokens,claimed_at FROM web_daily_rewards WHERE customer_id=? ORDER BY day').bind(player.customer.id).all()).results, games: (await db.prepare('SELECT * FROM game_rounds WHERE customer_id=? ORDER BY created_at').bind(player.customer.id).all()).results });
   }
   if (path === '/api/economysuite/confirmation/retry' && request.method === 'POST') {
     const orderId = s(data.order_id);

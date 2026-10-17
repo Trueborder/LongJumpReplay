@@ -7,6 +7,7 @@ import type { Env } from './config';
 import { sha256 } from './crypto';
 import worker from './index';
 import { TABLES, RULES_VERSION, maxStake, validInput, outcome } from './economysuite-games';
+import { claimDaily, nextRewardReset } from './economysuite-daily';
 
 describe('EconomySuite currency catalog', () => {
   const product = { active: true, name: 'Coin pack', metadata: { es_product: 'economysuite', es_server: 'pantheon', es_published: 'true' }, default_price: { id: 'price_es', active: true, currency: 'czk', type: 'one_time', unit_amount: 4900, metadata: { es_currency: 'coins', es_amount: '1000' } } };
@@ -45,6 +46,43 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://ljr.tomaspisar.cz', ECONOMYSUITE_PORTAL_ORIGIN: 'https://account.pantheon.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
   });
   afterEach(async () => { vi.unstubAllGlobals(); await runtime?.dispose(); });
+  it('claims the free daily once under concurrent requests and safely delivers through compatible bridges', async () => {
+    const db=env.ECONOMYSUITE_DB!;
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner',uuid,'Player',1).run();
+    const responses=await Promise.all(Array.from({length:6},()=>economySuite(request('daily/claim',{tokens:999,uuid:'wrong'}),env,auth)));
+    const results=await Promise.all(responses.map(response=>response.json() as Promise<{daily_reward:{amount:number;status:string}}>));
+    const amount=results[0].daily_reward.amount;
+    expect(amount).toBeGreaterThanOrEqual(1); expect(amount).toBeLessThanOrEqual(5);
+    expect(results.every(result=>result.daily_reward.amount===amount&&result.daily_reward.status==='pending')).toBe(true);
+    expect(await db.prepare('SELECT COUNT(*) FROM web_daily_rewards').first('COUNT(*)')).toBe(1);
+    expect(await db.prepare("SELECT COUNT(*) FROM bridge_operations WHERE kind='web_daily'").first('COUNT(*)')).toBe(1);
+    expect((await (await bridge('poll',{})).json() as {operations:unknown[]}).operations).toHaveLength(0);
+    const polled=await (await bridge('poll',{web_daily_version:1})).json() as {operations:{id:string;payload:{tokens:number}}[];web_daily:{day:string}[]};
+    expect(polled.operations).toHaveLength(1); expect(polled.operations[0].payload.tokens).toBe(amount);
+    await bridge('ack',{id:polled.operations[0].id,success:true});
+    await bridge('ack',{id:polled.operations[0].id,success:true});
+    const account=await (await economySuite(request('account'),env,auth)).json() as {daily_reward:{available:boolean;status:string}};
+    expect(account.daily_reward).toMatchObject({available:false,status:'delivered'});
+    // Linking the same Minecraft UUID to another account cannot reroll today's reward.
+    await db.prepare('UPDATE player_links SET customer_id=? WHERE uuid=?').bind('new-owner',uuid).run();
+    const newAuth={...auth,authenticate:async()=>({customer:{id:'new-owner',email:'new@example.com'},credential:{password_hash:'unused'}})};
+    const repeated=await (await economySuite(request('daily/claim',{}),env,newAuth)).json() as {daily_reward:{amount:number}};
+    expect(repeated.daily_reward.amount).toBe(amount);
+    expect(await db.prepare('SELECT COUNT(*) FROM web_daily_rewards').first('COUNT(*)')).toBe(1);
+    const tomorrow=await claimDaily(db,uuid,'new-owner',nextRewardReset(Math.floor(Date.now()/1000)));
+    expect(tomorrow.status).toBe('pending'); expect(tomorrow.available).toBe(false);
+    expect(await db.prepare('SELECT COUNT(*) FROM web_daily_rewards').first('COUNT(*)')).toBe(2);
+    const exported=await (await economySuite(request('export'),env,newAuth)).json() as {web_daily_rewards:{uuid:string;day:string}[]};
+    expect(exported.web_daily_rewards).toHaveLength(1);
+    expect(exported.web_daily_rewards[0].uuid).toBe(uuid);
+    expect(exported.web_daily_rewards[0].day).toBe(tomorrow.day);
+  });
+  it('requires authentication, CSRF and a linked player for the website reward', async () => {
+    expect((await economySuite(request('daily/claim',{}),env,{...auth,authenticate:async()=>null})).status).toBe(401);
+    expect((await economySuite(request('daily/claim',{}),env,{...auth,mutation:async()=>false})).status).toBe(403);
+    expect((await economySuite(request('daily/claim',{}),env,auth)).status).toBe(409);
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) FROM web_daily_rewards').first('COUNT(*)')).toBe(0);
+  });
   it('redirects old pages but keeps bridge and webhook requests on the original endpoint', async () => {
     const page = await worker.fetch(new Request('https://minecraft.tomaspisar.cz/economysuite/pair?test=1'), env);
     expect(page.status).toBe(308);

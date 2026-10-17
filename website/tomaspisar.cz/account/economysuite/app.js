@@ -6,7 +6,7 @@
   const $ = s => document.querySelector(s);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let lang = localStorage.getItem('es-language') === 'en' ? 'en' : 'cs';
-  let account = null, packages = [], purchasesEnabled = false, orders = [], rankings = [], metric = 'playtime', purchaseFilter = 'paid', pendingPurchase = null;
+  let account = null, packages = [], purchasesEnabled = false, orders = [], rankings = [], metric = 'playtime', purchaseFilter = 'paid', pendingPurchase = null, dailyClaimPending = false;
   let refreshBaseline = null, refreshStarted = 0, refreshOperation = '', finishRefresh = null;
   const feedback = window.LJR_FEEDBACK;
   const route = location.pathname.split('/')[2] || 'overview';
@@ -128,7 +128,7 @@
     const progress = levelProgress(level);
     const debt = Number(snapshot.debt?.coins || 0) + Number(snapshot.debt?.tokens || 0);
     const levelPanel = '<div class="es-level"><span class="es-level-number">' + number(progress.current) + '</span><div class="es-level-progress"><div class="es-level-head"><strong>' + t('Level ', 'Level ') + number(progress.current) + '</strong><span>' + (progress.current >= 100 ? t('Maxim\u00e1ln\u00ed level', 'Maximum level') : t('Dal\u0161\u00ed level: ', 'Next level: ') + number(progress.current + 1)) + '</span></div><div class="es-progress-labels"><span>' + number(progress.active) + ' / ' + number(progress.span) + ' XP ' + t('aktivn\u00ed postup', 'active progress') + '</span><span>' + progress.percent + '%</span></div><div class="es-progress" role="progressbar" aria-label="' + escape(t('Postup k dal\u0161\u00edmu levelu', 'Progress to next level')) + '" aria-valuemin="0" aria-valuemax="' + progress.span + '" aria-valuenow="' + progress.active + '"><span style="--es-progress-scale:' + (progress.percent / 100) + '"></span></div><div class="es-level-meta"><span>' + t('Celkem XP: ', 'Total XP: ') + number(progress.xp) + '</span><span>' + (progress.current >= 100 ? t('Dokon\u010deno', 'Complete') : t('Zb\u00fdv\u00e1 ', 'Remaining ') + number(progress.remaining) + ' XP') + '</span></div></div></div>' + xpSources();
-    const jobPanel = '<div class="es-detail"><span>' + t('Profese', 'Job') + '</span><strong>' + escape(strip(snapshot.job?.display || snapshot.job?.id || t('Nevybran\u00e1', 'Not selected'))) + '</strong></div><div class="es-detail"><span>' + t('\u00darove\u0148 profese', 'Job level') + '</span><strong>' + number(snapshot.job?.level) + '</strong></div><div class="es-detail"><span>' + t('Denn\u00ed kalend\u00e1\u0159', 'Daily calendar') + '</span><strong>' + number(snapshot.daily?.day) + ' / 30</strong></div>' + currentTasks(snapshot) + jobTask(snapshot) + '<p>' + escape(t('Odm\u011bny si vyzvedni ve h\u0159e. Webov\u00e1 aktivita nep\u0159id\u00e1v\u00e1 aktivn\u00ed \u010das ani tokeny.', 'Claim rewards in-game. Website activity does not add active time or tokens.')) + '</p>';
+    const jobPanel = '<div class="es-detail"><span>' + t('Profese', 'Job') + '</span><strong>' + escape(strip(snapshot.job?.display || snapshot.job?.id || t('Nevybran\u00e1', 'Not selected'))) + '</strong></div><div class="es-detail"><span>' + t('\u00darove\u0148 profese', 'Job level') + '</span><strong>' + number(snapshot.job?.level) + '</strong></div><div class="es-detail"><span>' + t('Denn\u00ed kalend\u00e1\u0159', 'Daily calendar') + '</span><strong>' + number(snapshot.daily?.day) + ' / 30</strong></div>' + currentTasks(snapshot) + jobTask(snapshot) + '<p>' + escape(t('Herní odměny vyzvedni ve hře. Webová denní odměna je samostatná; prohlížení webu nepřidává aktivní čas.', 'Claim gameplay rewards in-game. The daily website reward is separate; browsing does not add active time.')) + '</p>';
     return '<div class="es-grid">' + metricCard('Coins', snapshot.coins, t('Dostupn\u00fd z\u016fstatek', 'Available balance'), 'coins') + metricCard('Tokens', snapshot.tokens, t('\u010cekaj\u00edc\u00ed', 'Pending') + ': ' + number(snapshot.pending_tokens), 'tokens') + metricCard(t('Aktivn\u00ed minuty', 'Active minutes'), snapshot.active_minutes, t('Po\u010d\u00edt\u00e1 se pouze hra na serveru', 'Only server gameplay counts')) + '</div>' + panel(t('Tvoje \u00farove\u0148', 'Your level'), levelPanel) + panel(t('Profese a odm\u011bny', 'Job and rewards'), jobPanel) + (debt ? panel(t('Dluh po vr\u00e1cen\u00ed platby', 'Refund debt'), '<p>' + number(snapshot.debt.coins) + ' coins \u00b7 ' + number(snapshot.debt.tokens) + ' tokens</p><p>' + escape(t('Utr\u00e1cen\u00ed a p\u0159evody jsou pozastaven\u00e9, dokud dluh nesplat\u00ed\u0161. Dal\u0161\u00ed p\u0159\u00edjmy nejd\u0159\u00edv spl\u00e1cej\u00ed dluh p\u0159\u00edslu\u0161n\u00e9 m\u011bny.', 'Spending and transfers are paused until the debt is settled. Future income first pays down debt in the same currency.')) + '</p>') : '');
   }
   function statistics(snapshot) {
@@ -199,6 +199,40 @@
       [t('Denní coiny pro všechny','Daily coins for everyone'),'+10 %','+20 %','+30 %']
     ];
     return panel(t('Porovnání ranků','Compare ranks'), table([t('Výhoda','Benefit'),'VIP','VIP+','MVP'], rows.map(values => row(values.map(escape)))) + '<p class="es-muted">' + t('Vyšší rank zahrnuje nižší výhody. Jednorázový nákup, bez předplatného. Sedm dní běží od potvrzení platby i offline; vyšší rank pozastaví čas nižšího. Booster smí spustit každý dárce jednou za 168 hodin, bez skládání, nejvýše 120 minut aktivací serveru denně. Bonus dostanou všichni, nikoli jen platící hráči.', 'Higher ranks include lower-tier perks. One-time payment, no subscription. Seven days run from payment confirmation including offline time; a higher rank pauses lower-tier time. Each donor can activate a booster once per 168 hours, without stacking, with a server-wide 120-minute daily activation limit. Everyone receives the bonus, not only paying players.') + '</p>');
+  }
+  function dailyRewardCard() {
+    const reward = account?.daily_reward;
+    let content;
+    if (!account) content = '<a class="es-button" href="/login?product=economysuite">' + t('Přihlásit se', 'Sign in') + '</a>';
+    else if (!account.link) content = '<a class="es-button" href="/economysuite/pair">' + t('Propojit Minecraft účet', 'Pair Minecraft account') + '</a>';
+    else if (!reward) content = '<p class="es-muted">' + t('Stav odměny zatím není dostupný.', 'Reward status is not available yet.') + '</p>';
+    else if (reward.available) content = '<button id="claim-web-daily" class="es-primary" type="button"' + (dailyClaimPending ? ' disabled' : '') + '>' + t('Vyzvednout 1–5 tokenů zdarma', 'Claim 1–5 free tokens') + '</button>';
+    else {
+      const state = reward.status === 'delivered' ? t('Připsáno', 'Credited') : reward.status === 'failed' ? t('Doručení musí zkontrolovat správce. Dnes již znovu nelosuj.', 'An administrator needs to check delivery. Today’s reward cannot be rerolled.') : t('Odměna čeká na server', 'Reward is waiting for the server');
+      content = '<p role="status"><strong>' + number(reward.amount) + ' ' + t('tokenů', 'tokens') + '</strong> · ' + escape(state) + '</p>';
+    }
+    const reset = reward?.next_reset_at ? '<p class="es-muted">' + t('Další odměna', 'Next reward') + ': ' + escape(new Date(reward.next_reset_at * 1000).toLocaleString(lang === 'en' ? 'en-GB' : 'cs-CZ', { timeZone: 'Europe/Prague' })) + ' (Europe/Prague)</p>' : '';
+    return '<div id="web-daily-reward">' + panel(t('Denní webová odměna', 'Daily website reward'), '<p>' + t('Jednou denně náhodných <strong>1–5 tokenů</strong> zdarma. Nákup ani rank nejsou potřeba. Herní /daily zůstává samostatné.', 'Claim <strong>1–5 random tokens</strong> free each day. No purchase or rank required. In-game /daily stays separate.') + '</p>' + content + reset + '<p class="es-muted">' + t('Při offline serveru se odměna bezpečně doručí později. Platí běžné podmínky odemčení tokenů; do té doby jsou čekající.', 'If the server is offline, delivery safely waits. Normal token eligibility rules apply; tokens remain pending until unlocked.') + '</p>') + '</div>';
+  }
+  function refreshDailyReward() {
+    const host = $('#web-daily-reward');
+    if (!host) return;
+    host.outerHTML = dailyRewardCard();
+    bindDailyReward();
+  }
+  function bindDailyReward() {
+    $('#claim-web-daily')?.addEventListener('click', event => {
+      const button = event.currentTarget;
+      if (dailyClaimPending || button.disabled) return;
+      dailyClaimPending = true;
+      action(button, async () => {
+        try {
+          const result = await api('/api/economysuite/daily/claim', {});
+          account.daily_reward = result.daily_reward;
+          status(t('Denní odměna je uložená a čeká na doručení serverem.', 'Your daily reward is saved and waiting for server delivery.'), false, 'success');
+        } finally { dailyClaimPending = false; refreshDailyReward(); }
+      });
+    });
   }
   function store() {
     const support = '<div class="es-store-note"><strong>' + t('Podpora vývoje', 'Support the developer') + '</strong><span>' + t('Nákup podporuje vývoj a provoz EconomySuite týmu Novaryn Solutions.', 'Your purchase supports EconomySuite development and operation by Novaryn Solutions.') + '</span></div>';
@@ -307,11 +341,13 @@
     else if (!account?.link) html = empty();
     else if (!account.snapshot) html = waiting();
     else html = ({ overview, statistics, progress, appearance }[route] || overview)(account.snapshot);
+    if (route === 'overview' || route === 'store') html = dailyRewardCard() + html;
     $('#content').innerHTML = html; $('#content').setAttribute('aria-busy', 'false');
     bind();
   }
   async function action(button, work) { feedback?.busy(button, true); try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) feedback?.busy(button, false); } }
   function bind() {
+    bindDailyReward();
     if (route === 'games') window.ESGames.bind(gameContext());
     $('#retry-load')?.addEventListener('click', () => action($('#retry-load'), () => load({ initial: true })));
     document.querySelectorAll('.cosmetic-combined-form select').forEach(select => select.addEventListener('change', () => {
@@ -411,7 +447,10 @@
   setInterval(async () => {
     if (document.hidden) return;
     try {
-      const latest = await api('/api/economysuite/account'); account = latest; renderConnection();
+      const latest = await api('/api/economysuite/account');
+      const dailyChanged = JSON.stringify(account?.daily_reward) !== JSON.stringify(latest.daily_reward) || !!account?.link !== !!latest.link;
+      account = latest; renderConnection();
+      if (dailyChanged && !dailyClaimPending) refreshDailyReward();
       if (route === 'games') await window.ESGames.poll(gameContext());
       if (finishRefresh && latest.refresh_operation?.id === refreshOperation && latest.refresh_operation.state === 'complete') {
         try { await load({ refresh: true }); finishRefresh.resolve(); }

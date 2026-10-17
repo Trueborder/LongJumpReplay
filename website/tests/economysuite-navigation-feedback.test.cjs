@@ -39,6 +39,11 @@ function harness(options = {}) {
   let interval, clock = 100000;
   const documentHandlers = {}, documentElement = { dataset: {} };
   const account = { link: { uuid: 'test-player', name: 'TestPlayer' }, snapshot: {}, synced_at: 10, server_status: 'connected', refresh_operation: null };
+  if(options.daily) {
+    account.daily_reward={day:'2026-10-17',available:true,amount:null,status:'available',next_reset_at:1792274400};
+    nodes.set('#web-daily-reward',{outerHTML:''});
+    nodes.set('#claim-web-daily',{disabled:false,isConnected:true,handlers:{},attributes:{},addEventListener(name,handler){this.handlers[name]=handler;},setAttribute(name,value){this.attributes[name]=value;},removeAttribute(name){delete this.attributes[name];}});
+  }
   const feedback = {
     toast: Object.fromEntries(['info', 'error', 'success', 'warning'].map(kind => [kind, message => notices.push({ kind, message })])),
     busy(button, busy) { button.disabled = busy; if (busy) button.setAttribute('aria-busy', 'true'); else button.removeAttribute('aria-busy'); },
@@ -52,11 +57,12 @@ function harness(options = {}) {
     document: { addEventListener: (name, listener) => { documentHandlers[name] = listener; }, querySelector: key => nodes.get(key) || null, querySelectorAll: () => [], body: { classList: classes() }, documentElement, cookie: '', hidden: false },
     window: { LJR_FEEDBACK: feedback }, matchMedia: () => media,
     localStorage: { getItem: () => null, setItem() {} }, sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
-    location: { pathname: '/economysuite/store', search: '', hash: '', replace() {}, assign() {} },
+    location: { pathname: '/economysuite/'+(options.route||'store'), search: '', hash: '', replace() {}, assign() {} },
     URLSearchParams, Intl, Date: class extends Date { static now() { return clock; } },
     setInterval: callback => { interval = callback; },
     fetch: async (url, options) => {
       calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : undefined });
+      if(url.endsWith('/daily/claim')) {await flush();return {ok:true,json:async()=>({daily_reward:{...account.daily_reward,available:false,amount:4,status:'pending'}})};}
       if (url.endsWith('/cosmetics') && calls.at(-1).body.type === optionsForFailure) return { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) };
       const data = url.endsWith('/account') ? account : url.endsWith('/refresh') ? { operation_id: 'refresh-1' } : { packages: [], purchases_enabled: true };
       return { ok: true, json: async () => data };
@@ -64,6 +70,20 @@ function harness(options = {}) {
   });
   return { nodes, media, notices, calls, account, documentHandlers, documentElement, tick: () => interval(), advance: ms => { clock += ms; } };
 }
+
+test('daily reward appears in both store and overview and double-click cannot submit twice',async()=>{
+  for(const route of ['store','overview']){
+    const h=harness({daily:true,route});await flush();
+    assert.match(h.nodes.get('#content').innerHTML,/Denní webová odměna/);
+    assert.match(h.nodes.get('#content').innerHTML,/Vyzvednout 1–5 tokenů zdarma/);
+    const button=h.nodes.get('#claim-web-daily');
+    button.handlers.click({currentTarget:button});button.handlers.click({currentTarget:button});
+    await flush();await flush();
+    assert.equal(h.calls.filter(call=>call.url.endsWith('/daily/claim')).length,1);
+    assert.equal(h.account.daily_reward.amount,4);
+    assert.match(h.nodes.get('#web-daily-reward').outerHTML,/Odměna čeká na server/);
+  }
+});
 
 test('motion input follows keyboard and pointer without delaying navigation', async () => {
   const h = harness(); await flush();
