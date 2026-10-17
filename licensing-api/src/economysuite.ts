@@ -1,3 +1,4 @@
+import { rankProduct, rankDelivery, RANK_WEEK_SECONDS, type RankId } from './economysuite-ranks';
 import { gamesRoute, gameAcknowledgment, RULES_VERSION } from './economysuite-games';
 import type { Env } from './config';
 import { generateToken, sha256, timingSafeEqual, verifyPassword } from './crypto';
@@ -8,10 +9,10 @@ import { ECONOMYSUITE_POLICY_URLS, ECONOMYSUITE_POLICY_VERSIONS, policyVersionsM
 
 export interface PlayerAuth { customer: { id: string; email: string }; credential: { password_hash: string } | null }
 export interface EconomyAuth { authenticate(request: Request): Promise<PlayerAuth | null>; mutation(request: Request): Promise<boolean> }
-export type Currency = 'coins' | 'tokens';
-interface Package { id: string; name: string; description: string; currency: Currency; amount: number; price_minor: number; sort: number; checkoutable: boolean }
+export type Currency = 'coins' | 'tokens' | 'rank';
+interface Package { rank_id?: RankId; product_type?: "currency" | "rank"; id: string; name: string; description: string; currency: Currency; amount: number; price_minor: number; sort: number; checkoutable: boolean }
 interface Link { customer_id: string; uuid: string; name: string; leaderboard: number }
-interface Order { id: string; customer_id: string; uuid: string; player_name: string; price_id: string; currency_type: Currency; currency_amount: number; price_minor: number; session_id: string | null; payment_intent: string | null; dispute_id: string | null; paid: number; target_amount: number; revision: number; delivered_revision: number; state: string; receipt_url: string | null; receipt_reference: string | null; created_at: number }
+interface Order { product_type?: "currency" | "rank"; rank_id?: string | null; rank_paid_at?: number | null; id: string; customer_id: string; uuid: string; player_name: string; price_id: string; currency_type: Currency; currency_amount: number; price_minor: number; session_id: string | null; payment_intent: string | null; dispute_id: string | null; paid: number; target_amount: number; revision: number; delivered_revision: number; state: string; receipt_url: string | null; receipt_reference: string | null; created_at: number }
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 // Stripe currently requires a minimum charge of 15.00 CZK for CZK payments.
 // Keep this guard server-side so a public catalogue can never create a doomed Checkout Session.
@@ -24,13 +25,14 @@ const integer = (value: unknown, min = 0, max = 1_000_000_000): number | null =>
 const pick = (value: unknown, keys: string[]) => Object.fromEntries(keys.filter(key => Object.hasOwn(object(value), key)).map(key => [key, object(value)[key]]));
 function playerSnapshot(value: Record<string, unknown>): Record<string, unknown> {
   const out = pick(value, ['uuid', 'coins', 'tokens', 'pending_tokens', 'active_minutes', 'eligible', 'account_created_at', 'mailbox_count', 'auction_count']);
+  out.rank = { ...pick(value.rank, ['id','expires_at','frame']), remaining_ms: pick(object(value.rank).remaining_ms,['vip','vipplus','mvp']) };
   out.level = pick(value.level, ['level', 'xp']); out.job = pick(value.job, ['id', 'display', 'level']);
   out.debt = pick(value.debt, ['coins', 'tokens']); out.daily = pick(value.daily, ['day', 'last_day', 'revives']);
   const metrics = ['playtime', 'blocks_mined', 'blocks_placed', 'mobs_killed', 'deaths', 'crafted', 'smelted', 'fish_caught', 'breeding', 'trades', 'items_sold', 'items_bought', 'challenges_won', 'tasks_completed', 'crates_opened', 'daily_claims', 'passive_job_coins', 'duel_wins', 'duel_losses', 'duel_draws', 'duel_damage'];
   out.statistics = { all_time: pick(object(value.statistics).all_time, metrics), weekly: pick(object(value.statistics).weekly, metrics) };
   const progress = object(value.progress), cosmetics = object(value.cosmetics);
   out.progress = { tasks: (Array.isArray(progress.tasks) ? progress.tasks : []).slice(0, 100).map(task => pick(task, ['id', 'name', 'progress', 'target', 'complete'])), achievements: (Array.isArray(progress.achievements) ? progress.achievements : []).filter(a => typeof a === 'string').slice(0, 500), chapters: (Array.isArray(progress.chapters) ? progress.chapters : []).filter(Number.isSafeInteger).slice(0, 100) };
-  out.cosmetics = Object.fromEntries(['prefix', 'color', 'title'].map(type => [type, (Array.isArray(cosmetics[type]) ? cosmetics[type] as unknown[] : []).slice(0, 500).map(entry => pick(entry, ['id', 'display', 'value', 'owned', 'selected']))]));
+  out.cosmetics = Object.fromEntries(['prefix', 'color', 'aura', 'hat'].map(type => [type, (Array.isArray(cosmetics[type]) ? cosmetics[type] as unknown[] : []).slice(0, 500).map(entry => pick(entry, ['id', 'display', 'value', 'owned', 'selected']))]));
   return out;
 }
 async function body(request: Request): Promise<Record<string, unknown>> {
@@ -69,7 +71,7 @@ async function sendOrderConfirmation(env: Env, db: D1Database, orderId: string, 
     await mailer(env).send(email, orderConfirmationEmail({
       orderId,
       productName: pack.name,
-      amount: pack.amount,
+      amount: pack.currency === "rank" ? 7 : pack.amount,
       currency: pack.currency,
       priceMinor: pack.price_minor,
       purchaseUrl: ECONOMYSUITE_POLICY_URLS.purchase,
@@ -85,9 +87,10 @@ async function sendOrderConfirmation(env: Env, db: D1Database, orderId: string, 
 }
 export function packageFromProduct(value: unknown): Package | null {
   const p = object(value), m = object(p.metadata), price = object(p.default_price), pm = object(price.metadata);
-  const amount = integer(pm.es_amount, 1), minor = integer(price.unit_amount, 1);
-  if (p.active !== true || m.es_product !== 'economysuite' || m.es_server !== 'pantheon' || m.es_published !== 'true' || price.active !== true || price.currency !== 'czk' || price.type !== 'one_time' || !amount || !minor || !['coins', 'tokens'].includes(s(pm.es_currency)) || !s(price.id)) return null;
-  return { id: s(price.id), name: s(p.name), description: s(p.description), currency: pm.es_currency as Currency, amount, price_minor: minor, sort: integer(m.es_sort) ?? 0, checkoutable: minor >= STRIPE_CZK_MINIMUM_MINOR };
+  const rank = rankProduct(m, price);
+  const amount = rank ? RANK_WEEK_SECONDS : integer(pm.es_amount, 1), minor = integer(price.unit_amount, 1);
+  if (p.active !== true || m.es_product !== 'economysuite' || m.es_server !== 'pantheon' || m.es_published !== 'true' || price.active !== true || price.currency !== 'czk' || price.type !== 'one_time' || !amount || !minor || (!rank && !['coins', 'tokens'].includes(s(pm.es_currency))) || !s(price.id)) return null;
+  return { id: s(price.id), name: s(p.name), description: s(p.description), currency: rank ? 'rank' : pm.es_currency as Currency, product_type: rank ? 'rank' : 'currency', ...(rank ? { rank_id: rank } : {}), amount, price_minor: minor, sort: integer(m.es_sort) ?? 0, checkoutable: minor >= STRIPE_CZK_MINIMUM_MINOR };
 }
 async function catalog(env: Env): Promise<Package[]> {
   const out: Package[] = [];
@@ -99,7 +102,7 @@ async function catalog(env: Env): Promise<Package[]> {
     if (!data.has_more || !rows.length) break;
     cursor = s(object(rows.at(-1)).id);
   }
-  return out.sort((a, b) => a.sort - b.sort || a.price_minor - b.price_minor);
+  return out.filter(pack => pack.currency !== 'rank' || env.ECONOMYSUITE_RANKS_ENABLED === 'true').sort((a, b) => a.sort - b.sort || a.price_minor - b.price_minor);
 }
 export function targetCurrency(amount: number, paidMinor: number, refundedMinor: number, dispute: string): number {
   if (!Number.isSafeInteger(amount) || amount < 0 || !Number.isSafeInteger(paidMinor) || paidMinor < 1) throw new Error('Invalid order');
@@ -117,7 +120,7 @@ async function webhook(request: Request, env: Env, db: D1Database): Promise<Resp
   if (await db.prepare('SELECT id FROM webhook_events WHERE id=?').bind(eventId).first()) return reply({ received: true });
   let order: Order | null = null;
   if (type.startsWith('checkout.session.')) {
-    if (object(data.metadata).purchase_type !== 'economysuite_currency') return reply({ received: true });
+    if (!['economysuite_currency','economysuite_rank'].includes(s(object(data.metadata).purchase_type))) return reply({ received: true });
     order = await db.prepare('SELECT * FROM store_orders WHERE session_id=?').bind(s(data.id)).first<Order>();
     if (!order) {
       // Recover a session created just before a Worker/network failure prevented
@@ -134,7 +137,7 @@ async function webhook(request: Request, env: Env, db: D1Database): Promise<Resp
   if (!order) return error('order_not_ready', 'Order is not available yet. Retry delivery.', 503);
   const session = await stripe(env, `checkout/sessions/${encodeURIComponent(order.session_id!)}?expand[]=line_items`);
   const metadata = object(session.metadata), lines = object(session.line_items), first = object((Array.isArray(lines.data) ? lines.data : [])[0]);
-  if (metadata.order_id !== order.id || metadata.purchase_type !== 'economysuite_currency' || metadata.customer_id !== order.customer_id || metadata.player_uuid !== order.uuid || session.currency !== 'czk' || Number(session.amount_total) !== order.price_minor || object(first.price).id !== order.price_id || first.quantity !== 1) return error('order_mismatch', 'Payment does not match the order.', 409);
+  if (metadata.order_id !== order.id || metadata.purchase_type !== (order.currency_type === 'rank' ? 'economysuite_rank' : 'economysuite_currency') || metadata.customer_id !== order.customer_id || metadata.player_uuid !== order.uuid || session.currency !== 'czk' || Number(session.amount_total) !== order.price_minor || object(first.price).id !== order.price_id || first.quantity !== 1) return error('order_mismatch', 'Payment does not match the order.', 409);
   const mapped = await db.prepare('UPDATE store_orders SET session_id=? WHERE id=? AND (session_id IS NULL OR session_id=?)').bind(order.session_id, order.id, order.session_id).run();
   if (!mapped.meta.changes) return error('retry', 'Concurrent session mapping. Retry.', 503);
   if (session.payment_status !== 'paid') {
@@ -160,9 +163,13 @@ async function webhook(request: Request, env: Env, db: D1Database): Promise<Resp
   // each other. All payment state is retrieved from Stripe, rather than trusting
   // event arrival order. Failed comparisons are retried by Stripe.
   const revision = order.revision + 1, timestamp = now(), operation = crypto.randomUUID();
+  // Charge creation is Stripe's verified successful-charge time; never start a week at bridge delivery.
+  const paidAt = order.rank_paid_at || integer(charge.created, 1, Number.MAX_SAFE_INTEGER) || integer(event.created, 1, Number.MAX_SAFE_INTEGER) || timestamp;
+  const rankOrder = order.currency_type === 'rank';
+  const payload = rankOrder ? rankDelivery(order, paidAt, Math.max(paidAt,timestamp), target, revision) : { order_id: order.id, currency: order.currency_type, target_amount: target, revision };
   const changed = await db.batch([
-    db.prepare('INSERT INTO bridge_operations(id,uuid,kind,payload,order_id,revision,created_at) SELECT ?,?,?,?,?,?,? FROM store_orders WHERE id=? AND revision=?').bind(operation, order.uuid, 'purchase', JSON.stringify({ order_id: order.id, currency: order.currency_type, target_amount: target, revision }), order.id, revision, timestamp, order.id, order.revision),
-    db.prepare('UPDATE store_orders SET paid=1,payment_intent=?,dispute_id=?,target_amount=?,revision=?,state=?,receipt_url=?,receipt_reference=?,updated_at=? WHERE id=? AND revision=?').bind(intentId, disputeId, target, revision, state, s(charge.receipt_url) || null, s(charge.id) || intentId, timestamp, order.id, order.revision),
+    db.prepare('INSERT INTO bridge_operations(id,uuid,kind,payload,order_id,revision,created_at) SELECT ?,?,?,?,?,?,? FROM store_orders WHERE id=? AND revision=?').bind(operation, order.uuid, rankOrder ? 'rank_purchase' : 'purchase', JSON.stringify(payload), order.id, revision, timestamp, order.id, order.revision),
+    db.prepare('UPDATE store_orders SET rank_paid_at=COALESCE(rank_paid_at,?),paid=1,payment_intent=?,dispute_id=?,target_amount=?,revision=?,state=?,receipt_url=?,receipt_reference=?,updated_at=? WHERE id=? AND revision=?').bind(rankOrder ? paidAt : null, intentId, disputeId, target, revision, state, s(charge.receipt_url) || null, s(charge.id) || intentId, timestamp, order.id, order.revision),
     db.prepare('INSERT OR IGNORE INTO webhook_events(id,processed_at) SELECT ?,? WHERE EXISTS(SELECT 1 FROM bridge_operations WHERE id=?)').bind(eventId, timestamp, operation),
   ]);
   if (!changed[1].meta.changes) return error('retry', 'Concurrent order update. Retry.', 503);
@@ -216,10 +223,11 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
   }
   if (path.endsWith('/poll')) {
     const version = data.games_version === RULES_VERSION ? RULES_VERSION : null;
+    await db.prepare("UPDATE bridge_status SET ranks_version=? WHERE server='pantheon'").bind(data.ranks_version === 1 ? 1 : 0).run();
     await db.prepare("UPDATE bridge_status SET games_version=?,games_enabled=? WHERE server='pantheon'").bind(version, version && data.games_enabled === true ? 1 : 0).run();
     await db.prepare('DELETE FROM bridge_nonces WHERE expires_at<?').bind(now()).run();
     const links = await db.prepare('SELECT uuid,name FROM player_links').all();
-    const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION).all<{ id: string; uuid: string; kind: string; payload: string }>();
+    const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) AND (kind!='rank_purchase' OR ?=1) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION, data.ranks_version === 1 ? 1 : 0).all<{ id: string; uuid: string; kind: string; payload: string }>();
     return reply({ links: links.results, operations: operations.results.map(o => ({ ...o, payload: JSON.parse(o.payload) })) });
   }
   if (path.endsWith('/ack')) {
@@ -258,11 +266,11 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
   }
   if (path === '/api/economysuite/orders' && request.method === 'GET') {
-    const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,receipt_reference,order_confirmation_sent_at,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
+    const orders = await db.prepare('SELECT id,player_name,currency_type,product_type,rank_id,rank_paid_at,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,receipt_reference,order_confirmation_sent_at,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
     return reply({ orders: orders.results });
   }
   if (path === '/api/economysuite/export' && request.method === 'GET') {
-    const orders = await db.prepare('SELECT id,player_name,currency_type,currency_amount,price_minor,state,revision,delivered_revision,receipt_reference,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
+    const orders = await db.prepare('SELECT id,player_name,currency_type,product_type,rank_id,rank_paid_at,currency_amount,price_minor,state,revision,delivered_revision,receipt_reference,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();
     return reply({ exported_at: now(), account: { email: player.customer.email, link }, orders: orders.results, games: (await db.prepare('SELECT * FROM game_rounds WHERE customer_id=? ORDER BY created_at').bind(player.customer.id).all()).results });
   }
   if (path === '/api/economysuite/confirmation/retry' && request.method === 'POST') {
@@ -320,7 +328,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   }
   if (path === '/api/economysuite/cosmetics' && request.method === 'POST') {
     const type = s(data.type), id = s(data.id);
-    if (!['prefix', 'color', 'title'].includes(type) || !/^[a-z0-9_-]{0,80}$/.test(id)) return error('invalid_input', 'Invalid cosmetic.');
+    if (!['prefix', 'color', 'aura', 'hat'].includes(type) || !/^[a-z0-9_-]{0,80}$/.test(id)) return error('invalid_input', 'Invalid cosmetic.');
     const operation = crypto.randomUUID();
     await db.prepare('INSERT INTO bridge_operations(id,uuid,kind,payload,created_at) VALUES(?,?,?,?,?)').bind(operation, link.uuid, 'cosmetic', JSON.stringify({ type, id }), now()).run();
     return reply({ queued: true, operation_id: operation });
@@ -329,6 +337,10 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     if (env.ECONOMYSUITE_PURCHASES_ENABLED !== 'true') return error('unavailable', 'Purchases are not available yet.', 503);
     const pack = (await catalog(env)).find(p => p.id === s(data.price_id));
     if (!pack) return error('invalid_package', 'This package is no longer available.');
+    if (pack.currency === 'rank') {
+      const heartbeat = await db.prepare("SELECT ranks_version FROM bridge_status WHERE server='pantheon'").first<{ranks_version:number}>();
+      if(heartbeat?.ranks_version !== 1)return error('rank_delivery_unavailable','Rank delivery requires EconomySuite 2.41.0 or later.',503);
+    }
     if (!pack.checkoutable) return error('stripe_minimum', 'Tento balíček nelze přes Stripe účtovat. Stripe vyžaduje pro platby v CZK minimálně 15 Kč. Zvol vyšší balíček.', 422);
     if (data.accepted_purchase_terms !== true || data.immediate_delivery_requested !== true || data.withdrawal_rights_acknowledged !== true || !policyVersionsMatch(data.policy_versions)) {
       return error('purchase_consent_required', 'Před platbou potvrďte podmínky nákupu, okamžité digitální dodání a ztrátu práva na odstoupení.', 422);
@@ -347,11 +359,11 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     const id = crypto.randomUUID(), timestamp = now(), vatNotice = 'DPH/VAT: režim a zahrnutí DPH bude doplněno provozovatelem.';
     const ipHash = await consentIpHash(env, request), userAgent = consentUserAgent(request), policy = ECONOMYSUITE_POLICY_VERSIONS;
     await db.batch([
-      db.prepare('INSERT INTO store_orders(id,customer_id,uuid,player_name,price_id,currency_type,currency_amount,price_minor,checkout_key,product_name,displayed_currency,displayed_price_minor,vat_notice,policy_version,immediate_delivery_requested,withdrawal_rights_acknowledged,consent_at,consent_ip_hash,consent_user_agent,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, player.customer.id, link.uuid, link.name, pack.id, pack.currency, pack.amount, pack.price_minor, checkoutKey, pack.name, 'czk', pack.price_minor, vatNotice, policy.purchase, 1, 1, timestamp, ipHash, userAgent, timestamp, timestamp),
+      db.prepare('INSERT INTO store_orders(id,customer_id,uuid,player_name,price_id,currency_type,currency_amount,price_minor,checkout_key,product_name,displayed_currency,displayed_price_minor,vat_notice,policy_version,immediate_delivery_requested,withdrawal_rights_acknowledged,consent_at,consent_ip_hash,consent_user_agent,created_at,updated_at,product_type,rank_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, player.customer.id, link.uuid, link.name, pack.id, pack.currency, pack.amount, pack.price_minor, checkoutKey, pack.name, 'czk', pack.price_minor, vatNotice, policy.purchase, 1, 1, timestamp, ipHash, userAgent, timestamp, timestamp, pack.product_type || 'currency', pack.rank_id || null),
       db.prepare('INSERT INTO purchase_consents(id,order_id,customer_id,accepted_at,policy_version,terms_version,refund_version,delivery_version,immediate_delivery_requested,withdrawal_rights_acknowledged,ip_hash,user_agent,product_id,product_name,displayed_price_minor,displayed_currency,vat_notice) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), id, player.customer.id, timestamp, policy.privacy, policy.purchase, policy.refund, policy.delivery, 1, 1, ipHash, userAgent, pack.id, pack.name, pack.price_minor, 'czk', vatNotice),
     ]);
     try {
-      const checkout = await stripe(env, 'checkout/sessions', { mode: 'payment', locale: 'cs', client_reference_id: id, customer_email: player.customer.email, 'line_items[0][price]': pack.id, 'line_items[0][quantity]': '1', 'metadata[purchase_type]': 'economysuite_currency', 'metadata[order_id]': id, 'metadata[customer_id]': player.customer.id, 'metadata[player_uuid]': link.uuid, 'metadata[policy_version]': policy.purchase, 'metadata[consent_at]': String(timestamp), 'payment_intent_data[metadata][purchase_type]': 'economysuite_currency', 'payment_intent_data[metadata][order_id]': id, success_url: `${env.PORTAL_ORIGIN}/economysuite/purchases?order=${id}`, cancel_url: `${env.PORTAL_ORIGIN}/economysuite/store`, expires_at: String(timestamp + 1800) }, checkoutKey);
+      const checkout = await stripe(env, 'checkout/sessions', { mode: 'payment', locale: 'cs', client_reference_id: id, customer_email: player.customer.email, 'line_items[0][price]': pack.id, 'line_items[0][quantity]': '1', 'metadata[purchase_type]': pack.currency === 'rank' ? 'economysuite_rank' : 'economysuite_currency', 'metadata[order_id]': id, 'metadata[customer_id]': player.customer.id, 'metadata[player_uuid]': link.uuid, 'metadata[policy_version]': policy.purchase, 'metadata[consent_at]': String(timestamp), 'payment_intent_data[metadata][purchase_type]': pack.currency === 'rank' ? 'economysuite_rank' : 'economysuite_currency', 'payment_intent_data[metadata][order_id]': id, success_url: `${env.PORTAL_ORIGIN}/economysuite/purchases?order=${id}`, cancel_url: `${env.PORTAL_ORIGIN}/economysuite/store`, expires_at: String(timestamp + 1800) }, checkoutKey);
       const checkoutUrl = s(checkout.url);
       if (!checkoutUrl.startsWith('https://checkout.stripe.com/')) throw new Error('Invalid checkout URL');
       await db.prepare('UPDATE store_orders SET session_id=? WHERE id=?').bind(s(checkout.id), id).run();

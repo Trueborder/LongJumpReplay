@@ -30,7 +30,7 @@ export function orderConfirmationEmail(order: { orderId: string; productName: st
       '',
       `Objednávka: ${order.orderId}`,
       `Produkt: ${order.productName}`,
-      `Obsah: ${order.amount} ${order.currency}`,
+      order.currency === "rank" ? "Platnost ranku: 7 dní od potvrzení platby, také během offline stavu. Bez automatického prodloužení." : `Obsah: ${order.amount} ${order.currency}`,
       `Cena: ${price}`,
       '',
       'Digitální obsah bude doručen do propojeného hráče po potvrzení platby. Pokud je server offline, objednávka zůstane ve frontě.',

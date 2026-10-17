@@ -197,3 +197,9 @@ html[data-motion-input=keyboard] .es-nav-dialog::backdrop{transition:none!import
   .es-nav-dialog[open]{animation:none}
   @starting-style{.es-nav-dialog[open]{transform:none!important}}
 }
+/* Rank profile accents use existing portal colours without replaying content animation. */
+.es-rank-profile { padding: 1rem; border: 1px solid var(--line, #b9d4ce); border-radius: 12px; }
+.es-rank-profile strong { font-size: 1.25rem; }
+.es-rank-frame-1 { border-color: #20956c; }
+.es-rank-frame-2 { border-color: #168b9b; box-shadow: inset 0 0 0 2px #168b9b26; }
+.es-rank-frame-3 { border-color: #b38a25; box-shadow: inset 0 0 0 2px #b38a2533; }

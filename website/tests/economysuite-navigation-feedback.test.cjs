@@ -31,7 +31,7 @@ function harness(options = {}) {
   if (options.appearance) {
     const button = { disabled: false, isConnected: true, attributes: {},
       setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; } };
-    nodes.set('#appearance-form', { handlers: {}, elements: { prefix: { value: 'vip' }, color: { value: 'green' }, title: { value: 'miner' } },
+    nodes.set('#appearance-form', { handlers: {}, elements: { prefix: { value: 'vip' }, color: { value: 'green' }, aura: { value: 'heart-vortex' }, hat: { value: 'flower' } },
       addEventListener(name, listener) { this.handlers[name] = listener; }, querySelector: () => button });
   }
   const notices = [];
@@ -142,10 +142,10 @@ test('appearance snapshots all selections before currentTarget is cleared and bl
   form.handlers.submit(event);
   form.handlers.submit(event); // The first submission has already disabled the button.
   event.currentTarget = null; // Native event dispatch clears this before the next await resumes.
-  form.elements.color.value = 'red'; form.elements.title.value = 'changed-by-poll';
+  form.elements.color.value = 'red'; form.elements.aura.value = 'changed-by-poll';
   await flush(); await flush();
   assert.deepEqual(h.calls.filter(call => call.url.endsWith('/cosmetics')).map(call => call.body), [
-    { type: 'prefix', id: 'vip' }, { type: 'color', id: 'green' }, { type: 'title', id: 'miner' }
+    { type: 'prefix', id: 'vip' }, { type: 'color', id: 'green' }, { type: 'aura', id: 'heart-vortex' }, { type: 'hat', id: 'flower' }
   ]);
   assert.equal(button.disabled, false);
   assert.equal(h.notices.length, 1);

@@ -82,7 +82,7 @@ test('store explains how purchases support the developer', () => {
   assert.match(css, /\.es-store-note/);
 });
 
-test('appearance combines prefix, colour, and title into one preview', () => {
+test('appearance combines current cosmetics without retired titles', () => {
   assert.match(script, /cosmetic-combined-form/);
   assert.match(script, /combined-appearance-preview/);
   assert.match(script, /combinedPreview\(cosmetics\)/);

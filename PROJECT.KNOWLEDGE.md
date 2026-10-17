@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite weekly supporter ranks (2026-10-17)
+
+- EconomySuite 2.41.0 adds VIP/VIP+/MVP as distinct seven-day rank products, with 39/69/99 Kč one-time prices. The existing account store and payment bridge are reused; LongJumpReplay licensing and currency fulfillment are unchanged. Time starts at the verified payment timestamp, including offline time; higher ranks pause lower-tier remaining time.
+- `licensing-api/economysuite-migrations/0007_supporter_ranks.sql` preserves existing orders and consent references while extending product kinds. Rank revisions carry time instead of coins/tokens. Signed polling gates delivery on `ranks_version: 1`; the separate optional `ECONOMYSUITE_RANKS_ENABLED` flag defaults off, and rank checkout also requires a compatible reported plugin.
+- The portal removes retired cosmetic titles, supports prefix/color/aura/hat selections, displays synchronized rank state and frames, and explains offline expiry and shared boosters. Existing identity, navigation, reduced motion and hosted Stripe consent flow remain intact. The bounded block-model pets, emotes, timed access and shared bonus calculations live in the plugin, not a second web entitlement system.
+- Validation: 74 Worker tests passed, including rank fulfillment/refunds and a populated D1 migration rehearsal. Website checks cover current appearance submission and rank copy; final counts and plugin validation are recorded with the release. A connected Stripe tool required reauthentication, so no actual sandbox purchase, live publication, production migration/deployment, Paper/client visual verification or server restart was performed. See `docs/ECONOMYSUITE_RANKS_2.41.0.md` for the activation checklist. Do not enable sales merely because the local tests pass.
+
 ## Pantheon registration and pairing clarity (2026-10-15)
 
 - The temporary owner testing link was withdrawn on request on 2026-10-15: removed its sole static redirect rule. Cleanup is scoped to the two owner-confirmed disposable website accounts and temporary preview artifacts, preserving other accounts, financial records, in-game progress, balances and operational logs. Account-cleanup SQL was rehearsed with foreign keys enabled and refuses accounts with purchases or game rounds.

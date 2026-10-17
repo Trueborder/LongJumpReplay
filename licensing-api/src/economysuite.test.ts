@@ -99,6 +99,31 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     expect(await db.prepare('SELECT delivered_revision=revision AS delivered FROM store_orders').first('delivered')).toBe(1);
     expect((await event('evt_other', 'charge.refunded', { payment_intent: 'pi_ljr' })).status).toBe(200);
   });
+  it('fulfills and refunds ranks as time, gates old plugins and never credits currency', async () => {
+    const db=env.ECONOMYSUITE_DB!;
+    await db.prepare("INSERT INTO store_orders(id,customer_id,uuid,player_name,price_id,currency_type,currency_amount,price_minor,session_id,created_at,updated_at,product_type,rank_id) VALUES('rank_order','owner',?,'Player','price_vip','rank',604800,3900,'cs_rank',1,1,'rank','vip')").bind(uuid).run();
+    let refund=0;
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+      if(url.includes('/checkout/sessions/'))return Response.json({currency:'czk',amount_total:3900,payment_status:'paid',payment_intent:'pi_rank',metadata:{order_id:'rank_order',purchase_type:'economysuite_rank',customer_id:'owner',player_uuid:uuid},line_items:{data:[{price:{id:'price_vip'},quantity:1}]}});
+      if(url.includes('/payment_intents/'))return Response.json({latest_charge:{created:1700000000,amount_refunded:refund}});
+      throw new Error('Unexpected payment request');
+    }));
+    const value={id:'cs_rank',metadata:{purchase_type:'economysuite_rank'}};
+    expect((await event('rank_paid','checkout.session.completed',value)).status).toBe(200);
+    expect((await event('rank_paid','checkout.session.completed',value)).status).toBe(200);
+    const operations=await db.prepare('SELECT kind,payload FROM bridge_operations').all<{kind:string,payload:string}>();
+    expect(operations.results).toHaveLength(1);expect(operations.results[0].kind).toBe('rank_purchase');
+    expect(JSON.parse(operations.results[0].payload)).toMatchObject({rank:'vip',paid_at:1700000000000,duration_seconds:604800});
+    const old=await (await bridge('poll',{})).json() as {operations:unknown[]};expect(old.operations).toHaveLength(0);
+    const supported=await (await bridge('poll',{ranks_version:1})).json() as {operations:unknown[]};expect(supported.operations).toHaveLength(1);
+    refund=1950;expect((await event('rank_refund','charge.refunded',{payment_intent:'pi_rank'})).status).toBe(200);
+    const adjusted=await db.prepare('SELECT payload FROM bridge_operations WHERE revision=2').first<{payload:string}>();expect(JSON.parse(adjusted!.payload).duration_seconds).toBe(302400);
+    expect(await db.prepare('SELECT currency_type FROM store_orders').first('currency_type')).toBe('rank');
+  });
+  it('rejects retired title mutations even for linked players',async()=>{
+    await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,1)').bind('owner',uuid,'Player').run();
+    expect((await economySuite(request('cosmetics',{type:'title',id:'miner'}),env,auth)).status).toBe(400);
+  });
   it('rejects mismatched payment metadata and keeps purchase history owned by the account', async () => {
     const db = env.ECONOMYSUITE_DB!;
     await db.prepare('INSERT INTO store_orders(id,customer_id,uuid,player_name,price_id,currency_type,currency_amount,price_minor,session_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind('order', 'other', uuid, 'Other', 'price_es', 'coins', 100, 300, 'cs_es', 1, 1).run();
