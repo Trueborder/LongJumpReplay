@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite production rank launch (2026-10-18)
+
+- The operator explicitly waived Stripe sandbox payment/refund tests and authorized backing up/replacing the old Exaroton JAR and starting the offline server. This supersedes the earlier sandbox-access blocker below. No real or sandbox payment/refund was executed.
+- Backed up production EconomySuite D1 outside Git; applied only its 0007/0008 migrations. Orders/consents/bridge operations/player links stayed 21/19/87/8; foreign-key check clean. Installed EconomySuite 2.41.2 after backing up the old JAR and complete data folder. Actual Paper startup and signed polling confirm ranks_version=1 and web_daily_version=1.
+- Published live one-time VIP/VIP+/MVP at 39/69/99 CZK for 604800 seconds. Only production has ECONOMYSUITE_RANKS_ENABLED=true. Final Worker/assets version e7b6781d-8c96-459f-b3bd-358237ff344b; current catalog and anonymous/unsigned authentication checks passed. Existing currency products, webhook secret and LongJumpReplay license DB were unchanged.
+- Production rank utility allowlist uses existing WorldGuard spawn/spawn and lobby/lobby regions, not whole worlds. Client visuals, actual payment delivery/refund and 30-player tests remain unverified. ProtocolLib toast incompatibility is a separate existing runtime warning, not a rank-delivery failure. Exact product/price IDs, backups and recovery are in docs/ECONOMYSUITE_RANKS_PRODUCTION_2026-10-18.md.
+
 ## EconomySuite rank completion pass (2026-10-18)
 
 - EconomySuite 2.41.2 fixes staff-only descriptor gates on rank `/craft` and own `/ec`, independent glow/container cleanup, immediate expiry checks, master-switch consistency and backwards-compatible appearance preset switches. Payment revision identity is checked on replay; rank delivery rejects unsafe timestamps/revisions.

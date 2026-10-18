@@ -1,5 +1,7 @@
 # Rank completion — 2026-10-18
 
+> **Production status update:** The operator subsequently waived sandbox payment tests. Production migrations, web/backend, the Exaroton 2.41.2 JAR and live rank catalog are now deployed; compatible signed polling was verified before opening sales. See [the production record](ECONOMYSUITE_RANKS_PRODUCTION_2026-10-18.md). The blocker section below records the earlier state, not the current deployment. Payment/refund and client visual tests remain unperformed.
+
 ## Implemented and checked
 
 - EconomySuite 2.41.2 fixes the Bukkit descriptor gate preventing ordinary rank holders from reaching `/craft` and `/ec`. The executor still checks authenticated state, active rank and explicit WorldGuard lobby allowlists; staff permissions are not granted to rank holders.
