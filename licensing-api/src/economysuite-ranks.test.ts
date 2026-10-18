@@ -7,4 +7,8 @@ describe('supporter rank products',()=>{
   it('recognizes rank products without converting them into virtual currency',()=>{expect(packageFromProduct({active:true,name:'VIP',metadata,default_price:price})).toMatchObject({currency:'rank',product_type:'rank',rank_id:'vip',amount:RANK_WEEK_SECONDS,price_minor:3900});});
   it('rejects unknown ranks, wrong weekly duration and unexpected prices',()=>{expect(rankProduct({...metadata,es_rank:'admin'},price)).toBeNull();expect(rankProduct(metadata,{...price,unit_amount:100})).toBeNull();expect(rankProduct(metadata,{...price,metadata:{es_duration_seconds:'1'}})).toBeNull();});
   it('fulfills with the original paid timestamp and bounded cumulative refund duration',()=>{expect(rankDelivery({id:'order',rank_id:'mvp'},1000,2000,targetCurrency(RANK_WEEK_SECONDS,9900,4950,''),2)).toEqual({order_id:'order',rank:'mvp',paid_at:1000000,effective_at:2000000,duration_seconds:302400,revision:2});expect(()=>rankDelivery({id:'order',rank_id:'admin'},1000,2000,604800,1)).toThrow();});
+  it('rejects nonfinite, fractional and unsafe financial revisions or timestamps',()=>{
+    for(const revision of [0,-1,1.5,NaN,Infinity])expect(()=>rankDelivery({id:'order',rank_id:'vip'},1000,2000,604800,revision)).toThrow();
+    for(const effective of [NaN,Infinity,2000.5,Number.MAX_SAFE_INTEGER])expect(()=>rankDelivery({id:'order',rank_id:'vip'},1000,effective,604800,1)).toThrow();
+  });
 });

@@ -70,7 +70,7 @@
   mobileNavigation.addEventListener('change', positionNavigation);
   positionNavigation();
   const cookie = name => document.cookie.split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.split('=').slice(1).join('=') || '';
-  const errors = { pair_required: ['Nejdřív propoj svůj Minecraft účet.', 'Pair your Minecraft account first.'], invalid_password: ['Heslo není správné.', 'The password is incorrect.'], pair_expired: ['Propojení vypršelo. Použij znovu /web link.', 'Pairing expired. Run /web link again.'], pending_delivery: ['Nejdřív dokonči čekající nákupy a doručení.', 'Finish pending checkouts and deliveries first.'], already_linked: ['Tento účet nebo hráč už je propojený.', 'This account or player is already linked.'], unavailable: ['Tato funkce zatím není dostupná.', 'This feature is not available yet.'], stripe_minimum: ['Stripe vy\u017Eaduje minim\u00E1ln\u00ED platbu 15 K\u010D. Zvol vy\u0161\u0161\u00ED bal\u00ED\u010Dek.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.'], invalid_confirmation: ['Potvrzení není platné.', 'The confirmation is invalid.'] };
+  const errors = { rank_delivery_unavailable: ['Rank zatím nelze bezpečně doručit. Správce musí aktualizovat server.', 'Rank delivery is not ready. The administrator must update the server.'], pair_required: ['Nejdřív propoj svůj Minecraft účet.', 'Pair your Minecraft account first.'], invalid_password: ['Heslo není správné.', 'The password is incorrect.'], pair_expired: ['Propojení vypršelo. Použij znovu /web link.', 'Pairing expired. Run /web link again.'], pending_delivery: ['Nejdřív dokonči čekající nákupy a doručení.', 'Finish pending checkouts and deliveries first.'], already_linked: ['Tento účet nebo hráč už je propojený.', 'This account or player is already linked.'], unavailable: ['Tato funkce zatím není dostupná.', 'This feature is not available yet.'], stripe_minimum: ['Stripe vy\u017Eaduje minim\u00E1ln\u00ED platbu 15 K\u010D. Zvol vy\u0161\u0161\u00ED bal\u00ED\u010Dek.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.'], invalid_confirmation: ['Potvrzení není platné.', 'The confirmation is invalid.'] };
   Object.assign(errors, {
     games_disabled: ['Hry jsou vypnuté.', 'Games are disabled.'],
     server_games_disabled: ['Hry jsou na serveru vypnuté.', 'Games are disabled on the server.'],
@@ -180,8 +180,9 @@
   }
   function rankPanel(snapshot) {
     const rank = snapshot.rank || {}; const names = {vip:'VIP',vipplus:'VIP+',mvp:'MVP'};
-    const frame = Math.max(0, Math.min(3, Number(rank.frame) || 0));
-    return panel(t('Tvůj rank', 'Your rank'), '<div class="es-rank-profile es-rank-frame-' + frame + '"><strong>' + escape(names[rank.id] || t('Hráč', 'Player')) + '</strong><p>' + (names[rank.id] ? t('Platí do: ', 'Expires: ') + escape(date(Number(rank.expires_at) / 1000)) : t('Nemáš aktivní podporovatelský rank.', 'No supporter rank is currently active.')) + '</p>' + ['vip','vipplus','mvp'].filter(id => id !== rank.id && Number(rank.remaining_ms?.[id]) > 0).map(id => '<p>' + names[id] + ': ' + number(Math.ceil(Number(rank.remaining_ms[id])/3600000)) + ' h · ' + t('pozastaveno', 'paused') + '</p>').join('') + '<p>' + t('Rankové nastavení vzhledu upravíš ve hře v /cosmetics.', 'Change rank appearance in-game with /cosmetics.') + '</p></div>');
+    const stale = !!names[rank.id] && (!Number.isFinite(Number(rank.expires_at)) || Number(rank.expires_at) <= Date.now());
+    const frame = stale ? 0 : Math.max(0, Math.min(3, Number(rank.frame) || 0));
+    return panel(t('Tvůj rank', 'Your rank'), '<div class="es-rank-profile es-rank-frame-' + frame + '"><strong>' + escape(stale ? t('Čeká na synchronizaci', 'Waiting for synchronization') : names[rank.id] || t('Hráč', 'Player')) + '</strong><p>' + (stale ? t('Poslední uložená platnost skončila. Obnov data ze serveru pro aktuální rank.', 'The last saved expiry has passed. Refresh server data for the current rank.') : names[rank.id] ? t('Platí do: ', 'Expires: ') + escape(date(Number(rank.expires_at) / 1000)) : t('Nemáš aktivní podporovatelský rank.', 'No supporter rank is currently active.')) + '</p>' + ['vip','vipplus','mvp'].filter(id => id !== rank.id && Number(rank.remaining_ms?.[id]) > 0).map(id => '<p>' + names[id] + ': ' + number(Math.ceil(Number(rank.remaining_ms[id])/3600000)) + ' h · ' + t('pozastaveno', 'paused') + '</p>').join('') + '<p>' + t('Rankové nastavení vzhledu upravíš ve hře v /cosmetics.', 'Change rank appearance in-game with /cosmetics.') + '</p></div>', 'es-rank-section');
   }
   function rankComparison() {
     const rows = [
@@ -449,8 +450,13 @@
     try {
       const latest = await api('/api/economysuite/account');
       const dailyChanged = JSON.stringify(account?.daily_reward) !== JSON.stringify(latest.daily_reward) || !!account?.link !== !!latest.link;
+      const rankChanged = JSON.stringify(account?.snapshot?.rank) !== JSON.stringify(latest.snapshot?.rank);
       account = latest; renderConnection();
       if (dailyChanged && !dailyClaimPending) refreshDailyReward();
+      if (rankChanged || (latest.snapshot?.rank?.id && Number(latest.snapshot.rank.expires_at) <= Date.now())) {
+        const rankHost = $('.es-rank-section');
+        if (rankHost) rankHost.outerHTML = rankPanel(latest.snapshot || {});
+      }
       if (route === 'games') await window.ESGames.poll(gameContext());
       if (finishRefresh && latest.refresh_operation?.id === refreshOperation && latest.refresh_operation.state === 'complete') {
         try { await load({ refresh: true }); finishRefresh.resolve(); }

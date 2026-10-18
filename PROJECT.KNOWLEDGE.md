@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite rank completion pass (2026-10-18)
+
+- EconomySuite 2.41.2 fixes staff-only descriptor gates on rank `/craft` and own `/ec`, independent glow/container cleanup, immediate expiry checks, master-switch consistency and backwards-compatible appearance preset switches. Payment revision identity is checked on replay; rank delivery rejects unsafe timestamps/revisions.
+- The account portal labels expired rank snapshots as awaiting sync instead of presenting an active rank/frame. Keep existing portal design and CZ/EN text; never compute a new entitlement from a stale browser snapshot.
+- Actual staging work: isolated EconomySuite D1 migrated through 0008; foreign-key check clean; staging Worker deployed as `63274c7b-cbe5-45d0-a13d-1b23d55f229d`. Anonymous account=401 and unsigned bridge=403. Purchase flags remain off. This is not a production deployment or real payment validation.
+- Stripe was reconnected but exposes only the live Tomas Pisar account, no sandbox. A read-only Pantheon catalog audit found currency products but no ranks. The operator was asked to add sandbox access; no product/payment writes occurred. Production read-only checks show 0007/0008 pending. Do not enable rank sales, claim sandbox payment success or install/restart the production plugin until the remaining checklist is performed. See `docs/ECONOMYSUITE_RANKS_COMPLETION_2.41.2.md` for exact status and continuation.
+
 ## EconomySuite daily website reward (2026-10-17)
 
 - EconomySuite 2.41.1 adds a free 1–5-token claim in the account overview and store. It is separate from Minecraft `/daily`, requires a verified linked player and authenticated/CSRF-protected POST, and needs neither a purchase nor a rank. Normal gameplay token eligibility remains authoritative; earned tokens wait in the existing pending wallet when necessary.

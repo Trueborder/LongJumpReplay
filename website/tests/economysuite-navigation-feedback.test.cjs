@@ -39,6 +39,7 @@ function harness(options = {}) {
   let interval, clock = 100000;
   const documentHandlers = {}, documentElement = { dataset: {} };
   const account = { link: { uuid: 'test-player', name: 'TestPlayer' }, snapshot: {}, synced_at: 10, server_status: 'connected', refresh_operation: null };
+  if(options.rank) {account.snapshot.rank=options.rank;nodes.set('.es-rank-section',{outerHTML:''});}
   if(options.daily) {
     account.daily_reward={day:'2026-10-17',available:true,amount:null,status:'available',next_reset_at:1792274400};
     nodes.set('#web-daily-reward',{outerHTML:''});
@@ -83,6 +84,18 @@ test('daily reward appears in both store and overview and double-click cannot su
     assert.equal(h.account.daily_reward.amount,4);
     assert.match(h.nodes.get('#web-daily-reward').outerHTML,/Odměna čeká na server/);
   }
+});
+test('expired rank snapshots do not pretend the rank and its profile frame are still active',async()=>{
+  const h=harness({route:'store',rank:{id:'mvp',expires_at:99999,frame:3,remaining_ms:{}}});await flush();
+  assert.match(h.nodes.get('#content').innerHTML,/Čeká na synchronizaci/);
+  assert.match(h.nodes.get('#content').innerHTML,/es-rank-frame-0/);
+  assert.doesNotMatch(h.nodes.get('#content').innerHTML,/es-rank-frame-3/);
+});
+test('rank expiry refreshes its own panel while leaving appearance forms untouched',async()=>{
+  const h=harness({route:'appearance',appearance:true,rank:{id:'mvp',expires_at:100010,frame:3,remaining_ms:{}}});await flush();
+  const form=h.nodes.get('#appearance-form');h.advance(20);await h.tick();
+  assert.match(h.nodes.get('.es-rank-section').outerHTML,/Čeká na synchronizaci/);
+  assert.equal(h.nodes.get('#appearance-form'),form);
 });
 
 test('motion input follows keyboard and pointer without delaying navigation', async () => {
