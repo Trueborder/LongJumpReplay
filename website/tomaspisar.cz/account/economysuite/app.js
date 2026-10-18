@@ -11,8 +11,9 @@
   const feedback = window.LJR_FEEDBACK;
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
-  const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], games: ['Hry', 'Games'], store: ['Obchod', 'Store'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
+  const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], games: ['Hry', 'Games'], store: ['Obchod', 'Store'], rank: ['Ranky', 'Ranks'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
   const paths = {
+    rank: '<path d="m3 7 4 3 5-7 5 7 4-3-2 13H5L3 7Zm2 9h14"/>',
     games: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>',
     overview: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
     statistics: '<path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/>', progress: '<path d="m4 12 5 5L20 6"/>',
@@ -184,22 +185,55 @@
     const frame = stale ? 0 : Math.max(0, Math.min(3, Number(rank.frame) || 0));
     return panel(t('Tvůj rank', 'Your rank'), '<div class="es-rank-profile es-rank-frame-' + frame + '"><strong>' + escape(stale ? t('Čeká na synchronizaci', 'Waiting for synchronization') : names[rank.id] || t('Hráč', 'Player')) + '</strong><p>' + (stale ? t('Poslední uložená platnost skončila. Obnov data ze serveru pro aktuální rank.', 'The last saved expiry has passed. Refresh server data for the current rank.') : names[rank.id] ? t('Platí do: ', 'Expires: ') + escape(date(Number(rank.expires_at) / 1000)) : t('Nemáš aktivní podporovatelský rank.', 'No supporter rank is currently active.')) + '</p>' + ['vip','vipplus','mvp'].filter(id => id !== rank.id && Number(rank.remaining_ms?.[id]) > 0).map(id => '<p>' + names[id] + ': ' + number(Math.ceil(Number(rank.remaining_ms[id])/3600000)) + ' h · ' + t('pozastaveno', 'paused') + '</p>').join('') + '<p>' + t('Rankové nastavení vzhledu upravíš ve hře v /cosmetics.', 'Change rank appearance in-game with /cosmetics.') + '</p></div>', 'es-rank-section');
   }
-  function rankComparison() {
-    const rows = [
-      [t('Cena / 7 dní','Price / 7 days'),'39 Kč','69 Kč','99 Kč'],
-      [t('Aury a klobouky','Auras and hats'),'1 + 1','2 + 2','3 + 3'],
-      [t('Společníci / emoty','Pets / emotes'),'1 / 2','2 / 4','3 / 6'],
-      [t('Sestavy / barvy / rámečky','Presets / colours / frames'),'3 / 3 / 1','6 / 6 / 2','10 / 12 / 3'],
-      [t('Příchodové efekty','Arrival effects'),'1','2','3'],
-      [t('Crafting v lobby','Lobby crafting'),'✓','✓','✓'],
-      [t('Ender chest v lobby','Lobby ender chest'),'—','✓','✓'],
-      [t('Jméno společníka','Pet name'),'—','✓','✓'],
-      [t('Glow v lobby / dvoubarevný odznak','Lobby glow / two-colour badge'),'—','—','✓'],
-      [t('Společný booster','Shared booster'),'30 min','45 min','60 min'],
-      [t('Postup práce pro všechny','Job progress for everyone'),'+5 %','+10 %','+15 %'],
-      [t('Denní coiny pro všechny','Daily coins for everyone'),'+10 %','+20 %','+30 %']
+  const rankIds = ['vip', 'vipplus', 'mvp'];
+  const rankNames = { vip: 'VIP', vipplus: 'VIP+', mvp: 'MVP' };
+  const rankSymbols = {
+    vip: '<path d="m3 7 4 3 5-7 5 7 4-3-2 13H5L3 7Zm2 9h14"/>',
+    vipplus: '<path d="M12 2 21 6v6c0 5-9 10-9 10S3 17 3 12V6l9-4Z"/><path d="m8 12 3 3 5-6"/>',
+    mvp: '<path d="m6 3-4 6 10 13L22 9l-4-6H6Zm-4 6h20M6 3l6 19 6-19M6 3l6 6 6-6"/>'
+  };
+  const rankSymbol = id => '<svg class="es-rank-symbol" viewBox="0 0 24 24" aria-hidden="true">' + (rankSymbols[id] || '') + '</svg>';
+  function rankBenefits() {
+    return [
+      [t('Aury', 'Auras'), ['Zlatá svatozář', 'Zlatá svatozář · Duhový vír', 'Zlatá svatozář · Duhový vír · Pantheon aura'].map((v,i) => t(v, ['Golden halo','Golden halo · Rainbow vortex','Golden halo · Rainbow vortex · Pantheon aura'][i]))],
+      [t('Klobouky', 'Hats'), [t('Koruna','Crown'), t('Koruna · Dračí hlava','Crown · Dragon head'), t('Koruna · Dračí hlava · Zlatý blok','Crown · Dragon head · Gold block')]],
+      [t('Společníci', 'Pets'), [t('Včela','Bee'), t('Včela · Slime','Bee · Slime'), t('Včela · Slime · Drak','Bee · Slime · Dragon')]],
+      [t('Emoty', 'Emotes'), [t('Mávání · Srdíčka','Wave · Hearts'), t('Mávání · Srdíčka · Hudba · Oslava','Wave · Hearts · Music · Celebration'), t('Mávání · Srdíčka · Hudba · Oslava · Koruna · Konfety','Wave · Hearts · Music · Celebration · Crown · Confetti')]],
+      [t('Příchodové efekty','Arrival effects'), [t('Portál','Portal'), t('Portál · Ohňostroje','Portal · Fireworks'), t('Portál · Ohňostroje · Zlaté ohňostroje','Portal · Fireworks · Golden fireworks')]],
+      [t('Sestavy / barvy / rámečky','Presets / colours / frames'), ['3 / 3 / 1','6 / 6 / 2','10 / 12 / 3']],
+      [t('Crafting v lobby','Lobby crafting'), [t('Ano','Yes'),t('Ano','Yes'),t('Ano','Yes')]],
+      [t('Vlastní ender chest v lobby','Own ender chest in lobby'), ['—',t('Ano','Yes'),t('Ano','Yes')]],
+      [t('Vlastní jméno společníka','Custom pet name'), ['—',t('Ano','Yes'),t('Ano','Yes')]],
+      [t('Glow v lobby / dvoubarevný odznak','Lobby glow / two-colour badge'), ['—','—',t('Ano','Yes')]],
+      [t('Společný booster','Shared booster'), ['30 min','45 min','60 min']],
+      [t('Postup práce pro všechny','Job progress for everyone'), ['+5 %','+10 %','+15 %']],
+      [t('Denní coiny pro všechny','Daily coins for everyone'), ['+10 %','+20 %','+30 %']]
     ];
-    return panel(t('Porovnání ranků','Compare ranks'), table([t('Výhoda','Benefit'),'VIP','VIP+','MVP'], rows.map(values => row(values.map(escape)))) + '<p class="es-muted">' + t('Vyšší rank zahrnuje nižší výhody. Jednorázový nákup, bez předplatného. Sedm dní běží od potvrzení platby i offline; vyšší rank pozastaví čas nižšího. Booster smí spustit každý dárce jednou za 168 hodin, bez skládání, nejvýše 120 minut aktivací serveru denně. Bonus dostanou všichni, nikoli jen platící hráči.', 'Higher ranks include lower-tier perks. One-time payment, no subscription. Seven days run from payment confirmation including offline time; a higher rank pauses lower-tier time. Each donor can activate a booster once per 168 hours, without stacking, with a server-wide 120-minute daily activation limit. Everyone receives the bonus, not only paying players.') + '</p>');
+  }
+  function rankRules() {
+    return '<p class="es-rank-rules">' + t('Vyšší rank zahrnuje nižší výhody. Jednorázový nákup, bez předplatného. Sedm dní běží od potvrzení platby i offline; vyšší rank pozastaví čas nižšího. Booster smí spustit každý dárce jednou za 168 hodin, bez skládání, nejvýše 120 minut aktivací serveru denně. Bonus dostanou všichni, nikoli jen platící hráči.', 'Higher ranks include lower-tier perks. One-time payment, no subscription. Seven days run from payment confirmation including offline time; a higher rank pauses lower-tier time. Each donor can activate a booster once per 168 hours, without stacking, with a server-wide 120-minute daily activation limit. Everyone receives the bonus, not only paying players.') + '</p>';
+  }
+  function rankCard(pack) {
+    const id = pack.rank_id;
+    if (!rankIds.includes(id)) return '';
+    return '<article class="es-rank-card es-tier-' + id + '"><button class="es-rank-details-trigger" type="button" data-rank="' + id + '" aria-haspopup="dialog" aria-label="' + escape(t('Zobrazit všechny výhody ', 'View all benefits of ') + rankNames[id]) + '"><span class="es-rank-crest">' + rankSymbol(id) + '</span><strong class="es-rank-name">' + rankNames[id] + '</strong><span class="es-rank-tagline">' + t('Tvůj vlastní styl. Podpora Pantheonu.', 'Your own style. Support Pantheon.') + '</span><span class="es-rank-cost">' + money(pack.price_minor) + '<small> / ' + t('7 dní','7 days') + '</small></span><span class="es-rank-card-summary">' + escape(t(...[['Zlatá aura, koruna a včelí společník','Golden aura, crown and bee companion'],['Duhový vír, dračí hlava a vlastní ender chest','Rainbow vortex, dragon head and own ender chest'],['Pantheon aura, dračí společník a glow v lobby','Pantheon aura, dragon companion and lobby glow']][rankIds.indexOf(id)])) + '</span><span class="es-rank-details-link">' + t('Prohlédnout všechny výhody','Explore all benefits') + ' <span aria-hidden="true">↗</span></span></button></article>';
+  }
+  function rankDialog() {
+    return '<dialog id="rank-details-dialog" class="es-rank-dialog" aria-labelledby="rank-details-title"><button type="button" class="es-modal-close" id="close-rank-details" aria-label="' + t('Zavřít','Close') + '">×</button><div id="rank-details-content"></div></dialog>';
+  }
+  function rankDetail(id) {
+    const index = rankIds.indexOf(id), pack = packages.find(p => p.currency === 'rank' && p.rank_id === id);
+    if (index < 0 || !pack) return '';
+    const canBuy = purchasesEnabled && account?.link && pack.checkoutable !== false;
+    return '<header class="es-rank-detail-header">' + rankSymbol(id) + '<p class="es-eyebrow">PANTHEON / ' + t('PODPOROVATELSKÝ RANK','SUPPORTER RANK') + '</p><h2 id="rank-details-title">' + rankNames[id] + '</h2><p>' + money(pack.price_minor) + ' / ' + t('7 dní · bez předplatného','7 days · no subscription') + '</p></header><div class="es-rank-detail-body"><p class="es-rank-includes">' + t('Všechny výhody, včetně nižších ranků','All benefits, including lower tiers') + '</p><dl class="es-rank-benefits">' + rankBenefits().map(([label,values]) => '<div' + (values[index] === '—' ? ' class="is-unavailable"' : '') + '><dt>' + escape(label) + '</dt><dd>' + escape(values[index] === '—' ? t('Není součástí','Not included') : values[index]) + '</dd></div>').join('') + '</dl>' + rankRules() + '<div class="es-rank-detail-actions">' + (canBuy ? '<button type="button" class="es-primary" id="order-rank" data-price="' + escape(pack.id) + '">' + t('Objednat ', 'Order ') + rankNames[id] + ' · ' + money(pack.price_minor) + '</button>' : !account ? '<a class="es-button es-primary" href="/login?product=economysuite&amp;next=' + encodeURIComponent('/economysuite/' + route) + '">' + t('Přihlásit se pro nákup','Sign in to purchase') + '</a>' : !account.link ? '<a class="es-button es-primary" href="/economysuite/pair">' + t('Nejdřív propojit hráče','Pair your player first') + '</a>' : '<p>' + t('Prodej momentálně není dostupný.','Sales are currently unavailable.') + '</p>') + '<a href="/economysuite/rank">' + t('Porovnat ranky','Compare ranks') + '</a></div></div>';
+  }
+  function rankComparison() {
+    const columns = rankIds.map(id => { const pack = packages.find(p => p.currency === 'rank' && p.rank_id === id); return '<th scope="col" class="es-tier-' + id + '">' + rankSymbol(id) + '<strong>' + rankNames[id] + '</strong><span>' + (pack ? money(pack.price_minor) + ' / ' + t('7 dní','7 days') : t('Nyní nedostupné','Currently unavailable')) + '</span></th>'; }).join('');
+    const rows = rankBenefits().map(([label,values]) => '<tr><th scope="row">' + escape(label) + '</th>' + values.map((value,i) => '<td class="es-tier-' + rankIds[i] + '">' + escape(value) + '</td>').join('')).join('');
+    return '<section class="es-panel es-rank-comparison"><h2>' + t('Každý rank má svůj styl','Every rank has its own style') + '</h2><p>' + t('Vyber si podle výhod. Každý vyšší rank obsahuje i vše z těch předchozích.','Choose by benefits. Each higher tier also includes everything from the tiers below.') + '</p><div class="es-rank-table-scroll" tabindex="0" role="region" aria-label="' + t('Porovnání všech výhod ranků','Compare all rank benefits') + '"><table class="es-rank-table"><caption class="es-sr-only">' + t('Výhody VIP, VIP+ a MVP','VIP, VIP+ and MVP benefits') + '</caption><thead><tr><th scope="col">' + t('Výhoda','Benefit') + '</th>' + columns + '</tr></thead><tbody>' + rows + '</tbody></table></div>' + rankRules() + '</section>';
+  }
+  function rankPage() {
+    return '<div class="es-rank-intro"><p class="es-eyebrow">' + t('PODPOŘ PANTHEON · VYBER SI SVŮJ STYL','SUPPORT PANTHEON · CHOOSE YOUR STYLE') + '</p><h2>' + t('Tři ranky. Jeden Pantheon.','Three ranks. One Pantheon.') + '</h2><p>' + t('Kosmetika pro tebe, společné boostery pro všechny. Bez automatického obnovování.','Cosmetics for you, shared boosters for everyone. No automatic renewal.') + '</p></div><div class="es-rank-cards">' + packages.filter(p => p.currency === 'rank').map(rankCard).join('') + '</div>' + rankComparison() + rankDialog();
   }
   function dailyRewardCard() {
     const reward = account?.daily_reward;
@@ -220,6 +254,7 @@
     if (!host) return;
     host.outerHTML = dailyRewardCard();
     bindDailyReward();
+
   }
   function bindDailyReward() {
     $('#claim-web-daily')?.addEventListener('click', event => {
@@ -235,10 +270,13 @@
       });
     });
   }
+  function storePurchaseDialog() {
+    return '<div id="purchase-dialog" class="es-modal" hidden role="dialog" aria-modal="true" aria-labelledby="purchase-dialog-title"><div class="es-modal-backdrop" data-close-purchase></div><section class="es-modal-card" role="document"><button id="close-purchase-dialog" class="es-modal-close" type="button" aria-label="' + t('Zavřít', 'Close') + '">×</button><p class="es-eyebrow">' + t('PŘED PLATBOU', 'BEFORE PAYMENT') + '</p><h2 id="purchase-dialog-title">' + t('Zkontroluj objednávku', 'Review your order') + '</h2><div id="purchase-dialog-summary" class="es-order-summary"></div><form id="purchase-consent-form" class="es-purchase-consent"><label><input id="accept-purchase-terms" type="checkbox" required>' + t('Souhlasím s <a href="https://tomaspisar.cz/legal/economysuite-purchases/" target="_blank" rel="noopener">podmínkami nákupu EconomySuite</a>.', 'I accept the <a href="https://tomaspisar.cz/legal/economysuite-purchases/" target="_blank" rel="noopener">EconomySuite purchase terms</a>.') + '</label><label><input id="request-immediate-delivery" type="checkbox" required>' + t('Výslovně žádám o okamžité digitální dodání a beru na vědomí příslušný dopad na právo na odstoupení.', 'I expressly request immediate digital delivery and acknowledge the applicable effect on the withdrawal right.') + '</label><p class="es-muted">' + t('Dodání proběhne po potvrzení platby. Při offline serveru zůstane nákup ve frontě. <a href="https://tomaspisar.cz/legal/refunds/" target="_blank" rel="noopener">Vrácení a odstoupení</a>.', 'Delivery starts after payment confirmation. If the server is offline, the purchase remains queued. <a href="https://tomaspisar.cz/legal/refunds/" target="_blank" rel="noopener">Refunds and withdrawal</a>.') + '</p><div class="es-modal-actions"><button id="cancel-purchase" type="button">' + t('Zpět', 'Back') + '</button><button id="confirm-purchase" class="es-primary" type="submit">' + t('Potvrdit a pokračovat k platbě', 'Confirm and continue to checkout') + '</button></div></form></section></div>';
+  }
   function store() {
     const support = '<div class="es-store-note"><strong>' + t('Podpora vývoje', 'Support the developer') + '</strong><span>' + t('Nákup podporuje vývoj a provoz EconomySuite týmu Novaryn Solutions.', 'Your purchase supports EconomySuite development and operation by Novaryn Solutions.') + '</span></div>';
-    const modal = '<div id="purchase-dialog" class="es-modal" hidden role="dialog" aria-modal="true" aria-labelledby="purchase-dialog-title"><div class="es-modal-backdrop" data-close-purchase></div><section class="es-modal-card" role="document"><button id="close-purchase-dialog" class="es-modal-close" type="button" aria-label="' + t('Zavřít', 'Close') + '">×</button><p class="es-eyebrow">' + t('PŘED PLATBOU', 'BEFORE PAYMENT') + '</p><h2 id="purchase-dialog-title">' + t('Zkontroluj objednávku', 'Review your order') + '</h2><div id="purchase-dialog-summary" class="es-order-summary"></div><form id="purchase-consent-form" class="es-purchase-consent"><label><input id="accept-purchase-terms" type="checkbox" required>' + t('Souhlasím s <a href="https://tomaspisar.cz/legal/economysuite-purchases/" target="_blank" rel="noopener">podmínkami nákupu EconomySuite</a>.', 'I accept the <a href="https://tomaspisar.cz/legal/economysuite-purchases/" target="_blank" rel="noopener">EconomySuite purchase terms</a>.') + '</label><label><input id="request-immediate-delivery" type="checkbox" required>' + t('Výslovně žádám o okamžité digitální dodání a beru na vědomí příslušný dopad na právo na odstoupení.', 'I expressly request immediate digital delivery and acknowledge the applicable effect on the withdrawal right.') + '</label><p class="es-muted">' + t('Dodání proběhne po potvrzení platby. Při offline serveru zůstane nákup ve frontě. <a href="https://tomaspisar.cz/legal/refunds/" target="_blank" rel="noopener">Vrácení a odstoupení</a>.', 'Delivery starts after payment confirmation. If the server is offline, the purchase remains queued. <a href="https://tomaspisar.cz/legal/refunds/" target="_blank" rel="noopener">Refunds and withdrawal</a>.') + '</p><div class="es-modal-actions"><button id="cancel-purchase" type="button">' + t('Zpět', 'Back') + '</button><button id="confirm-purchase" class="es-primary" type="submit">' + t('Potvrdit a pokračovat k platbě', 'Confirm and continue to checkout') + '</button></div></form></section></div>';
-    return rankPanel(account?.snapshot || {}) + rankComparison() + support + (packages.length ? '<div class="es-grid es-store-grid">' + packages.map(pack => panel(pack.name, '<div class="es-pack-amount">' + currencyIcon(pack.currency) + '<span>' + productLabel(pack) + '</span></div><p>' + escape(pack.description) + '</p><span class="es-pack-price">' + money(pack.price_minor) + ' <small>CZK</small></span><p class="es-muted">' + t('Digitální obsah · bez dopravy · dodání po potvrzení platby', 'Digital content · no shipping · delivery after payment confirmation') + '</p>' + (pack.checkoutable === false ? '<p class="es-muted es-pack-unavailable">' + t('Stripe vyžaduje minimální platbu 15 Kč. Zvol vyšší balíček.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.') + '</p>' : '') + '<button class="es-primary buy" type="button" data-price="' + escape(pack.id) + '" data-amount="' + pack.price_minor + '"' + (!purchasesEnabled || !account?.link || pack.checkoutable === false ? ' disabled' : '') + ' aria-haspopup="dialog">' + icon('store') + (pack.checkoutable === false ? t('Nedostupné přes Stripe', 'Unavailable through Stripe') : t('Objednat', 'Order')) + '</button>', 'es-pack')).join('') + '</div>' : panel(t('Obchod se připravuje.', 'The store is being prepared.'), '<p>' + escape(t('Balíčky a ceny zde budou zveřejněné před otevřením prodeje.', 'Packages and prices will be published here before sales open.')) + '</p>', 'es-empty')) + modal;
+    const modal = storePurchaseDialog();
+    return support + (packages.length ? '<div class="es-grid es-store-grid">' + packages.filter(pack => pack.currency !== 'rank').map(pack => panel(pack.name, '<div class="es-pack-amount">' + currencyIcon(pack.currency) + '<span>' + productLabel(pack) + '</span></div><p>' + escape(pack.description) + '</p><span class="es-pack-price">' + money(pack.price_minor) + ' <small>CZK</small></span><p class="es-muted">' + t('Digitální obsah · bez dopravy · dodání po potvrzení platby', 'Digital content · no shipping · delivery after payment confirmation') + '</p>' + (pack.checkoutable === false ? '<p class="es-muted es-pack-unavailable">' + t('Stripe vyžaduje minimální platbu 15 Kč. Zvol vyšší balíček.', 'Stripe requires a minimum 15 CZK payment. Choose a larger package.') + '</p>' : '') + '<button class="es-primary buy" type="button" data-price="' + escape(pack.id) + '" data-amount="' + pack.price_minor + '"' + (!purchasesEnabled || !account?.link || pack.checkoutable === false ? ' disabled' : '') + ' aria-haspopup="dialog">' + icon('store') + (pack.checkoutable === false ? t('Nedostupné přes Stripe', 'Unavailable through Stripe') : t('Objednat', 'Order')) + '</button>', 'es-pack')).join('') + '</div>' : panel(t('Obchod se připravuje.', 'The store is being prepared.'), '<p>' + escape(t('Balíčky a ceny zde budou zveřejněné před otevřením prodeje.', 'Packages and prices will be published here before sales open.')) + '</p>', 'es-empty')) + modal;
   }
   function purchases() {
     const labels = { checkout: ['Čeká na platbu', 'Awaiting payment'], cancelled: ['Zrušeno', 'Cancelled'], paid: ['Zaplaceno', 'Paid'], refunded: ['Vráceno', 'Refunded'], partially_refunded: ['Částečně vráceno', 'Partially refunded'], disputed: ['Spor o platbu', 'Payment dispute'] };
@@ -336,6 +374,7 @@
     let html;
     if (route === 'games') html = window.ESGames.render(gameContext());
     else if (route === 'store') html = store();
+    else if (route === 'rank') html = rankPage() + storePurchaseDialog();
     else if (route === 'pair') html = pairingPage();
     else if (route === 'purchases') html = purchases();
     else if (route === 'settings') html = account ? settings() : empty();
@@ -349,6 +388,24 @@
   async function action(button, work) { feedback?.busy(button, true); try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) feedback?.busy(button, false); } }
   function bind() {
     bindDailyReward();
+    const rankDialogNode = $('#rank-details-dialog');
+    document.querySelectorAll('[data-rank]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.rank, content = rankDetail(id);
+      if (!content || !rankDialogNode) return;
+      rankDialogNode.className = 'es-rank-dialog es-tier-' + id;
+      $('#rank-details-content').innerHTML = content;
+      rankDialogNode.showModal();
+      document.body.classList.add('es-modal-open');
+      $('#close-rank-details').focus();
+      $('#order-rank')?.addEventListener('click', event => {
+        const orderButton = event.currentTarget;
+        rankDialogNode.close();
+        openPurchaseDialog(button, orderButton.dataset.price);
+      });
+    }));
+    $('#close-rank-details')?.addEventListener('click', () => rankDialogNode.close());
+    rankDialogNode?.addEventListener('close', () => document.body.classList.remove('es-modal-open'));
+    rankDialogNode?.addEventListener('click', event => { if (event.target === rankDialogNode) { const bounds = rankDialogNode.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) rankDialogNode.close(); } });
     if (route === 'games') window.ESGames.bind(gameContext());
     $('#retry-load')?.addEventListener('click', () => action($('#retry-load'), () => load({ initial: true })));
     document.querySelectorAll('.cosmetic-combined-form select').forEach(select => select.addEventListener('change', () => {
@@ -370,11 +427,11 @@
         status(t('Vzhled čeká na potvrzení serverem.', 'Appearance is waiting for server confirmation.'));
       });
     });
-    const openPurchaseDialog = button => {
-      const pack = packages.find(item => item.id === button.dataset.price);
+    const openPurchaseDialog = (button, priceId = button.dataset.price) => {
+      const pack = packages.find(item => item.id === priceId);
       if (!pack) return;
       pendingPurchase = { pack, button };
-      $('#purchase-dialog-summary').innerHTML = '<strong>' + escape(pack.name) + '</strong><span>' + currencyIcon(pack.currency) + ' ' + productLabel(pack) + '</span><b>' + money(pack.price_minor) + ' CZK</b>';
+      $('#purchase-dialog-summary').innerHTML = '<strong>' + escape(pack.name) + '</strong><span>' + (pack.currency === 'rank' ? rankSymbol(pack.rank_id) : currencyIcon(pack.currency)) + ' ' + productLabel(pack) + '</span><b>' + money(pack.price_minor) + ' CZK</b>';
       $('#purchase-consent-form').reset();
       $('#purchase-dialog').hidden = false;
       document.body.classList.add('es-modal-open');
@@ -431,11 +488,11 @@
     if (initial) { $('#content').setAttribute('aria-busy', 'true'); $('#content').innerHTML = loading(); }
     let accountFailure = null;
     try { account = await api('/api/economysuite/account'); }
-    catch (failure) { if (failure.status === 401 && !['store', 'pair'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) accountFailure = failure; }
-    if (accountFailure && !['store', 'pair'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); if (options.refresh) throw accountFailure; status(accountFailure.message, true); return; }
+    catch (failure) { if (failure.status === 401 && !['store', 'pair', 'rank'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) accountFailure = failure; }
+    if (accountFailure && !['store', 'pair', 'rank'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); if (options.refresh) throw accountFailure; status(accountFailure.message, true); return; }
     try {
       if (route === 'games' && account) await window.ESGames.load(api, account);
-      if (route === 'store') { const catalog = await api('/api/economysuite/catalog'); packages = catalog.packages; purchasesEnabled = catalog.purchases_enabled; }
+      if (route === 'store' || route === 'rank') { const catalog = await api('/api/economysuite/catalog'); packages = catalog.packages; purchasesEnabled = catalog.purchases_enabled; }
       if (route === 'purchases' && account) orders = (await api('/api/economysuite/orders')).orders;
       if (route === 'statistics' && account) rankings = (await api(`/api/economysuite/leaderboard?metric=${metric}`)).entries;
       if (route === 'pair' && account && pairingToken) pairing = await api('/api/economysuite/pair/inspect', { token: pairingToken });

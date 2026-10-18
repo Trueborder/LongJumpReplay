@@ -1,5 +1,11 @@
 # LongJumpReplay changelog
 
+## Pantheon rank comparison and details — 2026-10-18
+
+- Moves supporter ranks out of Store into a dedicated Rank page, keeping the store focused on coins, tokens and its free daily reward.
+- Adds yellow VIP crown, green VIP+ shield and light-blue MVP gem cards with detailed benefit dialogs and a separate coloured comparison.
+- Preserves live catalog prices, sign-in and pairing requirements, purchase consent and existing payment processing. Includes Czech/English copy and mobile/keyboard support.
+
 ## PANTHEON account domain — 2026-10-13
 
 - Moves the EconomySuite account portal to `account.pantheon.tomaspisar.cz` while keeping existing accounts and player data.

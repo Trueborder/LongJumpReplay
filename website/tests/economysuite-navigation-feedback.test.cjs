@@ -9,6 +9,7 @@ const flush = () => new Promise(setImmediate);
 
 function harness(options = {}) {
   const optionsForFailure = options.failCosmetic;
+  const rankDetails = options.rankDetails;
   const nodes = new Map();
   const classes = () => ({ add() {}, remove() {}, toggle() {} });
   for (const key of ['#navigation-dialog', '#menu-toggle', '.es-sidebar', '.es-layout', '#mobile-navigation-content', '#close-navigation', '#language', '#logout', '#support', '#navigation-title', '#navigation', '#page-title', '#page-description', '#player-identity', '#connection', '.es-live-actions', '#refresh-data', '#content', '#navigation [aria-current="page"]']) {
@@ -23,6 +24,14 @@ function harness(options = {}) {
       close() { this.open = false; this.handlers.close?.(); }
     };
     nodes.set(key, node);
+  }
+  const rankButtons = [];
+  if (options.rankDetails) {
+    const makeNode = () => ({handlers:{},dataset:{},classList:classes(),hidden:true,open:false,isConnected:true,addEventListener(name,fn){this.handlers[name]=fn;},focus(){this.focused=true;},showModal(){this.open=true;},close(){this.open=false;this.handlers.close?.();}});
+    for (const key of ['#rank-details-dialog','#rank-details-content','#close-rank-details','#order-rank','#purchase-dialog','#purchase-dialog-summary','#purchase-consent-form','#confirm-purchase','#close-purchase-dialog','#cancel-purchase']) nodes.set(key,makeNode());
+    nodes.get('#purchase-consent-form').reset = () => { nodes.get('#purchase-consent-form').wasReset=true; };
+    nodes.get('#order-rank').dataset.price='price_mvp';
+    const card=makeNode();card.dataset.rank='mvp';rankButtons.push(card);
   }
   const media = { matches: true, addEventListener(name, listener) { this.change = listener; } };
   for (const key of ['#language-label', '#account-link']) nodes.set(key, {
@@ -55,7 +64,7 @@ function harness(options = {}) {
     }
   };
   vm.runInNewContext(script, {
-    document: { addEventListener: (name, listener) => { documentHandlers[name] = listener; }, querySelector: key => nodes.get(key) || null, querySelectorAll: () => [], body: { classList: classes() }, documentElement, cookie: '', hidden: false },
+    document: { addEventListener: (name, listener) => { documentHandlers[name] = listener; }, querySelector: key => nodes.get(key) || null, querySelectorAll: selector => selector === '[data-rank]' ? rankButtons : [], body: { classList: classes() }, documentElement, cookie: '', hidden: false },
     window: { LJR_FEEDBACK: feedback }, matchMedia: () => media,
     localStorage: { getItem: () => null, setItem() {} }, sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
     location: { pathname: '/economysuite/'+(options.route||'store'), search: '', hash: '', replace() {}, assign() {} },
@@ -65,11 +74,11 @@ function harness(options = {}) {
       calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : undefined });
       if(url.endsWith('/daily/claim')) {await flush();return {ok:true,json:async()=>({daily_reward:{...account.daily_reward,available:false,amount:4,status:'pending'}})};}
       if (url.endsWith('/cosmetics') && calls.at(-1).body.type === optionsForFailure) return { ok: false, status: 503, json: async () => ({ error: 'unavailable' }) };
-      const data = url.endsWith('/account') ? account : url.endsWith('/refresh') ? { operation_id: 'refresh-1' } : { packages: [], purchases_enabled: true };
+      const data = url.endsWith('/account') ? account : url.endsWith('/refresh') ? { operation_id: 'refresh-1' } : { packages: rankDetails ? [{id:'price_mvp',rank_id:'mvp',name:'MVP',currency:'rank',price_minor:9900,checkoutable:true}] : [], purchases_enabled: true };
       return { ok: true, json: async () => data };
     }
   });
-  return { nodes, media, notices, calls, account, documentHandlers, documentElement, tick: () => interval(), advance: ms => { clock += ms; } };
+  return { nodes, rankButtons, media, notices, calls, account, documentHandlers, documentElement, tick: () => interval(), advance: ms => { clock += ms; } };
 }
 
 test('daily reward appears in both store and overview and double-click cannot submit twice',async()=>{
@@ -86,7 +95,7 @@ test('daily reward appears in both store and overview and double-click cannot su
   }
 });
 test('expired rank snapshots do not pretend the rank and its profile frame are still active',async()=>{
-  const h=harness({route:'store',rank:{id:'mvp',expires_at:99999,frame:3,remaining_ms:{}}});await flush();
+  const h=harness({route:'appearance',rank:{id:'mvp',expires_at:99999,frame:3,remaining_ms:{}}});await flush();
   assert.match(h.nodes.get('#content').innerHTML,/Čeká na synchronizaci/);
   assert.match(h.nodes.get('#content').innerHTML,/es-rank-frame-0/);
   assert.doesNotMatch(h.nodes.get('#content').innerHTML,/es-rank-frame-3/);
@@ -193,4 +202,20 @@ test('appearance API failure restores the button and never claims the whole appe
   assert.equal(h.calls.filter(call => call.url.endsWith('/cosmetics')).length, 2);
   assert.equal(form.querySelector('button').disabled, false);
   assert.equal(h.notices.length, 1); assert.equal(h.notices[0].kind, 'error');
+});
+
+test('rank card opens details on initial render and order moves to existing unchecked consent without payment', async () => {
+  const h=harness({route:'rank',rankDetails:true}); await flush();
+  h.rankButtons[0].handlers.click();
+  assert.equal(h.nodes.get('#rank-details-dialog').open,true);
+  assert.match(h.nodes.get('#rank-details-content').innerHTML,/Pantheon aura/);
+  assert.equal(h.calls.filter(call=>call.method==='POST').length,0);
+  h.nodes.get('#order-rank').handlers.click({currentTarget:h.nodes.get('#order-rank')});
+  assert.equal(h.nodes.get('#rank-details-dialog').open,false);
+  assert.equal(h.nodes.get('#purchase-dialog').hidden,false);
+  assert.equal(h.nodes.get('#purchase-consent-form').wasReset,true);
+  assert.match(h.nodes.get('#purchase-dialog-summary').innerHTML,/MVP/);
+  assert.equal(h.calls.filter(call=>call.method==='POST').length,0);
+  h.nodes.get('#cancel-purchase').handlers.click();
+  assert.equal(h.rankButtons[0].focused,true);
 });

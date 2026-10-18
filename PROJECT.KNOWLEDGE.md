@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite rank presentation (2026-10-18)
+
+- At the operator's follow-up request, Store contains currency packages and its daily reward, without rank cards, active-rank panel or comparison. Rank cards on the dedicated public `/economysuite/rank` navigation entry open a native modal with all inherited benefits. VIP uses a yellow crown, VIP+ a green shield, MVP a light-blue gem; existing portal typography and shell remain. The Rank page also hosts the coloured semantic comparison.
+- Benefit rows are shared between details and comparison; prices and buy eligibility come from the existing live catalog. Preview performs no mutation. Ordering closes the detail dialog and opens the unchanged consent/payment flow; unlinked visitors get sign-in/pairing actions. No Stripe catalog, secret, entitlement or database changes are needed.
+- CZ/EN copy, keyboard-native Escape/focus behavior, scrollable mobile table and narrow-screen dialog are covered by website tests; cache-busted app assets and the Worker route/login-return allowlists must ship together. This web-only update needs no Minecraft JAR or server restart.
+
 ## EconomySuite production rank launch (2026-10-18)
 
 - The operator explicitly waived Stripe sandbox payment/refund tests and authorized backing up/replacing the old Exaroton JAR and starting the offline server. This supersedes the earlier sandbox-access blocker below. No real or sandbox payment/refund was executed.
