@@ -39,9 +39,9 @@ test('comparison lives on its own public route with semantic coloured columns', 
   assert.equal((html.match(/scope="row"/g) || []).length, 13);
   assert.match(html, /tabindex="0" role="region"/);
   for (const id of ['vip','vipplus','mvp']) assert.match(html, new RegExp('scope="col" class="es-tier-' + id + '"'));
-  assert.match(worker, /'games', 'rank'\]\.includes\(category\)/);
+  assert.match(worker, /'games', 'rank'(?:, '[a-z-]+')*\]\.includes\(category\)/);
   assert.match(worker, /!\['store', 'pair', 'rank'\]\.includes\(category\)/);
-  assert.match(worker, /settings\|pair\|games\|rank\)\$/);
+  assert.match(worker, /settings\|pair\|games\|rank(?:\|[a-z-]+)*\)\$/);
 });
 
 test('all rank dialogs list every benefit, inherited cosmetics and shared booster rules in both languages', () => {

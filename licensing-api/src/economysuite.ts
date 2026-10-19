@@ -1,5 +1,7 @@
 import { rankProduct, rankDelivery, RANK_WEEK_SECONDS, type RankId } from './economysuite-ranks';
 import { dailyStatus, claimDaily, rewardDay } from './economysuite-daily';
+import { questProgress } from './economysuite-quests';
+import { tournamentBridge, tournamentRoute, tournamentAdmin } from './economysuite-tournaments';
 import { gamesRoute, gameAcknowledgment, RULES_VERSION } from './economysuite-games';
 import type { Env } from './config';
 import { generateToken, sha256, timingSafeEqual, verifyPassword } from './crypto';
@@ -32,7 +34,7 @@ function playerSnapshot(value: Record<string, unknown>): Record<string, unknown>
   const metrics = ['playtime', 'blocks_mined', 'blocks_placed', 'mobs_killed', 'deaths', 'crafted', 'smelted', 'fish_caught', 'breeding', 'trades', 'items_sold', 'items_bought', 'challenges_won', 'tasks_completed', 'crates_opened', 'daily_claims', 'passive_job_coins', 'duel_wins', 'duel_losses', 'duel_draws', 'duel_damage'];
   out.statistics = { all_time: pick(object(value.statistics).all_time, metrics), weekly: pick(object(value.statistics).weekly, metrics) };
   const progress = object(value.progress), cosmetics = object(value.cosmetics);
-  out.progress = { tasks: (Array.isArray(progress.tasks) ? progress.tasks : []).slice(0, 100).map(task => pick(task, ['id', 'name', 'progress', 'target', 'complete'])), achievements: (Array.isArray(progress.achievements) ? progress.achievements : []).filter(a => typeof a === 'string').slice(0, 500), chapters: (Array.isArray(progress.chapters) ? progress.chapters : []).filter(Number.isSafeInteger).slice(0, 100) };
+  out.progress = { ...questProgress(progress), achievements: (Array.isArray(progress.achievements) ? progress.achievements : []).filter(a => typeof a === 'string').slice(0, 500), chapters: (Array.isArray(progress.chapters) ? progress.chapters : []).filter(Number.isSafeInteger).slice(0, 100) };
   out.cosmetics = Object.fromEntries(['prefix', 'color', 'aura', 'hat'].map(type => [type, (Array.isArray(cosmetics[type]) ? cosmetics[type] as unknown[] : []).slice(0, 500).map(entry => pick(entry, ['id', 'display', 'value', 'owned', 'selected']))]));
   return out;
 }
@@ -193,6 +195,7 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
   const data = await signedBridge(request, env, db);
   if (!data) return error('forbidden', 'Invalid bridge request.', 403);
   await db.prepare("INSERT INTO bridge_status(server,last_seen) VALUES('pantheon',?) ON CONFLICT(server) DO UPDATE SET last_seen=excluded.last_seen").bind(now()).run();
+  if(path.startsWith('/api/economysuite/bridge/tournament/'))return tournamentBridge(db,path,data);
   if (path.endsWith('/pair/start')) {
     const uuid = s(data.uuid), name = s(data.name);
     if (!UUID.test(uuid) || !/^[A-Za-z0-9_]{1,16}$/.test(name)) return error('invalid_input', 'Invalid player.');
@@ -259,6 +262,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   if (!(await rateLimit(env.DB, `es:${player.customer.id}`, 60, 90))) return error('rate_limited', 'Please try again shortly.', 429);
   const link = await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind(player.customer.id).first<Link>();
   const data = request.method === 'POST' ? await body(request) : {};
+  if(path==='/api/economysuite/tournament'||path.startsWith('/api/economysuite/tournament/'))return tournamentRoute(request,env,db,player,link?.uuid??null,data);
   if (path === '/api/economysuite/daily/claim' && request.method === 'POST') {
     if (!link) return error('pair_required', 'Pair your Minecraft account first.', 409);
     return reply({ daily_reward: await claimDaily(db, link.uuid, player.customer.id, now()) });
@@ -271,7 +275,7 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
     const refresh = link ? await db.prepare("SELECT id,state,result,created_at,completed_at FROM bridge_operations WHERE uuid=? AND kind='refresh' ORDER BY created_at DESC LIMIT 1").bind(link.uuid).first() : null;
     const heartbeatAge = heartbeat ? Math.max(0, now() - heartbeat.last_seen) : null;
     const serverStatus = heartbeatAge === null || heartbeatAge >= 90 ? 'disconnected' : heartbeatAge >= 20 ? 'connecting' : 'connected';
-    return reply({ email: player.customer.email, link, snapshot: snapshot ? JSON.parse(snapshot.payload) : null, daily_reward: link ? await dailyStatus(db, link.uuid, now()) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
+    return reply({ email: player.customer.email, tournament_admin: await tournamentAdmin(db,player), link, snapshot: snapshot ? playerSnapshot(object(JSON.parse(snapshot.payload))) : null, daily_reward: link ? await dailyStatus(db, link.uuid, now()) : null, synced_at: snapshot?.synced_at ?? null, server_online: serverStatus === 'connected', server_status: serverStatus, server_last_seen: heartbeat?.last_seen ?? null, cosmetic_operations: pending.results, refresh_operation: refresh });
   }
   if (path === '/api/economysuite/orders' && request.method === 'GET') {
     const orders = await db.prepare('SELECT id,player_name,currency_type,product_type,rank_id,rank_paid_at,currency_amount,price_minor,state,revision,delivered_revision,receipt_url,receipt_reference,order_confirmation_sent_at,created_at FROM store_orders WHERE customer_id=? ORDER BY created_at DESC LIMIT 100').bind(player.customer.id).all();

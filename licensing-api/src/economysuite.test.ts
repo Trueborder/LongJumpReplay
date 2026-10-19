@@ -316,6 +316,18 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     expect((await worker.fetch(new Request('https://account.tomaspisar.cz/login?product=economysuite'),env)).headers.get('Location')).toBe('https://account.pantheon.tomaspisar.cz/login');
     expect((await worker.fetch(new Request('https://account.tomaspisar.cz/api/portal/register/complete',{method:'POST',body:'{}'}),env)).status).toBe(410);
   });
+  it('serves daily and weekly plugin quests and drops old stored batches without regranting anything', async () => {
+    const db=env.ECONOMYSUITE_DB!;
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner',uuid,'Player',1).run();
+    const daily={id:'stone',name:'Stone',progress:42,target:100,complete:false,reward_coins:50,points:1};
+    await bridge('sync',{snapshots:[{uuid,progress:{tasks_version:2,daily:[daily],weekly:[{...daily,id:'weekly',complete:true}],cycles:{daily:'2026-10-20',weekly:'2026-10-19'}}}]});
+    const response=await (await economySuite(request('account'),env,auth)).json() as {snapshot:{progress:{daily:unknown[];weekly:{complete:boolean}[];tasks?:unknown[]}}};
+    expect(response.snapshot.progress.daily).toEqual([daily]);expect(response.snapshot.progress.weekly[0].complete).toBe(true);expect(response.snapshot.progress).not.toHaveProperty('tasks');
+    await db.prepare('UPDATE player_snapshots SET payload=? WHERE uuid=?').bind(JSON.stringify({uuid,progress:{tasks:[daily]}}),uuid).run();
+    const old=await (await economySuite(request('account'),env,auth)).json() as {snapshot:{progress:{daily:unknown[];weekly:unknown[];tasks?:unknown[]}}};
+    expect(old.snapshot.progress.daily).toEqual([]);expect(old.snapshot.progress.weekly).toEqual([]);expect(old.snapshot.progress).not.toHaveProperty('tasks');
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM bridge_operations').first('n')).toBe(0);
+  });
   it('only stores the allowlisted gameplay snapshot and never publishes secrets', async () => {
     await env.ECONOMYSUITE_DB!.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner', uuid, 'Player', 1).run();
     await bridge('sync', { snapshots: [{ uuid, auth_pin: 'SECRET-PIN', email: 'hidden@example.com', coins: 5, daily: { day: 1, auth_hash: 'SECRET-HASH' }, statistics: { all_time: { playtime: 100, private_note: 'SECRET-NOTE' } } }] });

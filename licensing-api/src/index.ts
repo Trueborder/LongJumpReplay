@@ -336,12 +336,12 @@ function portalRedirect(request: Request, location: string): Response {
 
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
-  if (['/economysuite/app.js', '/economysuite/app.css', '/economysuite/games.js'].includes(path)) return env.ASSETS.fetch(request);
+  if (['/economysuite/app.js', '/economysuite/app.css', '/economysuite/games.js', '/economysuite/tournament.js'].includes(path)) return env.ASSETS.fetch(request);
   const product = env.PORTAL_PRODUCT;
   if (path === '/economysuite' || path.startsWith('/economysuite/')) {
     if (product !== 'economysuite') return new Response('Not found', { status: 404 });
     const category = path.split('/')[2] || 'overview';
-    if (!['overview', 'statistics', 'progress', 'appearance', 'store', 'purchases', 'settings', 'pair', 'games', 'rank'].includes(category) || path.split('/').filter(Boolean).length > 2) return new Response('Not found', { status: 404 });
+    if (!['overview', 'statistics', 'progress', 'appearance', 'store', 'purchases', 'settings', 'pair', 'games', 'rank', 'tournament', 'tournament-admin'].includes(category) || path.split('/').filter(Boolean).length > 2) return new Response('Not found', { status: 404 });
     const auth = await authenticatedPortal(request, env);
     // Pairing captures a fragment before authentication; the shell is public,
     // while every player data endpoint independently validates ownership.
@@ -361,7 +361,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
   if (product === 'economysuite' && (path === '/' || ['/login', '/login/', '/register', '/register/'].includes(path))) {
     if (auth?.credential) {
       const next = new URL(request.url).searchParams.get('next') || '';
-      return portalRedirect(request, /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games|rank)$/.test(next) ? next : '/economysuite/overview');
+      return portalRedirect(request, /^\/economysuite\/(overview|statistics|progress|appearance|store|purchases|settings|pair|games|rank|tournament|tournament-admin)$/.test(next) ? next : '/economysuite/overview');
     }
     if (path === '/') return portalRedirect(request, '/login');
     const asset = await env.ASSETS.fetch(new Request(new URL(path.startsWith('/register') ? '/register/' : '/login/', request.url), request));

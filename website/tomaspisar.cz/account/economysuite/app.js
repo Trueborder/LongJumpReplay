@@ -12,6 +12,7 @@
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
   const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], games: ['Hry', 'Games'], store: ['Obchod', 'Store'], rank: ['Ranky', 'Ranks'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
+  Object.assign(names,{tournament:['Turnaj','Tournament'],'tournament-admin':['Turnaj-admin','Tournament admin']});
   const paths = {
     rank: '<path d="m3 7 4 3 5-7 5 7 4-3-2 13H5L3 7Zm2 9h14"/>',
     games: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>',
@@ -86,7 +87,7 @@
     const result = await response.json();
     if (!response.ok) {
       const pair = errors[path.startsWith('/api/economysuite/games/') && result.error === 'invalid_input' ? 'invalid_game_input' : result.error];
-      const failure = new Error(pair ? t(...pair) : t('Požadavek se nepodařilo dokončit. Zkus to znovu.', 'The request could not be completed. Please try again.'));
+      const failure = new Error(pair ? t(...pair) : result.error === 'tournament_error' ? String(result.message || '').slice(0,500) : t('Požadavek se nepodařilo dokončit. Zkus to znovu.', 'The request could not be completed. Please try again.'));
       failure.status = response.status; throw failure;
     }
     return result;
@@ -102,7 +103,6 @@
   const metricCard = (title, value, note, currency = '') => `<section class="es-panel es-metric"><div class="es-metric-heading">${currency ? currencyIcon(currency) : icon('statistics')}<small>${escape(title)}</small></div><strong>${number(value)}</strong><span class="es-label">${escape(note)}</span></section>`;
   function xpSources() {
     const sources = [
-      [t('\u00daskoly', 'Tasks'), t('+20 XP za dokon\u010den\u00fd \u00fakol', '+20 XP per completed task')],
       [t('Denn\u00ed questy', 'Daily quests'), t('+35 XP za dokon\u010den\u00fd denn\u00ed quest', '+35 XP per completed daily quest')],
       [t('T\u00fddenn\u00ed questy', 'Weekly quests'), t('+180 XP za dokon\u010den\u00fd t\u00fddenn\u00ed quest', '+180 XP per completed weekly quest')],
       [t('Achievementy a v\u00fdzvy', 'Achievements and challenges'), t('+75 a\u017e +20 XP podle odm\u011bny', '+75 to +20 XP depending on the reward')],
@@ -111,8 +111,14 @@
     return '<div class="es-xp-sources"><div class="es-section-label">' + escape(t('Jak z\u00edskat XP', 'Ways to earn XP')) + '</div><ul>' + sources.map(source => '<li><strong>' + escape(source[0]) + '</strong><span>' + escape(source[1]) + '</span></li>').join('') + '</ul><p class="es-muted">' + escape(t('XP z\u00edsk\u00e1\u0161 hran\u00edm na serveru. Aktivita na webu sama o sob\u011b XP nep\u0159id\u00e1v\u00e1.', 'You earn XP by playing on the server. Website activity itself does not add XP.')) + '</p></div>';
   }
   function currentTasks(snapshot) {
-    const tasks = Array.isArray(snapshot.progress?.tasks) ? snapshot.progress.tasks : [];
-    return '<div class="es-subsection"><div class="es-section-label">' + escape(t('Aktu\u00e1ln\u00ed \u00fakoly', 'Current tasks')) + '</div>' + (tasks.length ? table([t('\u00dakol', 'Task'), t('Postup', 'Progress'), t('Stav', 'State')], tasks.map(task => row([escape(strip(task.name || task.id)), number(task.progress) + ' / ' + number(task.target), task.complete ? t('Dokon\u010deno', 'Complete') : t('Prob\u00edh\u00e1', 'In progress')]))) : '<p class="es-muted">' + escape(t('Aktivn\u00ed \u00fakoly se zobraz\u00ed po p\u0159ipojen\u00ed do hry.', 'Active tasks will appear after joining the game.')) + '</p>') + '</div>';
+    return ['daily', 'weekly'].map(period => {
+      const progress = snapshot.progress || {};
+      const tasks = progress.tasks_version === 2 && Array.isArray(progress[period]) ? progress[period] : [];
+      const title = period === 'daily' ? t('Denní úkoly', 'Daily tasks') : t('Týdenní úkoly', 'Weekly tasks');
+      const cycle = progress.cycles?.[period];
+      return '<div class="es-subsection"><div class="es-section-label">' + escape(title) + (cycle ? '<span>' + escape(t('Období: ', 'Cycle: ') + cycle) + '</span>' : '') + '</div>' +
+        (tasks.length ? table([t('Úkol', 'Task'), t('Postup', 'Progress'), t('Odměna', 'Reward'), t('Stav', 'State')], tasks.map(task => row([escape(strip(task.name || task.id)), number(task.progress) + ' / ' + number(task.target), number(task.reward_coins) + ' coins · ' + number(task.points) + ' ' + t('bodů', 'points'), task.complete ? t('Dokončeno', 'Complete') : t('Probíhá', 'In progress')]))) : '<p class="es-muted">' + escape(t('Čeká na synchronizaci denních a týdenních úkolů z aktualizovaného serveru.', 'Waiting for daily and weekly tasks from the updated server.')) + '</p>') + '</div>';
+    }).join('');
   }
   function jobTask(snapshot) {
     const job = snapshot.job || {};
@@ -138,10 +144,9 @@
       panel(t('Žebříček hráčů, kteří souhlasili se zveřejněním', 'Opt-in player rankings'), `<div class="es-controls"><label for="ranking-metric">${t('Porovnat', 'Compare')}</label><select id="ranking-metric">${['playtime', 'blocks_mined', 'tasks_completed', 'duel_wins'].map(key => `<option value="${key}" ${key === metric ? 'selected' : ''}>${escape(t(...statNames[key]))}</option>`).join('')}</select></div>${rankings.length ? table(['#', t('Hráč', 'Player'), t('Hodnota', 'Value')], rankings.map((entry, i) => row([number(i + 1), escape(entry.name), number(entry.value)]))) : `<p>${t('Zatím žádní hráči.', 'No players yet.')}</p>`}<p>${escape(t('Zůstatky ani nákupy se nezveřejňují. Účast změníš v Nastavení.', 'Balances and purchases remain private. Change participation in Settings.'))}</p>`);
   }
   function progress(snapshot) {
-    const tasks = snapshot.progress?.tasks || [];
     const achievements = snapshot.progress?.achievements || [];
     const jobs = snapshot.progress?.chapters || [];
-    return panel(t('Aktuální úkoly', 'Current tasks'), tasks.length ? table([t('Úkol', 'Task'), t('Postup', 'Progress'), t('Stav', 'State')], tasks.map(task => row([escape(strip(task.name || task.id)), `${number(task.progress)} / ${number(task.target)}`, task.complete ? t('Dokončeno', 'Complete') : t('Probíhá', 'In progress')]))) : `<p>${t('Aktivní úkoly se zobrazí po připojení do hry.', 'Active tasks will appear after joining the game.')}</p>`) +
+    return panel(t('Denní a týdenní úkoly', 'Daily and weekly tasks'), currentTasks(snapshot) + '<p class="es-muted">' + escape(t('Postup a vyplácení odměn spravuje hra. Stejné úkoly otevřeš přes /tasks daily a /tasks weekly.', 'Progress and reward delivery are managed in-game. Use /tasks daily and /tasks weekly for the same tasks.')) + '</p>') +
       panel(t('Profese a achievementy', 'Jobs and achievements'), `<p>${escape(t('Vyzvednuté kapitoly aktuální profese', 'Claimed chapters in your current job'))}: ${jobs.map(number).join(', ') || '—'}</p><p>${escape(t('Dokončené achievementy', 'Completed achievements'))}: ${achievements.map(a => escape(strip(a.name || a))).join(', ') || '—'}</p>`) +
       panel(t('Denní kalendář', 'Daily calendar'), `<p>${t('Den', 'Day')} ${number(snapshot.daily?.day)} / 30 · Revive: ${number(snapshot.daily?.revives)} · ${t('Poslední odměna', 'Last claim')}: ${escape(snapshot.daily?.last_day || '—')}</p><div class="es-calendar">${Array.from({ length: 30 }, (_, i) => `<span class="${i < Number(snapshot.daily?.day || 0) ? 'earned' : ''}">${i + 1}</span>`).join('')}</div><p>${t('Odměny a obnovu série spravuj ve hře přes /daily. Reset je o půlnoci Europe/Prague.', 'Manage rewards and streak recovery in-game with /daily. Reset is at midnight Europe/Prague.')}</p>`) +
       panel(t('Tokeny za aktivní hru', 'Active-play tokens'), `<p>${snapshot.eligible ? t('Převody tokenů jsou odemčené.', 'Token transfers are unlocked.') : t('Převody vyžadují stáří účtu 48 hodin a 300 aktivních minut.', 'Transfers require an account age of 48 hours and 300 active minutes.')}</p><p>${t('Placené tokeny můžeš utrácet ihned. Omezení převodů zůstává stejné.', 'Paid tokens can be spent immediately. Transfer eligibility remains unchanged.')}</p>`);
@@ -368,11 +373,12 @@
     $('#navigation').setAttribute('aria-label', t('Hráčský účet', 'Player account'));
     $('#page-title').textContent = successfulOrder ? t('Děkujeme za nákup', 'Thank you for your purchase') : t(...(names[route] || names.overview));
     $('#page-description').textContent = successfulOrder ? t('Tady můžeš sledovat potvrzení platby i doručení na server.', 'Track payment confirmation and server delivery here.') : t('Tvůj Pantheon účet. Postup ve hře, vzhled a nákupy na jednom místě.', 'Your Pantheon account. Game progress, appearance, and purchases in one place.');
-    $('#navigation').innerHTML = Object.entries(names).filter(([key]) => key !== 'pair').map(([key, labels]) => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${icon(key)}<span>${escape(t(...labels))}</span></a>`).join('');
+    $('#navigation').innerHTML = Object.entries(names).filter(([key]) => key !== 'pair' && (key !== 'tournament-admin' || account?.tournament_admin)).map(([key, labels]) => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${icon(key)}<span>${escape(t(...labels))}</span></a>`).join('');
     $('#player-identity').innerHTML = `<span class="es-avatar" aria-hidden="true">${escape(account?.link?.name?.slice(0, 2).toUpperCase() || 'P')}</span><div><strong>${escape(account?.link?.name || t('Hráčský účet', 'Player account'))}</strong><small>Pantheon Survival</small></div>`;
     renderConnection();
     let html;
-    if (route === 'games') html = window.ESGames.render(gameContext());
+    if (route === 'tournament' || route === 'tournament-admin') html = window.ESTournament.render({t,escape,admin:route==='tournament-admin'});
+    else if (route === 'games') html = window.ESGames.render(gameContext());
     else if (route === 'store') html = store();
     else if (route === 'rank') html = rankPage() + storePurchaseDialog();
     else if (route === 'pair') html = pairingPage();
@@ -387,6 +393,7 @@
   }
   async function action(button, work) { feedback?.busy(button, true); try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) feedback?.busy(button, false); } }
   function bind() {
+    if(route==='tournament'||route==='tournament-admin')window.ESTournament.bind({api,t,escape,status,admin:route==='tournament-admin'});
     bindDailyReward();
     const rankDialogNode = $('#rank-details-dialog');
     document.querySelectorAll('[data-rank]').forEach(button => button.addEventListener('click', () => {
@@ -491,6 +498,7 @@
     catch (failure) { if (failure.status === 401 && !['store', 'pair', 'rank'].includes(route)) { location.replace(`/login?product=economysuite&next=${encodeURIComponent(location.pathname)}`); return; } if (failure.status !== 401) accountFailure = failure; }
     if (accountFailure && !['store', 'pair', 'rank'].includes(route)) { $('#content').innerHTML = loadError(accountFailure); $('#content').setAttribute('aria-busy', 'false'); bind(); if (options.refresh) throw accountFailure; status(accountFailure.message, true); return; }
     try {
+      if ((route === 'tournament' || route === 'tournament-admin') && account) await window.ESTournament.load(api);
       if (route === 'games' && account) await window.ESGames.load(api, account);
       if (route === 'store' || route === 'rank') { const catalog = await api('/api/economysuite/catalog'); packages = catalog.packages; purchasesEnabled = catalog.purchases_enabled; }
       if (route === 'purchases' && account) orders = (await api('/api/economysuite/orders')).orders;
