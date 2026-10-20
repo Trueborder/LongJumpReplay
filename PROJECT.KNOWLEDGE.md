@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## Compact tournament workspace (2026-10-20)
+
+- Turnaj-admin is a settings-only workspace, not a duplicated player dashboard. Six compact category buttons switch Rules, Players, Matches, Rewards, Timing and Controls without discarding inputs. One roster has contextual actions per entrant; replacement choices exclude enrolled players. Match operations carry their concrete match ID and force-win offers only its opponents. Rewards are grouped by placement with inline removal and a collapsed add form. All mutations retain existing typed API, reauthentication, confirmation, revision and bridge checks; no backend/schema change.
+- Both tournament routes sit immediately above Settings, with trophy/control icons. The public page keeps the bracket, personal state and rewards, with smaller spacing and collapsed history/activity. Actual skin rendering remains unchanged. Linked but offline users are not told to pair again. Live polls preserve form drafts and disclosure state; admin next-phase status refreshes independently. Native dialog motion uses existing easing tokens, 200ms opacity/scale transitions, keyboard immediacy and reduced-motion variants; recurring match updates never replay entrance motion.
+- This is a web-only deployment: no Minecraft JAR, server restart, database migration or production tournament mutation is needed. Browser and automated validation evidence is recorded separately from live match verification.
+- Validation: all 126 website tests and production dry-run pass. Chrome checks cover desktop and 390px mobile, one roster/one visible admin section, no duplicated bracket, preserved reward input after a synthetic revision change, six bracket connectors, native match dialog/Escape and CZ/EN. Fixture actions are read-only and never forwarded to production. Final Worker `e2692889-16f5-4c64-a2f1-ed30d4df2866` serves exact source-matching JS/CSS (HTTP 200); anonymous tournament access remains 401 and unsigned bridge 403. Actual production tournament actions were not exercised.
+
 ## EconomySuite tournament portal (2026-10-19)
 
 - EconomySuite 2.46.0 adds authenticated `/economysuite/tournament` and owner-only `/economysuite/tournament-admin`, with matching route/login-return allowlists and a separate `tournament.js` asset. The existing light Pantheon shell, CZ/EN, responsive controls and reduced-motion behavior remain. Bracket avatars use the actual Paper profile texture (face plus hat layer), not a name-based avatar service; invalid/unavailable textures have an initials fallback.

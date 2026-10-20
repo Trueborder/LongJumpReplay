@@ -12,8 +12,12 @@
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
   const names = { overview: ['Přehled', 'Overview'], statistics: ['Statistiky', 'Statistics'], progress: ['Postup', 'Progress'], appearance: ['Vzhled', 'Appearance'], games: ['Hry', 'Games'], store: ['Obchod', 'Store'], rank: ['Ranky', 'Ranks'], purchases: ['Nákupy', 'Purchases'], settings: ['Nastavení', 'Settings'], pair: ['Propojení účtu', 'Pair your account'] };
+  // Keep tournament navigation together, directly above Settings on desktop and mobile.
+  const navigationOrder=['overview','statistics','progress','appearance','games','store','rank','purchases','tournament','tournament-admin','settings','pair'];
   Object.assign(names,{tournament:['Turnaj','Tournament'],'tournament-admin':['Turnaj-admin','Tournament admin']});
   const paths = {
+    tournament: '<path d="M8 3h8v6a4 4 0 0 1-8 0V3Zm0 2H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 2v6m-4 2h8"/>',
+    'tournament-admin': '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
     rank: '<path d="m3 7 4 3 5-7 5 7 4-3-2 13H5L3 7Zm2 9h14"/>',
     games: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/>',
     overview: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/>',
@@ -373,7 +377,8 @@
     $('#navigation').setAttribute('aria-label', t('Hráčský účet', 'Player account'));
     $('#page-title').textContent = successfulOrder ? t('Děkujeme za nákup', 'Thank you for your purchase') : t(...(names[route] || names.overview));
     $('#page-description').textContent = successfulOrder ? t('Tady můžeš sledovat potvrzení platby i doručení na server.', 'Track payment confirmation and server delivery here.') : t('Tvůj Pantheon účet. Postup ve hře, vzhled a nákupy na jednom místě.', 'Your Pantheon account. Game progress, appearance, and purchases in one place.');
-    $('#navigation').innerHTML = Object.entries(names).filter(([key]) => key !== 'pair' && (key !== 'tournament-admin' || account?.tournament_admin)).map(([key, labels]) => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${icon(key)}<span>${escape(t(...labels))}</span></a>`).join('');
+    $('#navigation').innerHTML = navigationOrder.filter(key => key !== 'pair' && (key !== 'tournament-admin' || account?.tournament_admin)).map(key => `<a href="/economysuite/${key}" ${key === route ? 'aria-current="page"' : ''}>${icon(key)}<span>${escape(t(...names[key]))}</span></a>`).join('');
+    if(route==='tournament'||route==='tournament-admin')$('#page-description').textContent=route==='tournament-admin'?t('Pravidla, hráči a odměny. Průběh najdeš v kartě Turnaj.','Rules, players and rewards. Follow the action in Tournament.'):t('Pavouk, tvůj zápas a odměny na jednom místě.','The bracket, your match and rewards in one place.');
     $('#player-identity').innerHTML = `<span class="es-avatar" aria-hidden="true">${escape(account?.link?.name?.slice(0, 2).toUpperCase() || 'P')}</span><div><strong>${escape(account?.link?.name || t('Hráčský účet', 'Player account'))}</strong><small>Pantheon Survival</small></div>`;
     renderConnection();
     let html;

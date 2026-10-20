@@ -32,3 +32,55 @@ test('admin panel uses typed operations, confirmations, no command editor and re
   const html=ui.render({t,admin:true});assert.match(html,/data-tw-form="rules"/);assert.match(html,/data-stamp=/);assert.match(html,/value="30"/);assert.match(html,/tw-reauth/);assert.doesNotMatch(html,/Příkazová odměna|name="command"/);
   const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8');assert.match(source,/setInterval\(poll,2000\)/);assert.match(source,/form\.dataset\.stamp/);assert.match(source,/getContext\('2d'\)/);assert.match(source,/drawImage\(img,40\*unit/);
 });
+
+const fixture=overrides=>({id:'t',instance:'i',revision:1,state:'REGISTRATION',size:4,best_of:3,policy:'RANDOM',mode:'Mace',round:0,players:[{uuid:'p0',name:'Adam',online:true}],waitlist:[{uuid:'p1',name:'Tereza'}],online:[{uuid:'p0',name:'Adam'},{uuid:'p1',name:'Tereza'},{uuid:'p2',name:'Klarka'}],matches:[],prizes:[{place:1,index:0,description:'100 coinů'}],summary:'100C',modes:['Mace'],pool:['Mace'],arenas:['rocky'],catalog:[],presets:[],times:{'inter-match-delay-seconds':30},problems:[],...overrides});
+async function renderFixture(admin,snapshot=fixture(),extra={}){
+  await ui.load(async()=>({snapshot,admin:true,history:[],operations:[],server_time:1,fresh:true,uuid:'p0',player_online:false,...extra}));
+  return ui.render({t,admin});
+}
+test('admin is settings only, with six compact sections and one player roster',async()=>{
+  const html=await renderFixture(true);
+  assert.doesNotMatch(html,/id="tw-live"|tw-bracket|id="tw-history"|TVŮJ TURNAJ/);
+  assert.equal((html.match(/data-admin-section=/g)||[]).length,6);
+  assert.equal((html.match(/data-player-row="p0"/g)||[]).length,1);
+  assert.equal((html.match(/data-player-row="p1"/g)||[]).length,1);
+  assert.match(html,/name="player" value="Adam"/);
+  assert.match(html,/name="player" value="p0"/);
+  assert.match(html,/name="replacement"><option value="Klarka"/);
+  assert.doesNotMatch(html,/name="replacement"><option value="Adam"/);
+  assert.match(html,/aria-controls="tw-section-players"/);
+  assert.match(html,/<fieldset class="tw-mode-pool">/);
+  assert.match(html,/type="checkbox" name="modes" value="Mace" checked/);
+  assert.doesNotMatch(html,/módy oddělené čárkou/);
+});
+test('creation gates every reward action and preserves current config times',async()=>{
+  const html=await renderFixture(true,fixture({id:'',state:'DRAFT',times:{'inter-match-delay-seconds':45}}));
+  assert.match(html,/value="45"/);
+  assert.match(html,/data-tw-form="create"/);
+  assert.match(html,/Nejprve vytvoř turnaj/);
+  for(const action of ['prize','catalog_prize','preset','clear_prizes','time']){
+    const form=html.match(new RegExp('<form[^>]*data-tw-form="'+action+'"[\\s\\S]*?<\/form>'))?.[0];
+    assert.match(form||'',/<button type="submit" disabled>/,action);
+  }
+});
+test('match controls bind one concrete match and offer only its two opponents',async()=>{
+  const s=fixture({players:[...players.slice(1,4)],matches:[{id:'m1',first:'p1',second:'p2',state:'PENDING',label:'Final',mode:'Mace'}]});
+  const html=await renderFixture(true,s);
+  const forced=html.match(/data-tw-form="forcewin"[\s\S]*?<\/form>/)?.[0];
+  assert.match(forced,/name="match" value="m1"/);assert.match(forced,/Player1/);assert.match(forced,/Player2/);assert.doesNotMatch(forced,/Player3/);
+});
+test('unauthorized admin has no controls, while public tournament keeps bracket and folds secondary data',async()=>{
+  const denied=await renderFixture(true,fixture(),{admin:false});assert.doesNotMatch(denied,/data-tw-form|data-admin-section/);
+  const html=await renderFixture(false,fixture(),{uuid:'not-enrolled'});
+  assert.match(html,/id="tw-live"/);assert.match(html,/tw-arena/);assert.match(html,/data-disclosure="history"/);
+  assert.doesNotMatch(html,/Pro registraci nejprve propoj účet/);assert.match(html,/Pro registraci se přihlas v Minecraftu/);
+  assert.doesNotMatch(html,/tw-operation-log/);
+});
+test('navigation places tournaments directly above Settings and motion preserves keyboard and reduced-motion paths',()=>{
+  const app=fs.readFileSync(path.join(root,'app.js'),'utf8'),css=fs.readFileSync(path.join(root,'app.css'),'utf8');
+  assert.match(app,/'tournament','tournament-admin','settings'/);
+  assert.match(css,/\.tw-dialog\{opacity:0;transform:scale\(\.96\);transition:opacity 200ms var\(--ease-out\)/);
+  assert.match(css,/html\[data-motion-input=keyboard\] \.tw-dialog/);
+  assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.tw-dialog/);
+  assert.match(css,/@starting-style/);
+});
