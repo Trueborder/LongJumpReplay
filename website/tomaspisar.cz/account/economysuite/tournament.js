@@ -8,6 +8,24 @@
   const matchStates={PENDING:['Čeká','Waiting'],RUNNING:['Hraje se','Playing'],ADMIN_DECISION:['Rozhodnutí admina','Admin decision'],COMPLETE:['Dohráno','Finished']};
   const destructive = new Set(['cancel','forcewin','rematch','disqualify','remove','substitute','remove_prize','clear_prizes','preset','announce']);
   let state=null,ctx=null,pollTimer=null,clockTimer=null,busy=false,loading=false,selectedHistory='',lastOperations='',serverOffset=0,resizeBound=false,adminSection='rules',liveSignature='';
+  let pendingAction=null,adminSignature='';
+  const formPayload=form=>{
+    const payload={};for(const field of form.elements){
+      if(!field.name||['submit','button'].includes(field.type)||(['checkbox','radio'].includes(field.type)&&!field.checked))continue;
+      if(field.name==='modes')payload.modes=[payload.modes,field.value].filter(Boolean).join(',');else payload[field.name]=field.value;
+    }return payload;
+  };
+  const formValues=form=>[...form.querySelectorAll('input:not([type=hidden]),select,textarea')].map(e=>({name:e.name,value:e.value,checked:e.checked,type:e.type}));
+  const adminSnapshotKey=data=>JSON.stringify([data?.admin,data?.fresh,data?.snapshot&&{...data.snapshot,server_time:0,deadline:0,matches:(data.snapshot.matches||[]).map(m=>({...m,time:''}))},data?.operations]);
+  function operationState(operation,pending,data,now=Date.now()){
+    if(!operation)return now-pending.started>30000?'unknown':'pending';
+    if(operation.state!=='complete')return operation.state==='pending'?'pending':'failed';
+    if(now-pending.started>30000)return 'unknown';
+    if(!data.fresh)return 'syncing';
+    const current=stamp(data.snapshot),changed=JSON.stringify(current)!==JSON.stringify(pending.expected);
+    if(changed||pending.action==='announce'||(pending.ackSync!==undefined&&data.synced_at>pending.ackSync))return 'complete';
+    return 'syncing';
+  }
   const head = p => `<span class="tw-head" data-skin="${esc(skin(p?.skin))}" aria-hidden="true"><span>${esc(p?.name?.slice(0,2)||'?')}</span><canvas width="32" height="32" hidden></canvas></span>`;
   function playerLine(id,s,score,winner,own) {
     const p=[...(s.players||[]),...(s.waitlist||[])].find(p=>p.uuid===id);
@@ -85,6 +103,8 @@
       if(Number(payload.direction)>0&&index===s.players.length-1)return t('Hráč už je na posledním místě nasazení.','This player is already last in the seed order.');
     }
     if(action==='announce')return t('Oznámení lze poslat pouze během otevřené registrace.','Announcements are available only while registration is open.');
+    if(action==='pause')return s?.state==='PAUSED'?t('Turnaj je již pozastavený.','The tournament is already paused.'):t('Nejprve musí skončit aktivní zápasy.','The active matches must finish first.');
+    if(action==='recover')return t('Obnovit lze pouze pozastavený turnaj.','Only a paused tournament can be resumed.');
     if(action==='remove_prize')return t('Na tomto umístění nejsou žádné odměny k odebrání.','There are no rewards to remove for this place.');
     if(action==='clear_prizes')return t('Turnaj nemá žádné nastavené odměny.','This tournament has no configured rewards.');
     if(action==='preset')return t('Pro tento turnaj není dostupný žádný preset odměn.','No reward preset is available for this tournament.');
@@ -98,18 +118,22 @@
     if(!ctx||!state)return;
     // Tooltips live outside animated panels, so transformed ancestors cannot misplace them.
     document.querySelectorAll('.tw-disabled-help[data-owner]').forEach(help=>{if(!document.getElementById(help.dataset.owner))help.remove();});
-    document.querySelectorAll('#tw-admin button,#tw-live button').forEach(button=>{
-      const form=button.closest('[data-tw-form]'),action=form?.dataset.twForm||button.dataset.twAction;
-      const payload=form?Object.fromEntries(new FormData(form)):{};
+    document.querySelectorAll('#tw-admin button,#tw-live button,#tw-admin input:not([type=hidden]),#tw-admin select,#tw-admin textarea').forEach(button=>{
+      const catalogFilter=['tw-search','tw-category'].includes(button.id);
+      const form=button.closest('[data-tw-form]')||(catalogFilter?document.querySelector('[data-tw-form="catalog_prize"]'):null),action=form?.dataset.twForm||button.dataset.twAction;
+      const payload=form?formPayload(form):{};
       if(action){button.dataset.tone=buttonTone(action,payload);}
-      if(action==='prize')button.textContent=payload.type==='tokens'?ctx.t('Přidat tokeny','Add tokens'):ctx.t('Přidat coiny','Add coins');
+      if(action==='prize'&&button.tagName==='BUTTON')button.textContent=payload.type==='tokens'?ctx.t('Přidat tokeny','Add tokens'):ctx.t('Přidat coiny','Add coins');
       let reason='';
       if(form){
         const expected=JSON.parse(form.dataset.stamp),s=state.snapshot;
         const stale=expected.revision!==s?.revision||expected.instance!==s?.instance||expected.tournament_id!==s?.id;
-        button.disabled=!state.fresh||stale||button.dataset.phaseDisabled==='true';
-        if(stale)reason=ctx.t('Turnaj se změnil. Klikni na Obnovit nad nastavením; rozepsané hodnoty zůstanou do té doby zachované.','Tournament changed. Select Refresh above the settings; your draft is preserved until then.');
+        button.disabled=!state.fresh||stale||form.dataset[catalogFilter?'setupDisabled':'phaseDisabled']==='true'||busy;
+        if(stale)reason=ctx.t('Probíhá automatická synchronizace nového stavu turnaje.','Automatically synchronizing the new tournament state.');
       }
+      const active=busy&&pendingAction&&button.tagName==='BUTTON'&&(form?form.dataset.formKey===pendingAction.key:button.dataset.twAction===pendingAction.action);
+      if(active)button.setAttribute('aria-busy','true');else button.removeAttribute('aria-busy');
+      if(busy&&action){button.disabled=true;reason=ctx.t('Čeká se na dokončení předchozí změny a potvrzení herního serveru.','Waiting for the previous change and game-server confirmation.');}
       if(!state.fresh&&action) {button.disabled=true;reason=ctx.t('Herní server neodpovídá nebo jsou data zastaralá. Počkej na obnovení spojení.','The game server is unavailable or its data is stale. Wait for synchronization.');}
       if(button.disabled&&!reason){
         if(button.classList.contains('tw-match'))reason=unavailableReason('placeholder',state.snapshot,{},ctx.t);
@@ -135,7 +159,7 @@
       }
       if(wrapper){
         const help=document.getElementById(wrapper.dataset.help);help.textContent=reason;
-        wrapper.tabIndex=button.disabled?0:-1;wrapper.setAttribute('aria-label',button.textContent.trim());
+        wrapper.tabIndex=button.disabled?0:-1;wrapper.setAttribute('aria-label',button.tagName==='BUTTON'?button.textContent.trim():button.name||action);
         wrapper.dataset.disabled=String(button.disabled);button.setAttribute('aria-describedby',help.id);wrapper.setAttribute('aria-describedby',help.id);
         if(!button.disabled)help.hidden=true;
       }
@@ -178,7 +202,7 @@
     const rewards=createNote+'<p class="tw-prize-total">'+esc(plain(s.summary)||t('Odměny zatím nejsou nastavené','Rewards not set yet'))+'</p>'+form('preset',t('Použít preset','Apply preset'),select('preset',t('Balíček odměn — nahradí současné','Reward bundle — replaces current'),s.presets.map(p=>[p.id,plain(p.name)+' · '+plain(p.summary)])),!live||!s.presets.length)+rewardRows+'<details class="tw-inline-details tw-add-reward"><summary>'+esc(t('+ Přidat odměnu','+ Add reward'))+'</summary>'+form('prize',t('Přidat měnu','Add currency'),select('place',t('Umístění','Place'),places)+select('type',t('Měna','Currency'),['coins','tokens'])+field('amount',t('Částka','Amount'),100,'number'),!live)+'<div class="tw-catalog-filters"><div class="tw-search-field"><label>'+esc(t('Hledat odměnu','Search rewards'))+'<input id="tw-search" type="search" aria-controls="tw-reward-suggestions" autocomplete="off" placeholder="'+esc(t('Název předmětu nebo klíče…','Item or key name…'))+'"></label><div id="tw-reward-suggestions" class="tw-reward-suggestions" role="group" aria-label="'+esc(t('Navržené odměny','Suggested rewards'))+'" hidden></div></div><label>'+esc(t('Kategorie','Category'))+'<select id="tw-category"><option value="">'+esc(t('Všechny','All'))+'</option>'+options([...new Set(s.catalog.map(p=>p.category))])+'</select></label></div>'+form('catalog_prize',t('Přidat předmět','Add item'),select('place',t('Umístění','Place'),places)+'<label>'+esc(t('Předmět','Item'))+'<select id="tw-catalog" name="id">'+s.catalog.map(p=>'<option value="'+esc(p.id)+'" data-category="'+esc(p.category)+'">'+esc(plain(p.name))+' · '+p.amount+'</option>').join('')+'</select></label>'+field('count',t('Počet kopií','Copies'),1,'number')+hidden('catalog_revision',s.catalog_revision),!live||!s.catalog.length)+'</details>'+action('clear_prizes',t('Vymazat všechny odměny','Clear all rewards'),{},!live||!s.prizes.length);
     const timeLabels={'inter-match-delay-seconds':t('Pauza mezi zápasy','Inter-match delay'),'reconnect-grace-seconds':t('Lhůta na návrat','Reconnect grace'),'sudden-death-seconds':t('Náhlá smrt','Sudden death'),'waiting-reminder-seconds':t('Připomenutí čekajícím','Waiting reminder')};
     const times=createNote+'<p class="es-muted">'+esc(t('Hodnoty jsou v sekundách. Změna neovlivní právě běžící odpočet.','Values are seconds. Changes do not alter an active countdown.'))+'</p><div class="tw-time-grid">'+Object.entries(s.times).map(([key,value])=>form('time',t('Uložit','Save'),hidden('key',key)+field('seconds',(timeLabels[key]||key)+' (s)',value,'number'),!live)).join('')+'</div>'+form('automatic',t('Uložit pokračování','Save progression'),select('enabled',t('Automaticky pokračovat','Advance automatically'),['true','false'],String(s.automatic)),!live);
-    const controls=createNote+'<h3>'+esc(t('Oznámení hráčům','Player announcement'))+'</h3><div class="tw-row-actions">'+action('announce',t('Náhled','Preview'),{preview:true},s.state!=='REGISTRATION')+action('announce',t('Zveřejnit ve hře','Publish in game'),{preview:false},s.state!=='REGISTRATION')+'</div><h3>'+esc(t('Zásahy do turnaje','Tournament controls'))+'</h3><div class="tw-row-actions">'+['pause','recover','cleanup','cancel'].map((a,i)=>action(a,t(...[['Pozastavit','Pause'],['Obnovit','Resume'],['Uklidit arény','Clean arenas'],['Zrušit turnaj','Cancel tournament']][i]),{},!live&&a!=='cleanup')).join('')+'</div><h3>'+esc(t('Kontrola připravenosti','Readiness checks'))+'</h3><ul>'+ (s.problems.map(p=>'<li>'+esc(plain(p))+'</li>').join('')||'<li>'+esc(t('Žádné zjištěné problémy. Omezení dalších pluginů ověří živý test.','No detected problems. A live test checks other plugins.'))+'</li>')+'</ul><details class="tw-inline-details"><summary>'+esc(t('Poslední změny','Recent changes'))+'</summary><div class="tw-operation-log">'+(state.operations||[]).slice(0,5).map(o=>'<p><strong>'+esc(o.action)+'</strong> · '+esc(o.state)+'<small>'+esc(plain(o.result||''))+'</small></p>').join('')+'</div></details>';
+    const controls=createNote+'<h3>'+esc(t('Oznámení hráčům','Player announcement'))+'</h3><div class="tw-row-actions">'+action('announce',t('Náhled','Preview'),{preview:true},s.state!=='REGISTRATION')+action('announce',t('Zveřejnit ve hře','Publish in game'),{preview:false},s.state!=='REGISTRATION')+'</div><h3>'+esc(t('Zásahy do turnaje','Tournament controls'))+'</h3><div class="tw-row-actions">'+['pause','recover','cleanup','cancel'].map((a,i)=>action(a,t(...[['Pozastavit','Pause'],['Obnovit','Resume'],['Uklidit arény','Clean arenas'],['Zrušit turnaj','Cancel tournament']][i]),{},(!live&&a!=='cleanup')||(a==='pause'&&['PAUSED','ROUND_ACTIVE'].includes(s.state))||(a==='recover'&&s.state!=='PAUSED'))).join('')+'</div><h3>'+esc(t('Kontrola připravenosti','Readiness checks'))+'</h3><ul>'+ (s.problems.map(p=>'<li>'+esc(plain(p))+'</li>').join('')||'<li>'+esc(t('Žádné zjištěné problémy. Omezení dalších pluginů ověří živý test.','No detected problems. A live test checks other plugins.'))+'</li>')+'</ul><details class="tw-inline-details"><summary>'+esc(t('Poslední změny','Recent changes'))+'</summary><div class="tw-operation-log">'+(state.operations||[]).slice(0,5).map(o=>'<p><strong>'+esc(o.action)+'</strong> · '+esc(o.state)+'<small>'+esc(plain(o.result||''))+'</small></p>').join('')+'</div></details>';
     return '<div id="tw-admin-status">'+adminStatus()+'</div><div class="tw-admin-toolbar"><nav class="tw-admin-tabs" aria-label="'+esc(t('Nastavení turnaje','Tournament settings'))+'">'+tabs.map(([id,label])=>'<button type="button" id="tw-tab-'+id+'" data-admin-section="'+id+'" aria-pressed="'+(adminSection===id)+'" aria-controls="tw-section-'+id+'">'+esc(label)+'</button>').join('')+'</nav><button type="button" data-refresh-admin>'+esc(t('Obnovit','Refresh'))+' ↻</button></div><p id="tw-form-stale" role="status"></p><div class="tw-admin-panels">'+section('rules',t('Pravidla turnaje','Tournament rules'),rules)+section('players',t('Hráči a nasazení','Players and seeding'),roster)+section('matches',t('Nastavení zápasů','Match settings'),matches)+section('rewards',t('Odměny','Rewards'),rewards)+section('times',t('Časy a automatika','Timing and automation'),times)+section('controls',t('Správa a diagnostika','Controls and diagnostics'),controls)+'</div>';
   }
   function render(context) {
@@ -212,17 +236,23 @@
   }
   async function send(action,payload={},expected=stamp(state.snapshot)) {
     if(busy)return;busy=true;
+    const trigger=document.activeElement,form=trigger?.closest?.('[data-tw-form]');
+    pendingAction={action,key:form?.dataset.formKey||'',expected,started:Date.now(),id:null};
+    explainButtons();
     try {
       if(!state.fresh)throw new Error(ctx.t('Server neodpovídá. Obnov stránku.','Server is unavailable. Refresh the page.'));
       if(destructive.has(action)){
         const description=`${action} · ${Object.values(payload).join(' · ')}`;
         const approved=await confirmChange(description,action!=='announce');
-        if(!approved)return;
+        if(!approved){pendingAction=null;return;}
       }
       const body={...expected,action,payload,idempotency_key:crypto.randomUUID(),confirm:true};
-      await ctx.api('/api/economysuite/tournament/action',body);
+      pendingAction.id=body.idempotency_key;
+      const result=await ctx.api('/api/economysuite/tournament/action',body);
+      pendingAction.id=result.operation_id||body.idempotency_key;
       ctx.status(ctx.t('Požadavek čeká na potvrzení serverem.','Request is waiting for server confirmation.'),false);await poll();
-    }catch(e){ctx.status(e.message,true);}finally{busy=false;}
+    }catch(e){ctx.status(e.message,true);if(!pendingAction?.id||e.status)pendingAction=null;}
+    finally{busy=!!pendingAction;explainButtons();}
   }
   function bindLive() {
     const shown=selectedHistory?state.history.find(h=>h.id===selectedHistory):state?.snapshot;
@@ -239,8 +269,9 @@
     });drawHeads();drawConnections();updateClock();if(!ctx.admin)explainButtons();
   }
   function bindAdmin() {
+    adminSignature=adminSnapshotKey(state);
     const status=document.querySelector('#tw-admin-status');if(status)status.dataset.rendered=adminStatus();
-    document.querySelector('[data-refresh-admin]')?.addEventListener('click',()=>{document.querySelector('#tw-admin').innerHTML=adminPanel();bindAdmin();});
+    document.querySelector('[data-refresh-admin]')?.addEventListener('click',()=>poll());
     document.querySelectorAll('[data-admin-section]').forEach(button=>button.addEventListener('click',()=>{
       adminSection=button.dataset.adminSection;
       document.querySelectorAll('[data-admin-section]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
@@ -248,11 +279,12 @@
       drawHeads();
     }));
     document.querySelectorAll('#tw-admin-status [data-tw-action]').forEach(b=>b.onclick=()=>send(b.dataset.twAction));
-    document.querySelectorAll('[data-tw-form]').forEach(form=>{const button=form.querySelector('button');button.dataset.phaseDisabled=String(button.disabled);form.addEventListener('change',explainButtons);form.addEventListener('submit',e=>{
-      e.preventDefault();const payload=Object.fromEntries(new FormData(form));if(form.dataset.twForm==='pool')payload.modes=new FormData(form).getAll('modes').join(',');for(const k of ['preview','enabled','random'])if(k in payload)payload[k]=payload[k]==='true';send(form.dataset.twForm,payload,JSON.parse(form.dataset.stamp));
+    document.querySelectorAll('[data-tw-form]').forEach(form=>{const button=form.querySelector('button');form.dataset.phaseDisabled=String(button.disabled);form.dataset.formKey=form.dataset.twForm+'|'+JSON.stringify([...form.querySelectorAll('input[type=hidden]')].map(e=>[e.name,e.value]));form.dataset.base=JSON.stringify(formValues(form));form.addEventListener('change',explainButtons);form.addEventListener('submit',e=>{
+      e.preventDefault();if(button.disabled||busy)return;const payload=formPayload(form);for(const k of ['preview','enabled','random'])if(k in payload)payload[k]=payload[k]==='true';send(form.dataset.twForm,payload,JSON.parse(form.dataset.stamp));
     });});
     const search=document.querySelector('#tw-search'),category=document.querySelector('#tw-category'),suggestions=document.querySelector('#tw-reward-suggestions');
-    const catalogButton=document.querySelector('[data-tw-form="catalog_prize"] button'),catalogBlocked=catalogButton?.dataset.phaseDisabled==='true';
+    const catalogButton=document.querySelector('[data-tw-form="catalog_prize"] button'),catalogForm=catalogButton?.closest('form'),catalogBlocked=catalogForm?.dataset.phaseDisabled==='true';
+    if(catalogForm)catalogForm.dataset.setupDisabled=String(catalogBlocked);
     const filter=(show=true)=>{
       const list=catalogMatches(state.snapshot.catalog,search?.value||'',category?.value||''),ids=new Set(list.map(p=>p.id));
       document.querySelectorAll('#tw-catalog option').forEach(o=>{o.hidden=!ids.has(o.value);o.disabled=o.hidden;});
@@ -262,7 +294,7 @@
         suggestions.hidden=!show||!search?.value.trim();
         suggestions.innerHTML=list.slice(0,8).map(p=>'<button type="button" data-reward-id="'+esc(p.id)+'"><strong>'+esc(plain(p.name))+'</strong><small>'+esc(p.amount+' × · '+({keys:ctx.t('Klíče','Keys'),items:ctx.t('Předměty','Items'),coins:ctx.t('Coiny','Coins'),cosmetics:ctx.t('Kosmetika','Cosmetics'),mod:'MOD'}[p.category]||p.category))+'</small></button>').join('')||'<p role="status">'+esc(ctx.t('Žádná odpovídající odměna.','No matching reward.'))+'</p>';
       }
-      if(catalogButton){catalogButton.dataset.phaseDisabled=String(catalogBlocked||!list.length);catalogButton.disabled=!state.fresh||catalogButton.dataset.phaseDisabled==='true';}explainButtons();
+      if(catalogButton){catalogForm.dataset.phaseDisabled=String(catalogBlocked||!list.length);catalogButton.disabled=!state.fresh||catalogForm.dataset.phaseDisabled==='true';}explainButtons();
     };
     search?.addEventListener('input',()=>filter());category?.addEventListener('change',()=>filter());
     search?.addEventListener('keydown',e=>{
@@ -284,6 +316,32 @@
     explainButtons();
     drawHeads();
   }
+  function refreshAdmin(force=false,discardKey=''){
+    const host=document.querySelector('#tw-admin');if(!host)return;
+    const signature=adminSnapshotKey(state);if(!force&&signature===adminSignature)return;
+    const active=document.activeElement,activeForm=active?.closest?.('[data-tw-form]');
+    const focusKey=activeForm?.dataset.formKey,focusIndex=activeForm?[...activeForm.querySelectorAll('input:not([type=hidden]),select,textarea,button')].indexOf(active):-1;
+    const drafts=new Map();
+    for(const form of host.querySelectorAll('[data-tw-form]')){
+      const expected=JSON.parse(form.dataset.stamp),s=state.snapshot,values=formValues(form);
+      if(expected.instance===s?.instance&&expected.tournament_id===s?.id&&form.dataset.formKey!==discardKey&&JSON.stringify(values)!==form.dataset.base)drafts.set(form.dataset.formKey,values);
+    }
+    const opened=[...host.querySelectorAll('details[open]')].map(e=>[...host.querySelectorAll('details')].indexOf(e)),y=root.scrollY;
+    const filters=['tw-search','tw-category'].map(id=>[id,document.getElementById(id)?.value||'']);
+    host.innerHTML=adminPanel();bindAdmin();
+    for(const [id,value] of filters){const field=document.getElementById(id);if(field){field.value=value;field.dispatchEvent(new Event(id==='tw-search'?'input':'change',{bubbles:true}));}}
+    for(const form of host.querySelectorAll('[data-tw-form]')){
+      const draft=drafts.get(form.dataset.formKey);if(!draft)continue;
+      const fields=[...form.querySelectorAll('input:not([type=hidden]),select,textarea')];
+      draft.forEach((value,i)=>{const field=fields[i];if(!field||field.name!==value.name)return;if(field.tagName==='SELECT'&&![...field.options].some(o=>o.value===value.value))return;field.value=value.value;if(['checkbox','radio'].includes(field.type))field.checked=value.checked;});
+      form.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    const details=[...host.querySelectorAll('details')];opened.forEach(i=>{if(details[i])details[i].open=true;});
+    const focusForm=[...host.querySelectorAll('[data-tw-form]')].find(f=>f.dataset.formKey===focusKey);
+    focusForm?.querySelectorAll('input:not([type=hidden]),select,textarea,button')[focusIndex]?.focus({preventScroll:true});
+    if(root.scrollY!==y)root.scrollTo({top:y,behavior:'instant'});
+    explainButtons();
+  }
   function refreshLive(){
     const host=document.querySelector('#tw-live');if(!host)return;
     const signature=JSON.stringify([state.snapshot,state.history,state.uuid,state.player_online,state.fresh,selectedHistory,ctx.t('cs','en')]);
@@ -299,20 +357,21 @@
     if(loading||document.hidden)return;loading=true;
     try{
       await load(ctx.api);refreshLive();
-      if(ctx.admin&&!state.admin){const admin=document.querySelector('#tw-admin');if(admin)admin.innerHTML=adminPanel();}
-      const status=document.querySelector('#tw-admin-status');
-      if(status){const html=adminStatus();if(status.dataset.rendered!==html){status.innerHTML=html;status.dataset.rendered=html;status.querySelectorAll('[data-tw-action]').forEach(b=>b.onclick=()=>send(b.dataset.twAction));}}
-      const stale=document.querySelector('#tw-form-stale'),form=document.querySelector('[data-tw-form]');
-      if(stale&&form){
-        const expected=JSON.parse(form.dataset.stamp),current=stamp(state.snapshot);
-        const changed=expected.revision!==current.revision||expected.instance!==current.instance||expected.tournament_id!==current.tournament_id;
-        stale.textContent=changed?ctx.t('Turnaj se změnil. Klikni na Obnovit; rozepsané hodnoty zůstanou do té doby zachované.','Tournament changed. Select Refresh; your draft values are preserved until then.'):'';
-        stale.dataset.changed=String(changed);
+      let discardKey='';
+      if(pendingAction?.id){
+        const operation=state.operations?.find(o=>o.id===pendingAction.id),result=operationState(operation,pendingAction,state);
+        if(result==='syncing'&&pendingAction.ackSync===undefined)pendingAction.ackSync=state.synced_at;
+        if(['complete','failed','unknown'].includes(result)){
+          if(result==='complete')discardKey=pendingAction.key;
+          ctx.status(plain(operation?.result)||ctx.t(result==='complete'?'Změna byla uložena.':'Výsledek se nepodařilo potvrdit. Zkontroluj poslední požadavky před opakováním.',result==='complete'?'Change saved.':'Could not confirm the result. Check recent requests before retrying.'),result!=='complete');
+          pendingAction=null;busy=false;
+        }
       }
+      if(ctx.admin)refreshAdmin(!!discardKey,discardKey);
       const ops=JSON.stringify(state.operations);
       if(lastOperations&&ops!==lastOperations){const latest=state.operations?.[0];if(latest&&latest.state!=='pending')ctx.status(plain(latest.result)||latest.state,latest.state!=='complete');}
       lastOperations=ops;
-    }catch{if(state)state.fresh=false;refreshLive();document.querySelectorAll('#tw-admin-status button').forEach(b=>b.disabled=true);}
+    }catch{if(state)state.fresh=false;refreshLive();}
     finally{explainButtons();loading=false;}
   }
   function bind(context){
@@ -326,5 +385,5 @@
     const words=normalizeSearch(query).split(/\s+/).filter(Boolean);
     return (catalog||[]).filter(p=>(!category||p.category===category)&&words.every(word=>normalizeSearch(p.name).includes(word)));
   }
-  const api={render,load,bind,head,bracket,skin,nextAction,standings,catalogMatches,buttonTone,unavailableReason};root.ESTournament=api;if(typeof module!=='undefined')module.exports=api;
+  const api={render,load,bind,head,bracket,skin,nextAction,standings,catalogMatches,buttonTone,unavailableReason,operationState,adminSnapshotKey};root.ESTournament=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

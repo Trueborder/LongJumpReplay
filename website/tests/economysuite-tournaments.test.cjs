@@ -114,3 +114,50 @@ test('disabled controls explain missing setup, locked rules, empty rewards and s
   const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8');
   assert.match(source,/aria-describedby/);assert.match(source,/pointerenter/);assert.match(source,/focusin/);assert.match(source,/hintSequence/);assert.match(source,/e.key==='Escape'/);
 });
+
+test('submitted actions remain pending until server acknowledgement and updated snapshot, not just HTTP acceptance',()=>{
+  const pending={started:1000,action:'prize',expected:{tournament_id:'t',revision:1,instance:'i'}};
+  const data={fresh:true,synced_at:10,snapshot:fixture({revision:1})};
+  assert.equal(ui.operationState(undefined,pending,data,2000),'pending');
+  assert.equal(ui.operationState({state:'pending'},pending,data,2000),'pending');
+  assert.equal(ui.operationState({state:'complete'},pending,data,2000),'syncing');
+  assert.equal(ui.operationState({state:'complete'},pending,{...data,snapshot:fixture({revision:2})},2000),'complete');
+  assert.equal(ui.operationState({state:'complete'},{...pending,ackSync:9},data,2000),'complete');
+  assert.equal(ui.operationState({state:'failed'},pending,data,2000),'failed');
+  assert.equal(ui.operationState({state:'expired'},pending,data,2000),'failed');
+  assert.equal(ui.operationState(undefined,pending,data,32000),'unknown');
+  assert.equal(ui.operationState({state:'complete'},pending,{...data,fresh:false},2000),'syncing');
+  assert.equal(ui.operationState({state:'complete'},pending,data,32000),'unknown');
+  assert.equal(ui.operationState({state:'complete'},{...pending,action:'announce'},data,2000),'complete');
+});
+
+test('admin refresh ignores ticking clocks but reacts to actual phase, revision and operation changes',()=>{
+  const data={admin:true,fresh:true,snapshot:fixture({server_time:1,deadline:20,matches:[{id:'m',time:'00:10'}]}),operations:[]};
+  assert.equal(ui.adminSnapshotKey(data),ui.adminSnapshotKey({...data,snapshot:{...data.snapshot,server_time:2,deadline:21,matches:[{id:'m',time:'00:09'}]}}));
+  assert.notEqual(ui.adminSnapshotKey(data),ui.adminSnapshotKey({...data,snapshot:{...data.snapshot,revision:2}}));
+  assert.notEqual(ui.adminSnapshotKey(data),ui.adminSnapshotKey({...data,fresh:false}));
+  assert.notEqual(ui.adminSnapshotKey(data),ui.adminSnapshotKey({...data,operations:[{id:'op',state:'complete'}]}));
+});
+
+test('automatic admin refresh preserves unsaved drafts and locks all unsavable controls with accessible busy feedback',()=>{
+  const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8'),css=fs.readFileSync(path.join(root,'app.css'),'utf8');
+  assert.match(source,/function refreshAdmin/);assert.match(source,/drafts\.get\(form\.dataset\.formKey\)/);
+  assert.match(source,/expected\.instance===s\?\.instance&&expected\.tournament_id===s\?\.id/);
+  assert.match(source,/form\.dataset\.formKey!==discardKey/);assert.match(source,/setAttribute\('aria-busy','true'\)/);
+  assert.match(source,/#tw-admin input:not\(\[type=hidden\]\),#tw-admin select/);
+  assert.doesNotMatch(source,/Klikni na Obnovit|Select Refresh/);
+  assert.match(css,/#tw-admin button\[aria-busy=true\]/);assert.match(css,/background:#e5e7e9/);
+  assert.match(css,/@media\(prefers-reduced-motion:reduce\).*aria-busy/s);
+});
+
+test('pause and resume controls follow the actual tournament phase',async()=>{
+  const active=await renderFixture(true,fixture({state:'ROUND_ACTIVE'}));
+  assert.match(active,/data-tw-form="pause"[\s\S]*?<button[^>]*disabled/);
+  assert.match(active,/data-tw-form="recover"[\s\S]*?<button[^>]*disabled/);
+  assert.match(ui.unavailableReason('pause',fixture({state:'ROUND_ACTIVE'})),/aktivní zápasy/);
+  assert.match(ui.unavailableReason('recover',fixture()),/pouze pozastavený/);
+  const paused=await renderFixture(true,fixture({state:'PAUSED'}));
+  const resume=paused.match(/data-tw-form="recover"[\s\S]*?<\/form>/)?.[0];
+  assert.ok(resume);assert.doesNotMatch(resume,/<button[^>]*disabled/);
+  assert.match(paused,/data-tw-form="pause"[\s\S]*?<button[^>]*disabled/);
+});

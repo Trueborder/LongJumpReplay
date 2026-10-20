@@ -1,5 +1,13 @@
 # Long Jump Replay — Project Knowledge
 
+## Tournament automatic admin synchronization (2026-10-20)
+
+- Supersedes the explicit-refresh behavior described below. Existing two-second polling now rebuilds admin controls when real snapshot/operation state changes, updates revision stamps automatically, and preserves unrelated dirty form values, selected workspace, disclosure state, focus and scroll. Drafts never cross tournament IDs or server instances; a successfully submitted form takes the confirmed server value.
+- Mutation buttons stay grey with the existing reduced-motion-aware inline spinner until their operation is acknowledged by the game server and synchronized data arrives, not merely until HTTP acceptance. Other mutation controls remain disabled while waiting. Failures/timeouts explain the outcome without automatic resubmission; the original idempotency ID is retained after uncertain network delivery.
+- Disabled state now includes form inputs, selectors and catalogue filters, with the existing accessible explanatory hints. Pause/resume availability follows the tournament phase. No backend/schema, reward, authentication, Minecraft JAR or server restart changes are required.
+- Validation: 133 website tests, JS syntax and production dry-run checks; local Chrome verified grey spinner during a delayed game acknowledgment, automatic re-enabling, preservation of an unrelated unsaved draft, and automatic locking of rule fields after a phase change. No production tournament mutation is used for browser verification.
+- Deployed account Worker/assets version `8d6703c6-be22-4838-bfc6-0c44ccede12a`. Public JS/CSS return HTTP 200 with exact local-source matches; authenticated production Chrome shows phase-appropriate disabled inputs and no console errors. A production screenshot is saved in the task output folder, outside Git. Production mutation/real Paper acknowledgment remains untested; the delayed acknowledgment test uses a local fixture.
+
 ## Tournament action colours and disabled reasons (2026-10-20)
 
 - Tournament/player/admin disabled buttons get a focusable, touch-clickable explanation wrapper while retaining the native disabled button. Hover/focus/tap shows a Czech/English reason, Escape dismisses. Hints cover offline synchronization, stale revision, missing setup, locked registration, first/last seed, missing substitute, empty prizes/presets/search and pending matches. Hints live in the document body (not transformed animated panels), are viewport-clamped and are removed when their owning control disappears. Existing polls update explanations without a new timer. Stale forms are blocked until explicit refresh; draft fields remain intact.

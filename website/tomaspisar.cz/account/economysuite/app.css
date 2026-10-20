@@ -368,6 +368,10 @@ html[data-motion-input=keyboard] .tw-dialog,html[data-motion-input=keyboard] .tw
 .tw-button-hint{display:inline-flex;vertical-align:middle;min-width:0;max-width:100%;align-items:center}
 .tw-button-hint[data-disabled=true]{cursor:help;border-radius:8px}
 .tw-button-hint[data-disabled=true]>button{pointer-events:none}
+.tw-button-hint[data-disabled=true]>input,.tw-button-hint[data-disabled=true]>select,.tw-button-hint[data-disabled=true]>textarea{pointer-events:none}
+.tw-button-hint:has(>input),.tw-button-hint:has(>select),.tw-button-hint:has(>textarea){display:flex;width:100%}
+.es-portal #tw-admin button[aria-busy=true],.es-portal #tw-live button[aria-busy=true]{background:#e5e7e9;border-color:#bac0c5;color:#515b64;opacity:1;cursor:wait}
+.tw-form input:disabled,.tw-form select:disabled,.tw-form textarea:disabled{opacity:.65;cursor:not-allowed}
 .tw-button-hint:focus-visible{outline:2px solid #775297;outline-offset:3px}
 .tw-disabled-help{position:fixed;z-index:10020;width:max-content;max-width:min(290px,calc(100vw - 16px));padding:9px 12px;background:#302b3b;color:#fff;border:1px solid #51475f;border-radius:8px;box-shadow:0 4px 20px #21123226;font:500 12px/1.5 var(--font-body,system-ui);white-space:normal;text-align:left;overflow-wrap:anywhere;pointer-events:auto}
 .tw-disabled-help[hidden]{display:none!important}
