@@ -2,6 +2,10 @@
 
 Standalone static CZ/EN site with an independent Cloudflare Worker. Existing account, wiki, map and checkout remain separate.
 
+## Visual direction
+
+The homepage uses a monumental Pantheon wordmark, warm stone surfaces, charcoal text, a moss action accent, self-hosted Chivo, and the existing voxel illustration as a panorama. Feature routes and joining instructions use editorial layouts rather than repeated cards. `PRODUCT.md` records existing product facts and constraints; `DESIGN.md` records the replacement visual system. Taste Skill supplied the composition direction, Impeccable the quality floor, and Emil's guidance the interaction details. The new design preserves the independent status proxy and all account/wiki/map/Discord destinations.
+
 ## Build and preview
 
 Run from this directory (custom build commands use the current directory):
@@ -34,9 +38,9 @@ Homepage `GET /api/status` fetches only the fixed public API URL, forwards no co
 ## Deployment status — 2026-10-20
 
 - Preview: https://pantheon-home.xpisar10.workers.dev/ (CZ), `/en/` (EN). Workers.dev responses carry `X-Robots-Tag: noindex`.
-- Production: https://pantheon.tomaspisar.cz/ and `/en/`. Homepage Worker version: `002f4763-c589-4cd8-883c-bae73e113e0d`.
+- Production: https://pantheon.tomaspisar.cz/ and `/en/`. Homepage Worker version after the visual redesign: `f25beacc-8f40-49b5-ac39-4431b86f7188`.
 - Account API version: `33b1904d-38dd-409b-a898-99bc32554409`.
-- The owner installed the JAR and restarted. Repeated real exports and production `/api/status` return `fresh:true`, Java 1.21.11, zero players and capacity 20; no tournament/community event is active. No fake snapshot was inserted.
+- At domain cutover, the owner installed the JAR and restarted; repeated real exports returned `fresh:true`, Java 1.21.11, zero players and capacity 20. At redesign validation the feed is stale (`fresh:false`), so the homepage reports live status unavailable. Export freshness is separate from the visual release. No fake snapshot was inserted.
 - The root web CNAME was backed up and replaced with the homepage custom domain. The independent Minecraft SRV CNAME is unchanged, including its record ID and modification timestamp. Before/after protocol status handshakes through the original address both returned Paper 1.21.11. No additional restart was performed.
 - Homepage uses a service binding to `longjumpreplay-licensing-production`, calling only the fixed anonymous GET on `account.pantheon.tomaspisar.cz`. No incoming cookies or paths are forwarded. Redirect mode is `manual`, with non-2xx responses rejected: Workers does not support `redirect:error`. Backend authentication is unchanged.
 
