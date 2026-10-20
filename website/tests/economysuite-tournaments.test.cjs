@@ -29,7 +29,7 @@ test('next phase never skips matches, transfer, intermission or ceremony',()=>{
 test('admin panel uses typed operations, confirmations, no command editor and retains forms during polls',async()=>{
   const snapshot={id:'t',instance:'i',revision:1,state:'DRAFT',size:4,best_of:1,policy:'RANDOM',mode:'Mace',round:0,players:[],waitlist:[],online:[],matches:[],prizes:[],modes:['Mace'],pool:['Mace'],arenas:['rocky'],catalog:[],presets:[],times:{'inter-match-delay-seconds':30},problems:[]};
   await ui.load(async()=>({snapshot,admin:true,history:[],operations:[],server_time:1,fresh:true}));
-  const html=ui.render({t,admin:true});assert.match(html,/data-tw-form="rules"/);assert.match(html,/data-stamp=/);assert.match(html,/value="30"/);assert.match(html,/tw-reauth/);assert.doesNotMatch(html,/Příkazová odměna|name="command"/);
+  const html=ui.render({t,admin:true});assert.match(html,/data-tw-form="rules"/);assert.match(html,/data-stamp=/);assert.match(html,/value="30"/);assert.doesNotMatch(html,/tw-reauth|Příkazová odměna|name="command"/);
   const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8');assert.match(source,/setInterval\(poll,2000\)/);assert.match(source,/form\.dataset\.stamp/);assert.match(source,/getContext\('2d'\)/);assert.match(source,/drawImage\(img,40\*unit/);
 });
 
@@ -83,4 +83,14 @@ test('navigation places tournaments directly above Settings and motion preserves
   assert.match(css,/html\[data-motion-input=keyboard\] \.tw-dialog/);
   assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.tw-dialog/);
   assert.match(css,/@starting-style/);
+});
+test('reward suggestions match Czech names without accents, all query words and categories',async()=>{
+  const catalog=[{id:'key',name:'&6Legendární klíč',category:'keys'},{id:'other',name:'Legendární meč',category:'items'},{id:'html',name:'<img src=x>',category:'items'}];
+  assert.deepEqual(ui.catalogMatches(catalog,'leg klic').map(p=>p.id),['key']);
+  assert.deepEqual(ui.catalogMatches(catalog,'LEGENDÁRNÍ','items').map(p=>p.id),['other']);
+  assert.equal(ui.catalogMatches(catalog,'nenalezeno').length,0);
+  const html=await renderFixture(true,fixture({catalog}));
+  assert.match(html,/aria-controls="tw-reward-suggestions"/);assert.match(html,/id="tw-reward-suggestions"/);
+  assert.doesNotMatch(html,/<img src=x>/);assert.doesNotMatch(html,/reauth|type="password"/);
+  const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8');assert.doesNotMatch(source,/reauth_token|\/reauth|Ověř heslo/);
 });

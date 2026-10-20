@@ -1,7 +1,6 @@
 import type { Env } from './config';
 import type { PlayerAuth } from './economysuite';
 import { now, rateLimit } from './db';
-import { generateToken, sha256, verifyPassword } from './crypto';
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => v && typeof v === 'object' && !Array.isArray(v) ? v as Obj : {};
@@ -60,20 +59,8 @@ export async function tournamentBridge(db: D1Database, path: string, data: Obj):
   }
   return fail('Not found.',404);
 }
-async function sessionHash(request: Request): Promise<string> {
-  const cookie=request.headers.get('Cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith('__Host-es-session='))||'';
-  return cookie?sha256(cookie):'';
-}
 export async function tournamentRoute(request: Request, env: Env, db: D1Database, player: PlayerAuth, linkedUuid: string|null, data: Obj): Promise<Response> {
   const path=new URL(request.url).pathname,admin=await tournamentAdmin(db,player),at=now();
-  if(path.endsWith('/reauth')&&request.method==='POST') {
-    if(!admin)return fail('Forbidden.',403);
-    if(!await rateLimit(env.DB,`es:tournament:reauth:${player.customer.id}`,600,5))return fail('Try again later.',429);
-    const session=await sessionHash(request);
-    if(!session||!player.credential||!await verifyPassword(str(data.password,1024),player.credential.password_hash))return fail('Invalid password.',401);
-    const token=generateToken();await db.prepare('INSERT INTO tournament_reauth VALUES(?,?,?,?)').bind(await sha256(token),player.customer.id,session,at+600).run();
-    return reply({token,expires_at:at+600});
-  }
   const stored=await db.prepare("SELECT payload,synced_at FROM tournament_snapshots WHERE id='current'").first<{payload:string;synced_at:number}>();
   const snap=stored?tournamentSnapshot(JSON.parse(stored.payload)):null,fresh=!!stored&&at-stored.synced_at<=10&&snap?.version===1;
   if(request.method==='GET'&&path==='/api/economysuite/tournament') {
@@ -99,8 +86,7 @@ export async function tournamentRoute(request: Request, env: Env, db: D1Database
     if(!rows(snap.online,500).some(p=>p.uuid===linkedUuid&&p.eligible===true))return fail('Sign in to Minecraft first.');
     if(snap.state!=='REGISTRATION')return fail('Registration is closed.');
   }else{
-    const grant=await db.prepare('SELECT token_hash FROM tournament_reauth WHERE token_hash=? AND customer_id=? AND session_hash=? AND expires_at>?').bind(await sha256(str(data.reauth_token,200)),player.customer.id,await sessionHash(request),at).first();
-    if(!grant)return reply({error:'reauth_required',message:'Verify your password to manage the tournament.'},403);
+    // The authenticated account's stable owner role is sufficient; no second password prompt.
     if(CONFIRM_ACTIONS.has(action)&&data.confirm!==true)return fail('Explicit confirmation required.',400);
   }
   if(!await rateLimit(env.DB,`es:tournament:action:${player.customer.id}`,60,30))return fail('Too many changes. Wait a moment.',429);

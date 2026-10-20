@@ -7,7 +7,7 @@
   const stages = {Quarterfinal:['Čtvrtfinále','Quarterfinal'],Semifinal:['Semifinále','Semifinal'],Final:['Finále','Final'],Bronze:['O třetí místo','Third place']};
   const matchStates={PENDING:['Čeká','Waiting'],RUNNING:['Hraje se','Playing'],ADMIN_DECISION:['Rozhodnutí admina','Admin decision'],COMPLETE:['Dohráno','Finished']};
   const destructive = new Set(['cancel','forcewin','rematch','disqualify','remove','substitute','remove_prize','clear_prizes','preset','announce']);
-  let state=null,ctx=null,pollTimer=null,clockTimer=null,busy=false,loading=false,reauth='',selectedHistory='',lastOperations='',serverOffset=0,resizeBound=false,adminSection='rules',liveSignature='';
+  let state=null,ctx=null,pollTimer=null,clockTimer=null,busy=false,loading=false,selectedHistory='',lastOperations='',serverOffset=0,resizeBound=false,adminSection='rules',liveSignature='';
   const head = p => `<span class="tw-head" data-skin="${esc(skin(p?.skin))}" aria-hidden="true"><span>${esc(p?.name?.slice(0,2)||'?')}</span><canvas width="32" height="32" hidden></canvas></span>`;
   function playerLine(id,s,score,winner,own) {
     const p=[...(s.players||[]),...(s.waitlist||[])].find(p=>p.uuid===id);
@@ -96,11 +96,11 @@
       return '<article class="tw-match-settings"><header><strong>'+esc(t(...(stages[m.label]||['Zápas','Match'])))+' · '+esc(names.join(' × ')||t('Soupeři nejsou určeni','Players pending'))+'</strong><small>'+esc(m.id)+' · '+esc(m.state==='RUNNING'?t('Hraje se','Playing'):m.state==='COMPLETE'?t('Dohráno','Finished'):t('Čeká','Waiting'))+'</small></header>'+form('mode',t('Uložit mód','Save mode'),hidden('match',m.id)+select('mode',t('Mód','Mode'),s.modes,m.mode),!pending)+form('arena',t('Uložit arénu','Save arena'),hidden('match',m.id)+select('arena',t('Aréna','Arena'),[['',t('Automaticky','Automatic')],...s.arenas],m.arena),!pending)+'<details class="tw-inline-details"><summary>'+esc(t('Rozhodnutí a odveta','Decision and rematch'))+'</summary>'+action('rematch',t('Odveta','Rematch'),{match:m.id})+form('forcewin',t('Určit vítěze','Force winner'),hidden('match',m.id)+select('player',t('Vítěz','Winner'),names),!names.length)+'</details></article>';
     }).join('')||'<p class="es-muted">'+esc(t('Zápasy vzniknou po uzamčení registrace. Pavouk je v kartě Turnaj.','Matches appear after registration closes. The bracket is in Tournament.'))+'</p>';
     const rewardRows=places.map(([place,label])=>'<div class="tw-reward-place"><header><strong>'+esc(label)+'</strong>'+action('remove_prize',t('Vymazat místo','Clear place'),{place,index:-1},!live||!s.prizes.some(p=>p.place===Number(place)))+'</header>'+ (s.prizes.filter(p=>p.place===Number(place)).map(p=>'<div class="tw-prize-edit"><span>'+esc(plain(p.description))+'</span>'+action('remove_prize',t('Odebrat','Remove'),{place:p.place,index:p.index},!live)+'</div>').join('')||'<small class="es-muted">'+esc(t('Bez odměny','No reward'))+'</small>')+'</div>').join('');
-    const rewards=createNote+'<p class="tw-prize-total">'+esc(plain(s.summary)||t('Odměny zatím nejsou nastavené','Rewards not set yet'))+'</p>'+form('preset',t('Použít preset','Apply preset'),select('preset',t('Balíček odměn — nahradí současné','Reward bundle — replaces current'),s.presets.map(p=>[p.id,plain(p.name)+' · '+plain(p.summary)])),!live||!s.presets.length)+rewardRows+'<details class="tw-inline-details tw-add-reward"><summary>'+esc(t('+ Přidat odměnu','+ Add reward'))+'</summary>'+form('prize',t('Přidat měnu','Add currency'),select('place',t('Umístění','Place'),places)+select('type',t('Měna','Currency'),['coins','tokens'])+field('amount',t('Částka','Amount'),100,'number'),!live)+'<div class="tw-catalog-filters"><label>'+esc(t('Hledat odměnu','Search rewards'))+'<input id="tw-search" type="search"></label><label>'+esc(t('Kategorie','Category'))+'<select id="tw-category"><option value="">'+esc(t('Všechny','All'))+'</option>'+options([...new Set(s.catalog.map(p=>p.category))])+'</select></label></div>'+form('catalog_prize',t('Přidat předmět','Add item'),select('place',t('Umístění','Place'),places)+'<label>'+esc(t('Předmět','Item'))+'<select id="tw-catalog" name="id">'+s.catalog.map(p=>'<option value="'+esc(p.id)+'" data-category="'+esc(p.category)+'">'+esc(plain(p.name))+' · '+p.amount+'</option>').join('')+'</select></label>'+field('count',t('Počet kopií','Copies'),1,'number')+hidden('catalog_revision',s.catalog_revision),!live||!s.catalog.length)+'</details>'+action('clear_prizes',t('Vymazat všechny odměny','Clear all rewards'),{},!live||!s.prizes.length);
+    const rewards=createNote+'<p class="tw-prize-total">'+esc(plain(s.summary)||t('Odměny zatím nejsou nastavené','Rewards not set yet'))+'</p>'+form('preset',t('Použít preset','Apply preset'),select('preset',t('Balíček odměn — nahradí současné','Reward bundle — replaces current'),s.presets.map(p=>[p.id,plain(p.name)+' · '+plain(p.summary)])),!live||!s.presets.length)+rewardRows+'<details class="tw-inline-details tw-add-reward"><summary>'+esc(t('+ Přidat odměnu','+ Add reward'))+'</summary>'+form('prize',t('Přidat měnu','Add currency'),select('place',t('Umístění','Place'),places)+select('type',t('Měna','Currency'),['coins','tokens'])+field('amount',t('Částka','Amount'),100,'number'),!live)+'<div class="tw-catalog-filters"><div class="tw-search-field"><label>'+esc(t('Hledat odměnu','Search rewards'))+'<input id="tw-search" type="search" aria-controls="tw-reward-suggestions" autocomplete="off" placeholder="'+esc(t('Název předmětu nebo klíče…','Item or key name…'))+'"></label><div id="tw-reward-suggestions" class="tw-reward-suggestions" role="group" aria-label="'+esc(t('Navržené odměny','Suggested rewards'))+'" hidden></div></div><label>'+esc(t('Kategorie','Category'))+'<select id="tw-category"><option value="">'+esc(t('Všechny','All'))+'</option>'+options([...new Set(s.catalog.map(p=>p.category))])+'</select></label></div>'+form('catalog_prize',t('Přidat předmět','Add item'),select('place',t('Umístění','Place'),places)+'<label>'+esc(t('Předmět','Item'))+'<select id="tw-catalog" name="id">'+s.catalog.map(p=>'<option value="'+esc(p.id)+'" data-category="'+esc(p.category)+'">'+esc(plain(p.name))+' · '+p.amount+'</option>').join('')+'</select></label>'+field('count',t('Počet kopií','Copies'),1,'number')+hidden('catalog_revision',s.catalog_revision),!live||!s.catalog.length)+'</details>'+action('clear_prizes',t('Vymazat všechny odměny','Clear all rewards'),{},!live||!s.prizes.length);
     const timeLabels={'inter-match-delay-seconds':t('Pauza mezi zápasy','Inter-match delay'),'reconnect-grace-seconds':t('Lhůta na návrat','Reconnect grace'),'sudden-death-seconds':t('Náhlá smrt','Sudden death'),'waiting-reminder-seconds':t('Připomenutí čekajícím','Waiting reminder')};
     const times=createNote+'<p class="es-muted">'+esc(t('Hodnoty jsou v sekundách. Změna neovlivní právě běžící odpočet.','Values are seconds. Changes do not alter an active countdown.'))+'</p><div class="tw-time-grid">'+Object.entries(s.times).map(([key,value])=>form('time',t('Uložit','Save'),hidden('key',key)+field('seconds',(timeLabels[key]||key)+' (s)',value,'number'),!live)).join('')+'</div>'+form('automatic',t('Uložit pokračování','Save progression'),select('enabled',t('Automaticky pokračovat','Advance automatically'),['true','false'],String(s.automatic)),!live);
     const controls=createNote+'<h3>'+esc(t('Oznámení hráčům','Player announcement'))+'</h3><div class="tw-row-actions">'+action('announce',t('Náhled','Preview'),{preview:true},s.state!=='REGISTRATION')+action('announce',t('Zveřejnit ve hře','Publish in game'),{preview:false},s.state!=='REGISTRATION')+'</div><h3>'+esc(t('Zásahy do turnaje','Tournament controls'))+'</h3><div class="tw-row-actions">'+['pause','recover','cleanup','cancel'].map((a,i)=>action(a,t(...[['Pozastavit','Pause'],['Obnovit','Resume'],['Uklidit arény','Clean arenas'],['Zrušit turnaj','Cancel tournament']][i]),{},!live&&a!=='cleanup')).join('')+'</div><h3>'+esc(t('Kontrola připravenosti','Readiness checks'))+'</h3><ul>'+ (s.problems.map(p=>'<li>'+esc(plain(p))+'</li>').join('')||'<li>'+esc(t('Žádné zjištěné problémy. Omezení dalších pluginů ověří živý test.','No detected problems. A live test checks other plugins.'))+'</li>')+'</ul><details class="tw-inline-details"><summary>'+esc(t('Poslední změny','Recent changes'))+'</summary><div class="tw-operation-log">'+(state.operations||[]).slice(0,5).map(o=>'<p><strong>'+esc(o.action)+'</strong> · '+esc(o.state)+'<small>'+esc(plain(o.result||''))+'</small></p>').join('')+'</div></details>';
-    return '<div id="tw-admin-status">'+adminStatus()+'</div><div class="tw-admin-toolbar"><nav class="tw-admin-tabs" aria-label="'+esc(t('Nastavení turnaje','Tournament settings'))+'">'+tabs.map(([id,label])=>'<button type="button" id="tw-tab-'+id+'" data-admin-section="'+id+'" aria-pressed="'+(adminSection===id)+'" aria-controls="tw-section-'+id+'">'+esc(label)+'</button>').join('')+'</nav><button type="button" data-refresh-admin>'+esc(t('Obnovit','Refresh'))+' ↻</button></div><p id="tw-form-stale" role="status"></p><div class="tw-admin-panels">'+section('rules',t('Pravidla turnaje','Tournament rules'),rules)+section('players',t('Hráči a nasazení','Players and seeding'),roster)+section('matches',t('Nastavení zápasů','Match settings'),matches)+section('rewards',t('Odměny','Rewards'),rewards)+section('times',t('Časy a automatika','Timing and automation'),times)+section('controls',t('Správa a diagnostika','Controls and diagnostics'),controls)+'</div><dialog id="tw-reauth" class="tw-dialog"><form id="tw-reauth-form"><h2>'+esc(t('Ověření administrátora','Administrator verification'))+'</h2><p>'+esc(t('Heslo se neukládá. Ověření platí deset minut.','Password is not stored. Verification lasts ten minutes.'))+'</p><label>'+esc(t('Heslo','Password'))+'<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">'+esc(t('Ověřit','Verify'))+'</button><button type="button" data-close-reauth>'+esc(t('Zrušit','Cancel'))+'</button></form></dialog>';
+    return '<div id="tw-admin-status">'+adminStatus()+'</div><div class="tw-admin-toolbar"><nav class="tw-admin-tabs" aria-label="'+esc(t('Nastavení turnaje','Tournament settings'))+'">'+tabs.map(([id,label])=>'<button type="button" id="tw-tab-'+id+'" data-admin-section="'+id+'" aria-pressed="'+(adminSection===id)+'" aria-controls="tw-section-'+id+'">'+esc(label)+'</button>').join('')+'</nav><button type="button" data-refresh-admin>'+esc(t('Obnovit','Refresh'))+' ↻</button></div><p id="tw-form-stale" role="status"></p><div class="tw-admin-panels">'+section('rules',t('Pravidla turnaje','Tournament rules'),rules)+section('players',t('Hráči a nasazení','Players and seeding'),roster)+section('matches',t('Nastavení zápasů','Match settings'),matches)+section('rewards',t('Odměny','Rewards'),rewards)+section('times',t('Časy a automatika','Timing and automation'),times)+section('controls',t('Správa a diagnostika','Controls and diagnostics'),controls)+'</div>';
   }
   function render(context) {
     ctx={...ctx,...context};
@@ -140,9 +140,8 @@
         const approved=await confirmChange(description,action!=='announce');
         if(!approved)return;
       }
-      const body={...expected,action,payload,idempotency_key:crypto.randomUUID(),confirm:true,reauth_token:reauth};
-      try{await ctx.api('/api/economysuite/tournament/action',body);}
-      catch(e){if(e.status===403&&state.admin){document.querySelector('#tw-reauth').showModal();document.querySelector('#tw-reauth input').focus();ctx.status(ctx.t('Ověř heslo a akci potom zvol znovu.','Verify your password, then select the action again.'),false);return;}throw e;}
+      const body={...expected,action,payload,idempotency_key:crypto.randomUUID(),confirm:true};
+      await ctx.api('/api/economysuite/tournament/action',body);
       ctx.status(ctx.t('Požadavek čeká na potvrzení serverem.','Request is waiting for server confirmation.'),false);await poll();
     }catch(e){ctx.status(e.message,true);}finally{busy=false;}
   }
@@ -173,10 +172,36 @@
     document.querySelectorAll('[data-tw-form]').forEach(form=>{const button=form.querySelector('button');button.dataset.phaseDisabled=String(button.disabled);form.addEventListener('submit',e=>{
       e.preventDefault();const payload=Object.fromEntries(new FormData(form));if(form.dataset.twForm==='pool')payload.modes=new FormData(form).getAll('modes').join(',');for(const k of ['preview','enabled','random'])if(k in payload)payload[k]=payload[k]==='true';send(form.dataset.twForm,payload,JSON.parse(form.dataset.stamp));
     });});
-    const filter=()=>{const search=(document.querySelector('#tw-search')?.value||'').toLocaleLowerCase(),category=document.querySelector('#tw-category')?.value;document.querySelectorAll('#tw-catalog option').forEach(o=>{o.hidden=!!((category&&o.dataset.category!==category)||!o.textContent.toLocaleLowerCase().includes(search));o.disabled=o.hidden;});const select=document.querySelector('#tw-catalog');if(select&&select.selectedOptions[0]?.disabled)select.value=[...select.options].find(o=>!o.disabled)?.value||'';};
-    document.querySelector('#tw-search')?.addEventListener('input',filter);document.querySelector('#tw-category')?.addEventListener('change',filter);
-    document.querySelector('[data-close-reauth]')?.addEventListener('click',()=>document.querySelector('#tw-reauth').close());
-    document.querySelector('#tw-reauth-form')?.addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget,password=form.elements.password.value;form.reset();try{const result=await ctx.api('/api/economysuite/tournament/reauth',{password});reauth=result.token;document.querySelector('#tw-reauth').close();ctx.status(ctx.t('Ověřeno. Nyní můžeš provést změnu.','Verified. You can now make the change.'),false);}catch(f){ctx.status(f.message,true);}});
+    const search=document.querySelector('#tw-search'),category=document.querySelector('#tw-category'),suggestions=document.querySelector('#tw-reward-suggestions');
+    const catalogButton=document.querySelector('[data-tw-form="catalog_prize"] button'),catalogBlocked=catalogButton?.dataset.phaseDisabled==='true';
+    const filter=(show=true)=>{
+      const list=catalogMatches(state.snapshot.catalog,search?.value||'',category?.value||''),ids=new Set(list.map(p=>p.id));
+      document.querySelectorAll('#tw-catalog option').forEach(o=>{o.hidden=!ids.has(o.value);o.disabled=o.hidden;});
+      const select=document.querySelector('#tw-catalog');
+      if(select&&select.selectedOptions[0]?.disabled)select.value=[...select.options].find(o=>!o.disabled)?.value||'';
+      if(suggestions){
+        suggestions.hidden=!show||!search?.value.trim();
+        suggestions.innerHTML=list.slice(0,8).map(p=>'<button type="button" data-reward-id="'+esc(p.id)+'"><strong>'+esc(plain(p.name))+'</strong><small>'+esc(p.amount+' × · '+({keys:ctx.t('Klíče','Keys'),items:ctx.t('Předměty','Items'),coins:ctx.t('Coiny','Coins'),cosmetics:ctx.t('Kosmetika','Cosmetics'),mod:'MOD'}[p.category]||p.category))+'</small></button>').join('')||'<p role="status">'+esc(ctx.t('Žádná odpovídající odměna.','No matching reward.'))+'</p>';
+      }
+      if(catalogButton){catalogButton.dataset.phaseDisabled=String(catalogBlocked||!list.length);catalogButton.disabled=!state.fresh||catalogButton.dataset.phaseDisabled==='true';}
+    };
+    search?.addEventListener('input',()=>filter());category?.addEventListener('change',()=>filter());
+    search?.addEventListener('keydown',e=>{
+      if(e.key==='ArrowDown'&&!suggestions?.hidden){e.preventDefault();suggestions.querySelector('button')?.focus();}
+      if(e.key==='Escape'&&suggestions){suggestions.hidden=true;}
+    });
+    suggestions?.addEventListener('click',e=>{
+      const button=e.target.closest('[data-reward-id]');if(!button)return;
+      const item=state.snapshot.catalog.find(p=>p.id===button.dataset.rewardId);if(!item)return;
+      search.value=plain(item.name);filter(false);document.querySelector('#tw-catalog').value=item.id;search.focus();
+    });
+    suggestions?.addEventListener('keydown',e=>{
+      const buttons=[...suggestions.querySelectorAll('button')],index=buttons.indexOf(document.activeElement);
+      if(e.key==='ArrowDown'){e.preventDefault();buttons[Math.min(index+1,buttons.length-1)]?.focus();}
+      if(e.key==='ArrowUp'){e.preventDefault();if(index<=0)search.focus();else buttons[index-1]?.focus();}
+      if(e.key==='Escape'){e.preventDefault();suggestions.hidden=true;search.focus();}
+    });
+    filter(false);
     document.querySelectorAll('[data-tw-form] button').forEach(b=>b.disabled=!state.fresh||b.dataset.phaseDisabled==='true');
     drawHeads();
   }
@@ -195,7 +220,7 @@
     if(loading||document.hidden)return;loading=true;
     try{
       await load(ctx.api);refreshLive();
-      if(ctx.admin&&!state.admin){reauth='';const admin=document.querySelector('#tw-admin');if(admin)admin.innerHTML=adminPanel();}
+      if(ctx.admin&&!state.admin){const admin=document.querySelector('#tw-admin');if(admin)admin.innerHTML=adminPanel();}
       const status=document.querySelector('#tw-admin-status');
       if(status){const html=adminStatus();if(status.dataset.rendered!==html){status.innerHTML=html;status.dataset.rendered=html;status.querySelectorAll('[data-tw-action]').forEach(b=>b.onclick=()=>send(b.dataset.twAction));}}
       const stale=document.querySelector('#tw-form-stale'),form=document.querySelector('[data-tw-form]');
@@ -217,5 +242,10 @@
     if(pollTimer)clearInterval(pollTimer);if(clockTimer)clearInterval(clockTimer);
     pollTimer=setInterval(poll,2000);clockTimer=setInterval(updateClock,1000);
   }
-  const api={render,load,bind,head,bracket,skin,nextAction,standings};root.ESTournament=api;if(typeof module!=='undefined')module.exports=api;
+  const normalizeSearch=value=>plain(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase().trim();
+  function catalogMatches(catalog,query='',category=''){
+    const words=normalizeSearch(query).split(/\s+/).filter(Boolean);
+    return (catalog||[]).filter(p=>(!category||p.category===category)&&words.every(word=>normalizeSearch(p.name).includes(word)));
+  }
+  const api={render,load,bind,head,bracket,skin,nextAction,standings,catalogMatches};root.ESTournament=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

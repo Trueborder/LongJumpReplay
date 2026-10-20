@@ -5,7 +5,6 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {tournamentSnapshot,skinUrl,tournamentAdmin,tournamentBridge,tournamentRoute} from './economysuite-tournaments';
 import {economySuite,type PlayerAuth} from './economysuite';
 import type {Env} from './config';
-import {sha256} from './crypto';
 
 const uuid='11111111-1111-4111-8111-111111111111',instance='22222222-2222-4222-8222-222222222222';
 const head='https://textures.minecraft.net/texture/'+'a'.repeat(64);
@@ -62,12 +61,18 @@ describe('tournament account authorization and outbox',()=>{
     await db.prepare('UPDATE tournament_operations SET expires_at=0').run();await tournamentBridge(db,'/sync',{snapshot:snapshot()});
     expect(await db.prepare('SELECT state FROM tournament_operations').first('state')).toBe('expired');
   });
-  it('requires session-bound fresh reauthentication and explicit destructive confirmation',async()=>{
-    const body=action('cancel');expect((await tournamentRoute(req('/action',body),env,db,owner,null,body)).status).toBe(403);
-    const at=Math.floor(Date.now()/1000);await db.prepare('INSERT INTO tournament_reauth VALUES(?,?,?,?)').bind(await sha256('grant'),owner.customer.id,await sha256('__Host-es-session=fixture-session'),at+600).run();
-    expect((await tournamentRoute(req('/action',body),env,db,owner,null,{...body,reauth_token:'grant'})).status).toBe(400);
-    expect((await tournamentRoute(req('/action',body),env,db,owner,null,{...body,reauth_token:'grant',confirm:true})).status).toBe(202);
+  it('allows the signed-in owner without reauthentication but retains destructive confirmation',async()=>{
+    const body=action('cancel');
+    expect((await tournamentRoute(req('/action',body),env,db,owner,null,body)).status).toBe(400);
+    expect((await tournamentRoute(req('/action',body),env,db,owner,null,{...body,confirm:true})).status).toBe(202);
     const ack={id:body.idempotency_key,success:true,message:'Cancelled'};await tournamentBridge(db,'/ack',ack);await tournamentBridge(db,'/ack',{...ack,success:false});expect(await db.prepare('SELECT state FROM tournament_operations').first('state')).toBe('complete');
+  });
+  it('does not expose a secondary password endpoint or allow non-owner admin actions',async()=>{
+    expect((await tournamentRoute(req('/reauth',{}),env,db,owner,null,{})).status).toBe(404);
+    const body={...action('rules'),confirm:true};
+    expect((await tournamentRoute(req('/action',body),env,db,player,uuid,body)).status).toBe(403);
+    expect((await tournamentRoute(req('/action',body),env,db,owner,null,body)).status).toBe(202);
+    expect(await db.prepare('SELECT COUNT(*) n FROM tournament_reauth').first('n')).toBe(0);
   });
   it('stores terminal history once without rewriting it on later synchronization',async()=>{
     expect(await db.prepare("SELECT COUNT(*) n FROM tournament_snapshots WHERE id!='current'").first('n')).toBe(0);

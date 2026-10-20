@@ -6,7 +6,7 @@ The implementation and activation contract is documented in the EconomySuite rep
 - Owner administration: `https://account.pantheon.tomaspisar.cz/economysuite/tournament-admin`.
 - Apply `licensing-api/economysuite-migrations/0009_tournaments.sql` to the EconomySuite D1 binding before deploying the account Worker/assets.
 - Existing web credentials, secrets, Stripe products, flags and normal gameplay snapshots are reused and preserved.
-- The verified email `xpisar10@gmail.com` is pinned once to stable customer ID on the first authenticated request; future recreation of the same email does not gain access. Password reauthentication is session-bound for ten minutes. Turnaj-admin navigation is returned by the backend, never inferred from a browser email field.
+- The verified email `xpisar10@gmail.com` is pinned once to stable customer ID on the first authenticated request; future recreation of the same email does not gain access. As requested on 2026-10-20, the signed-in owner no longer needs a secondary password prompt. Owner authorization, authenticated session, CSRF, destructive confirmations, operation idempotency and revision checks remain mandatory. The retired reauthentication endpoint returns 404; its additive legacy table is left intact. Turnaj-admin navigation is returned by the backend, never inferred from a browser email field.
 - Screenshots with fixture players prove responsive layout and browser behavior, NOT real tournament synchronization. Actual Minecraft visuals, the post-login inventory UI and all live admin operations require the new JAR and a separate Paper smoke test.
 
 ## Delivery evidence
