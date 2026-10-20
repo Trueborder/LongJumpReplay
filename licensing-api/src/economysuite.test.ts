@@ -46,6 +46,16 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://ljr.tomaspisar.cz', ECONOMYSUITE_PORTAL_ORIGIN: 'https://account.pantheon.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
   });
   afterEach(async () => { vi.unstubAllGlobals(); await runtime?.dispose(); });
+  it('accepts signed public snapshots without exposing player or admin data and leaves older polls compatible',async()=>{
+    const posted=await bridge('public/sync',{snapshot:{version:1,enabled:true,server:{players:0,capacity:50,version:'1.21.11',accounts:['private']},tournament:{state:'REGISTRATION',size:4,players:2,best_of:1,mode:'Mace',summary:'Keys',players_private:['private']},community:{active:true,title:'Hunting',progress:20,target:100,ends_at:Math.floor(Date.now()/1000)+100}}});
+    expect(posted.status).toBe(200);
+    const publicAuth={authenticate:async()=>null,mutation:async()=>false};
+    const response=await economySuite(request('public/summary'),env,publicAuth),data=await response.json();
+    expect(data).toMatchObject({version:1,fresh:true,server:{players:0},community:{title:'Hunting'}});expect(JSON.stringify(data)).not.toMatch(/private|catalog|email|uuid/);
+    expect((await bridge('poll',{})).status).toBe(200);
+    expect((await economySuite(request('account'),env,publicAuth)).status).toBe(401);
+    expect((await economySuite(request('tournament'),env,publicAuth)).status).toBe(401);
+  });
   it('claims the free daily once under concurrent requests and safely delivers through compatible bridges', async () => {
     const db=env.ECONOMYSUITE_DB!;
     await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner',uuid,'Player',1).run();

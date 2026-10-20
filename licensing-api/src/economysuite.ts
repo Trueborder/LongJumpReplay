@@ -2,6 +2,7 @@ import { rankProduct, rankDelivery, RANK_WEEK_SECONDS, type RankId } from './eco
 import { dailyStatus, claimDaily, rewardDay } from './economysuite-daily';
 import { questProgress } from './economysuite-quests';
 import { tournamentBridge, tournamentRoute, tournamentAdmin } from './economysuite-tournaments';
+import { publicSummary, savePublicSnapshot } from './economysuite-public';
 import { gamesRoute, gameAcknowledgment, RULES_VERSION } from './economysuite-games';
 import type { Env } from './config';
 import { generateToken, sha256, timingSafeEqual, verifyPassword } from './crypto';
@@ -196,6 +197,9 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
   if (!data) return error('forbidden', 'Invalid bridge request.', 403);
   await db.prepare("INSERT INTO bridge_status(server,last_seen) VALUES('pantheon',?) ON CONFLICT(server) DO UPDATE SET last_seen=excluded.last_seen").bind(now()).run();
   if(path.startsWith('/api/economysuite/bridge/tournament/'))return tournamentBridge(db,path,data);
+  if(path==='/api/economysuite/bridge/public/sync'){
+    await savePublicSnapshot(db,data.snapshot,now());return reply({synced:true});
+  }
   if (path.endsWith('/pair/start')) {
     const uuid = s(data.uuid), name = s(data.name);
     if (!UUID.test(uuid) || !/^[A-Za-z0-9_]{1,16}$/.test(name)) return error('invalid_input', 'Invalid player.');
@@ -252,6 +256,7 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
 export async function economySuite(request: Request, env: Env, auth: EconomyAuth): Promise<Response> {
   const path = new URL(request.url).pathname, db = env.ECONOMYSUITE_DB;
   if (!db) return error('unavailable', 'The player portal is being configured.', 503);
+  if(path==='/api/economysuite/public/summary')return request.method==='GET'?publicSummary(db,now()):error('method_not_allowed','GET required.',405);
   if (path === '/api/economysuite/stripe/webhook' && request.method === 'POST') return webhook(request, env, db);
   if (path.startsWith('/api/economysuite/bridge/')) return bridge(request, env, db, path);
   if (path === '/api/economysuite/catalog' && request.method === 'GET') return reply({ packages: await catalog(env), purchases_enabled: env.ECONOMYSUITE_PURCHASES_ENABLED === 'true' });

@@ -1,0 +1,11 @@
+import {mkdir,writeFile,cp} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {render} from './render.mjs';
+import {site} from './assets/content.mjs';
+const root=fileURLToPath(new URL('.',import.meta.url)),dist=root+'dist/';
+await mkdir(dist+'en',{recursive:true});await cp(root+'assets',dist+'assets',{recursive:true});
+for(const lang of ['cs','en'])await writeFile(dist+(lang==='cs'?'index.html':'en/index.html'),render(lang));
+await writeFile(dist+'robots.txt',`User-agent: *\nAllow: /\nSitemap: ${site.origin}/sitemap.xml\n`);
+await writeFile(dist+'sitemap.xml',`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['/','/en/'].map(p=>`<url><loc>${site.origin}${p}</loc></url>`).join('')}</urlset>`);
+await writeFile(dist+'404.html',`<!doctype html><html lang="cs"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>404 — Pantheon</title><link rel="stylesheet" href="/assets/site.css"><main class="section"><p class="eyebrow">404</p><h1>Tady cesta končí.</h1><a class="button" href="/">Zpět na Pantheon / Back to Pantheon</a></main></html>`);
+console.log('Built Czech and English Pantheon pages.');
