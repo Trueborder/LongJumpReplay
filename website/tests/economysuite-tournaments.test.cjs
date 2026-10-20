@@ -94,3 +94,23 @@ test('reward suggestions match Czech names without accents, all query words and 
   assert.doesNotMatch(html,/<img src=x>/);assert.doesNotMatch(html,/reauth|type="password"/);
   const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8');assert.doesNotMatch(source,/reauth_token|\/reauth|Ověř heslo/);
 });
+test('action colours follow meaning, including the selected currency',()=>{
+  for(const action of ['cancel','remove','remove_prize','clear_prizes','disqualify'])assert.equal(ui.buttonTone(action),'danger');
+  assert.equal(ui.buttonTone('pause'),'warning');assert.equal(ui.buttonTone('prize',{type:'coins'}),'coins');assert.equal(ui.buttonTone('prize',{type:'tokens'}),'tokens');
+  assert.equal(ui.buttonTone('add'),'success');assert.equal(ui.buttonTone('time'),'info');assert.equal(ui.buttonTone('catalog_prize'),'accent');
+});
+test('disabled controls explain missing setup, locked rules, empty rewards and seeding limits in both languages',()=>{
+  const s=fixture();
+  assert.match(ui.unavailableReason('prize',{...s,id:''}),/vytvoř nový turnaj/);
+  assert.match(ui.unavailableReason('rules',{...s,state:'ROUND_ACTIVE'}),/Registrace je uzamčená/);
+  assert.match(ui.unavailableReason('seed',s,{player:'p0',direction:-1}),/prvním místě/);
+  assert.match(ui.unavailableReason('seed',s,{player:'p0',direction:1}),/posledním místě/);
+  assert.match(ui.unavailableReason('substitute',{...s,online:[]}),/Není dostupný/);
+  assert.match(ui.unavailableReason('catalog_prize',s),/vyhledávání/);
+  assert.match(ui.unavailableReason('preset',s),/preset/);
+  assert.match(ui.unavailableReason('advance',{...s,state:'INTERMISSION'}),/povinná pauza/);
+  assert.match(ui.unavailableReason('advance',{...s,state:'ROUND_READY',problems:['Rocky: neplatný spawn B']}),/neplatný spawn B/);
+  assert.match(ui.unavailableReason('rules',{...s,state:'ROUND_ACTIVE'},{},(cs,en)=>en),/Registration is locked/);
+  const source=fs.readFileSync(path.join(root,'tournament.js'),'utf8');
+  assert.match(source,/aria-describedby/);assert.match(source,/pointerenter/);assert.match(source,/focusin/);assert.match(source,/hintSequence/);assert.match(source,/e.key==='Escape'/);
+});

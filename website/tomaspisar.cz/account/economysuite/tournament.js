@@ -62,6 +62,85 @@
       <details class="es-panel tw-history" data-disclosure="history"><summary>${esc(t('Historie turnajů','Tournament history'))}</summary><select id="tw-history" aria-label="${esc(t('Turnaj','Tournament'))}"><option value="">${esc(t('Aktuální turnaj','Current tournament'))}</option>${(state.history||[]).map(h=>`<option value="${esc(h.id)}" ${selectedHistory===h.id?'selected':''}>${esc(h.id.slice(0,8))} · ${h.size} · ${esc(t(...(phases[h.state]||['Turnaj','Tournament'])))}</option>`).join('')}</select></details>
       ${(state.operations||[]).length?`<details class="es-panel tw-operation-log" data-disclosure="operations"><summary>${esc(t('Poslední požadavky','Recent requests'))}</summary>${(state.operations||[]).slice(0,5).map(o=>`<p data-operation="${esc(o.id)}"><strong>${esc(o.action)}</strong> · ${esc(o.state)} — ${esc(plain(o.result||t('Čeká na potvrzení serveru','Waiting for server confirmation')))}</p>`).join('')}</details>`:''}`;
   }
+  function buttonTone(action,payload={}) {
+    if(action==='prize')return payload.type==='tokens'?'tokens':'coins';
+    if(['cancel','remove','disqualify','remove_prize','clear_prizes'].includes(action))return 'danger';
+    if(['pause','cleanup','forcewin','rematch','substitute','preset'].includes(action))return 'warning';
+    if(['create','add','recover','advance'].includes(action))return 'success';
+    if(['catalog_prize','announce'].includes(action))return 'accent';
+    return 'info';
+  }
+  function unavailableReason(action,s,payload={},t=(cs,en)=>cs) {
+    if(action==='placeholder')return t('Zápas ještě nebyl sestaven. Čeká na výsledky předchozího kola.','This match has not been drawn yet. Waiting for the previous round.');
+    if(action==='advance')return ['REGISTRATION','ROUND_READY'].includes(s?.state)&&(s.problems||[]).length?plain(s.problems.join(' · ')):nextAction(s,t).label;
+    const live=!!s?.id&&!['COMPLETED','CANCELLED'].includes(s.state);
+    if(s?.celebrating)return t('Nejprve musí skončit slavnostní vyhlášení.','Wait until the award ceremony finishes.');
+    if(!live&&action!=='create'&&action!=='cleanup')return t('Nejprve vytvoř nový turnaj v Pravidlech.','Create a new tournament in Rules first.');
+    if(['rules','pool','seeding','seed','add','remove','substitute'].includes(action)&&!['DRAFT','REGISTRATION'].includes(s?.state))return t('Registrace je uzamčená. Pravidla a nasazení už nelze měnit.','Registration is locked. Rules and seeding can no longer change.');
+    const available=(s?.online||[]).filter(p=>![...(s.players||[]),...(s.waitlist||[])].some(e=>e.uuid===p.uuid));
+    if(['add','substitute'].includes(action)&&!available.length)return t('Není dostupný další online hráč, který ještě není přihlášený.','No additional online player is available outside the roster.');
+    if(action==='seed'){
+      const index=s.players.findIndex(p=>p.uuid===payload.player);
+      if(Number(payload.direction)<0&&index<=0)return t('Hráč už je na prvním místě nasazení.','This player is already first in the seed order.');
+      if(Number(payload.direction)>0&&index===s.players.length-1)return t('Hráč už je na posledním místě nasazení.','This player is already last in the seed order.');
+    }
+    if(action==='announce')return t('Oznámení lze poslat pouze během otevřené registrace.','Announcements are available only while registration is open.');
+    if(action==='remove_prize')return t('Na tomto umístění nejsou žádné odměny k odebrání.','There are no rewards to remove for this place.');
+    if(action==='clear_prizes')return t('Turnaj nemá žádné nastavené odměny.','This tournament has no configured rewards.');
+    if(action==='preset')return t('Pro tento turnaj není dostupný žádný preset odměn.','No reward preset is available for this tournament.');
+    if(action==='catalog_prize')return t('Žádná odměna neodpovídá vyhledávání nebo vybrané kategorii.','No reward matches your search or selected category.');
+    if(['mode','arena'].includes(action))return t('Mód a arénu lze měnit pouze u čekajícího zápasu.','Mode and arena can only be changed for a pending match.');
+    if(action==='forcewin')return t('Nejprve musí být určeni oba soupeři zápasu.','Both opponents must be assigned first.');
+    return t('Akce není dostupná v aktuální fázi turnaje. Zkontroluj Pravidla a Správu.','This action is unavailable in the current phase. Check Rules and Controls.');
+  }
+  let hintSequence=0;
+  function explainButtons() {
+    if(!ctx||!state)return;
+    // Tooltips live outside animated panels, so transformed ancestors cannot misplace them.
+    document.querySelectorAll('.tw-disabled-help[data-owner]').forEach(help=>{if(!document.getElementById(help.dataset.owner))help.remove();});
+    document.querySelectorAll('#tw-admin button,#tw-live button').forEach(button=>{
+      const form=button.closest('[data-tw-form]'),action=form?.dataset.twForm||button.dataset.twAction;
+      const payload=form?Object.fromEntries(new FormData(form)):{};
+      if(action){button.dataset.tone=buttonTone(action,payload);}
+      if(action==='prize')button.textContent=payload.type==='tokens'?ctx.t('Přidat tokeny','Add tokens'):ctx.t('Přidat coiny','Add coins');
+      let reason='';
+      if(form){
+        const expected=JSON.parse(form.dataset.stamp),s=state.snapshot;
+        const stale=expected.revision!==s?.revision||expected.instance!==s?.instance||expected.tournament_id!==s?.id;
+        button.disabled=!state.fresh||stale||button.dataset.phaseDisabled==='true';
+        if(stale)reason=ctx.t('Turnaj se změnil. Klikni na Obnovit nad nastavením; rozepsané hodnoty zůstanou do té doby zachované.','Tournament changed. Select Refresh above the settings; your draft is preserved until then.');
+      }
+      if(!state.fresh&&action) {button.disabled=true;reason=ctx.t('Herní server neodpovídá nebo jsou data zastaralá. Počkej na obnovení spojení.','The game server is unavailable or its data is stale. Wait for synchronization.');}
+      if(button.disabled&&!reason){
+        if(button.classList.contains('tw-match'))reason=unavailableReason('placeholder',state.snapshot,{},ctx.t);
+        else if(['join','leave'].includes(action))reason=!state.uuid?ctx.t('Nejprve propoj účet s Minecraftem přes /web link.','Link your Minecraft account using /web link first.'):ctx.t('Pro tuto akci musíš být přihlášený v Minecraftu.','Sign in to Minecraft for this action.');
+        else reason=unavailableReason(action,state.snapshot,payload,ctx.t);
+      }
+      let wrapper=button.parentElement?.classList.contains('tw-button-hint')?button.parentElement:null;
+      if(!wrapper&&button.disabled){
+        wrapper=document.createElement('span');wrapper.className='tw-button-hint';button.before(wrapper);wrapper.append(button);
+        const help=document.createElement('span');help.className='tw-disabled-help';help.id='tw-help-'+(++hintSequence);wrapper.id='tw-hint-owner-'+hintSequence;wrapper.dataset.help=help.id;help.dataset.owner=wrapper.id;help.setAttribute('role','tooltip');help.hidden=true;document.body.append(help);
+        const show=()=>{
+          if(!button.disabled)return;help.hidden=false;
+          const rect=wrapper.getBoundingClientRect(),bounds=help.getBoundingClientRect();
+          help.style.left=Math.max(8,Math.min(rect.left,innerWidth-bounds.width-8))+'px';
+          help.style.top=(rect.bottom+bounds.height+8>innerHeight?Math.max(8,rect.top-bounds.height):rect.bottom)+'px';
+        };
+        wrapper.addEventListener('pointerenter',show);wrapper.addEventListener('focusin',show);
+        wrapper.addEventListener('pointerleave',e=>{if(e.relatedTarget!==help&&!help.contains(e.relatedTarget)&&!wrapper.contains(document.activeElement))help.hidden=true;});
+        help.addEventListener('pointerleave',e=>{if(e.relatedTarget!==wrapper&&!wrapper.contains(e.relatedTarget)&&!wrapper.contains(document.activeElement))help.hidden=true;});
+        wrapper.addEventListener('focusout',()=>help.hidden=true);
+        wrapper.addEventListener('click',e=>{if(button.disabled){e.preventDefault();show();}});
+        wrapper.addEventListener('keydown',e=>{if(e.key==='Escape'){help.hidden=true;e.stopPropagation();}else if(button.disabled&&['Enter',' '].includes(e.key)){e.preventDefault();show();}});
+      }
+      if(wrapper){
+        const help=document.getElementById(wrapper.dataset.help);help.textContent=reason;
+        wrapper.tabIndex=button.disabled?0:-1;wrapper.setAttribute('aria-label',button.textContent.trim());
+        wrapper.dataset.disabled=String(button.disabled);button.setAttribute('aria-describedby',help.id);wrapper.setAttribute('aria-describedby',help.id);
+        if(!button.disabled)help.hidden=true;
+      }
+    });
+  }
   function adminStatus() {
     const s=state?.snapshot,{t}=ctx;if(!s||!state.admin)return '';
     const next=nextAction(s,t);
@@ -157,7 +236,7 @@
       const s=selectedHistory?state.history.find(h=>h.id===selectedHistory):state.snapshot,m=s?.matches.find(m=>m.id===b.dataset.match);if(!m)return;
       document.querySelector('#tw-match-content').innerHTML=`<h2>${esc(ctx.t(...(stages[m.label]||['Zápas','Match'])))}</h2>${playerLine(m.first,s,m.first_score,m.winner,state.uuid)}${playerLine(m.second,s,m.second_score,m.winner,state.uuid)}<p>${esc(m.mode)} · ${esc(m.arena)} · ${esc(ctx.t(...(matchStates[m.state]||['Čeká','Waiting'])))}</p><p>${esc(ctx.t('Sledování ve hře: /tournament spectate','Watch in Minecraft: /tournament spectate'))}</p>`;
       document.querySelector('#tw-match-detail').showModal();drawHeads();
-    });drawHeads();drawConnections();updateClock();
+    });drawHeads();drawConnections();updateClock();if(!ctx.admin)explainButtons();
   }
   function bindAdmin() {
     const status=document.querySelector('#tw-admin-status');if(status)status.dataset.rendered=adminStatus();
@@ -169,7 +248,7 @@
       drawHeads();
     }));
     document.querySelectorAll('#tw-admin-status [data-tw-action]').forEach(b=>b.onclick=()=>send(b.dataset.twAction));
-    document.querySelectorAll('[data-tw-form]').forEach(form=>{const button=form.querySelector('button');button.dataset.phaseDisabled=String(button.disabled);form.addEventListener('submit',e=>{
+    document.querySelectorAll('[data-tw-form]').forEach(form=>{const button=form.querySelector('button');button.dataset.phaseDisabled=String(button.disabled);form.addEventListener('change',explainButtons);form.addEventListener('submit',e=>{
       e.preventDefault();const payload=Object.fromEntries(new FormData(form));if(form.dataset.twForm==='pool')payload.modes=new FormData(form).getAll('modes').join(',');for(const k of ['preview','enabled','random'])if(k in payload)payload[k]=payload[k]==='true';send(form.dataset.twForm,payload,JSON.parse(form.dataset.stamp));
     });});
     const search=document.querySelector('#tw-search'),category=document.querySelector('#tw-category'),suggestions=document.querySelector('#tw-reward-suggestions');
@@ -183,7 +262,7 @@
         suggestions.hidden=!show||!search?.value.trim();
         suggestions.innerHTML=list.slice(0,8).map(p=>'<button type="button" data-reward-id="'+esc(p.id)+'"><strong>'+esc(plain(p.name))+'</strong><small>'+esc(p.amount+' × · '+({keys:ctx.t('Klíče','Keys'),items:ctx.t('Předměty','Items'),coins:ctx.t('Coiny','Coins'),cosmetics:ctx.t('Kosmetika','Cosmetics'),mod:'MOD'}[p.category]||p.category))+'</small></button>').join('')||'<p role="status">'+esc(ctx.t('Žádná odpovídající odměna.','No matching reward.'))+'</p>';
       }
-      if(catalogButton){catalogButton.dataset.phaseDisabled=String(catalogBlocked||!list.length);catalogButton.disabled=!state.fresh||catalogButton.dataset.phaseDisabled==='true';}
+      if(catalogButton){catalogButton.dataset.phaseDisabled=String(catalogBlocked||!list.length);catalogButton.disabled=!state.fresh||catalogButton.dataset.phaseDisabled==='true';}explainButtons();
     };
     search?.addEventListener('input',()=>filter());category?.addEventListener('change',()=>filter());
     search?.addEventListener('keydown',e=>{
@@ -202,7 +281,7 @@
       if(e.key==='Escape'){e.preventDefault();suggestions.hidden=true;search.focus();}
     });
     filter(false);
-    document.querySelectorAll('[data-tw-form] button').forEach(b=>b.disabled=!state.fresh||b.dataset.phaseDisabled==='true');
+    explainButtons();
     drawHeads();
   }
   function refreshLive(){
@@ -234,7 +313,7 @@
       if(lastOperations&&ops!==lastOperations){const latest=state.operations?.[0];if(latest&&latest.state!=='pending')ctx.status(plain(latest.result)||latest.state,latest.state!=='complete');}
       lastOperations=ops;
     }catch{if(state)state.fresh=false;refreshLive();document.querySelectorAll('#tw-admin-status button').forEach(b=>b.disabled=true);}
-    finally{document.querySelectorAll('[data-tw-form] button').forEach(b=>b.disabled=!state?.fresh||b.dataset.phaseDisabled==='true');loading=false;}
+    finally{explainButtons();loading=false;}
   }
   function bind(context){
     ctx={...ctx,...context};bindLive();if(ctx.admin)bindAdmin();
@@ -247,5 +326,5 @@
     const words=normalizeSearch(query).split(/\s+/).filter(Boolean);
     return (catalog||[]).filter(p=>(!category||p.category===category)&&words.every(word=>normalizeSearch(p.name).includes(word)));
   }
-  const api={render,load,bind,head,bracket,skin,nextAction,standings,catalogMatches};root.ESTournament=api;if(typeof module!=='undefined')module.exports=api;
+  const api={render,load,bind,head,bracket,skin,nextAction,standings,catalogMatches,buttonTone,unavailableReason};root.ESTournament=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

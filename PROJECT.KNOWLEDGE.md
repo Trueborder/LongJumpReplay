@@ -1,5 +1,11 @@
 # Long Jump Replay — Project Knowledge
 
+## Tournament action colours and disabled reasons (2026-10-20)
+
+- Tournament/player/admin disabled buttons get a focusable, touch-clickable explanation wrapper while retaining the native disabled button. Hover/focus/tap shows a Czech/English reason, Escape dismisses. Hints cover offline synchronization, stale revision, missing setup, locked registration, first/last seed, missing substitute, empty prizes/presets/search and pending matches. Hints live in the document body (not transformed animated panels), are viewport-clamped and are removed when their owning control disappears. Existing polls update explanations without a new timer. Stale forms are blocked until explicit refresh; draft fields remain intact.
+- Action colours follow meaning without relying on colour alone: red cancellation/removal, yellow caution/coins, pink tokens, green creation/addition/recovery, blue settings and purple reward catalogue/announcements. Currency selection updates the action label and colour immediately. Native backend authorization and confirmations remain unchanged.
+- Validation: all 129 website tests pass. In-app-browser DOM checks confirmed locked-rule explanation, zero disabled controls without reasons and computed red/yellow/green/pink colours. Chrome was unavailable; screenshot capture in the in-app browser timed out, so no screenshot/pixel review is claimed. No production tournament mutation, schema or Minecraft-server change is part of this web-only update.
+
 ## Tournament reward suggestions and session-only administration (2026-10-20)
 
 - Reward search now shows up to eight concrete catalogue suggestions inline, with item name, amount and category. It normalizes Czech accents/case and matches all search words; category filters apply to both suggestions and the final catalogue selector. Click or ArrowDown/Enter selects the exact catalogue ID, Escape dismisses, and zero matches disables item submission. Suggestions use native buttons, not a password or command editor.

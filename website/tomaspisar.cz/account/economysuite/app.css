@@ -357,3 +357,21 @@ html[data-motion-input=keyboard] .tw-dialog,html[data-motion-input=keyboard] .tw
   .tw-time-grid{grid-template-columns:1fr}.tw-admin-player>.tw-row-actions{margin-left:27px;width:100%;gap:5px}.tw-admin-player{gap:7px}
 }
 @media(prefers-reduced-motion:reduce){.tw-dialog,.tw-dialog[open]{transform:none!important;transition-property:opacity,display,overlay}.tw-dialog::backdrop{transition-duration:160ms}@starting-style{.tw-dialog[open]{transform:none!important}}}
+/* Action meaning is conveyed by labels as well as colour. */
+.es-portal button[data-tone=danger]{background:#fbe8e8;border-color:#d99393;color:#922f35}
+.es-portal button[data-tone=warning],.es-portal button[data-tone=coins]{background:#fff2c5;border-color:#d4b15a;color:#745015}
+.es-portal button[data-tone=tokens]{background:#fde7f3;border-color:#d99cbd;color:#923761}
+.es-portal button[data-tone=success]{background:#e2f2e7;border-color:#8ebfa0;color:#216442}
+.es-portal button[data-tone=info]{background:#e9f1fb;border-color:#9ab6d5;color:#315e8a}
+.es-portal button[data-tone=accent]{background:#f0e8fb;border-color:#b7a0d3;color:#6c468c}
+.tw-form button:disabled{opacity:.7;cursor:help}
+.tw-button-hint{display:inline-flex;vertical-align:middle;min-width:0;max-width:100%;align-items:center}
+.tw-button-hint[data-disabled=true]{cursor:help;border-radius:8px}
+.tw-button-hint[data-disabled=true]>button{pointer-events:none}
+.tw-button-hint:focus-visible{outline:2px solid #775297;outline-offset:3px}
+.tw-disabled-help{position:fixed;z-index:10020;width:max-content;max-width:min(290px,calc(100vw - 16px));padding:9px 12px;background:#302b3b;color:#fff;border:1px solid #51475f;border-radius:8px;box-shadow:0 4px 20px #21123226;font:500 12px/1.5 var(--font-body,system-ui);white-space:normal;text-align:left;overflow-wrap:anywhere;pointer-events:auto}
+.tw-disabled-help[hidden]{display:none!important}
+.tw-next>.tw-button-hint{max-width:280px;flex-shrink:0}.tw-next>.tw-button-hint>button{max-width:100%}
+.tw-round-matches>.tw-button-hint,.tw-bronze>.tw-button-hint{display:block;width:100%}
+@media(hover:hover) and (pointer:fine){.es-portal button[data-tone]:not(:disabled):hover{filter:brightness(.97)}}
+@media(max-width:800px){.tw-next>.tw-button-hint{max-width:45%}}
