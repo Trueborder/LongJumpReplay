@@ -25,9 +25,25 @@ test('homepage proxy pins the read-only endpoint, forwards no cookies and fails 
  const env={ASSETS:{fetch:async()=>new Response('page')}};const ctx={waitUntil:()=>{}};
  const fetcher=async(url,options)=>{called={url,options};return Response.json({version:1,fresh:false,server:null});};
  const response=await handle(new Request('https://pantheon.tomaspisar.cz/api/status?target=https://evil.test',{headers:{Cookie:'private-session'}}),env,ctx,fetcher,null);
- assert.equal(response.status,200);assert.equal(called.url,'https://api.tomaspisar.cz/api/economysuite/public/summary');assert.equal(called.options.headers.Cookie,undefined);assert.match(response.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);
+ assert.equal(response.status,200);assert.equal(called.url,'https://account.pantheon.tomaspisar.cz/api/economysuite/public/summary');assert.equal(called.options.headers.Cookie,undefined);assert.match(response.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);
  const failed=await handle(new Request('https://pantheon.tomaspisar.cz/api/status'),env,ctx,async()=>{throw Error('down');},null);assert.equal((await failed.json()).fresh,false);assert.equal(failed.headers.get('cache-control'),'no-store');
  assert.equal((await handle(new Request('https://pantheon.tomaspisar.cz/api/status',{method:'POST'}),env,ctx,fetcher,null)).status,405);
  assert.equal((await handle(new Request('https://pantheon.tomaspisar.cz/api/admin'),env,ctx,fetcher,null)).status,404);
  assert.equal((await handle(new Request('https://preview.workers.dev/'),env,ctx,fetcher,null)).headers.get('X-Robots-Tag'),'noindex');
+});
+test('production proxy uses its service binding for only the fixed anonymous summary',async()=>{
+ const {handle}=await import('../pantheon/worker.mjs');let called;
+ const env={PUBLIC_API:{fetch:async(url,options)=>{called={url,options};return Response.json({version:1,fresh:true,server:{players:0}});}}};
+ const response=await handle(new Request('https://pantheon.tomaspisar.cz/api/status',{headers:{Cookie:'private'}}),env,{waitUntil(){}},()=>{throw Error('must not use public fetch');},null);
+ assert.equal((await response.json()).fresh,true);assert.equal(called.url,'https://account.pantheon.tomaspisar.cz/api/economysuite/public/summary');assert.equal(called.options.headers.Cookie,undefined);assert.equal(called.options.redirect,'manual');
+ const redirect=await handle(new Request('https://pantheon.tomaspisar.cz/api/status'),{}, {waitUntil(){}},async()=>new Response(null,{status:302,headers:{Location:'https://evil.test'}}),null);assert.equal((await redirect.json()).fresh,false);
+ const config=JSON.parse(fs.readFileSync(path.join(base,'wrangler.jsonc'),'utf8'));
+ assert.deepEqual(config.services,[{binding:'PUBLIC_API',service:'longjumpreplay-licensing-production'}]);
+});
+test('edge cache remains ten seconds without making the browser reuse stale status',async()=>{
+ const {handle}=await import('../pantheon/worker.mjs');
+ const cached=Response.json({version:1,fresh:true},{headers:{'Cache-Control':'public, max-age=10'}});
+ const result=await handle(new Request('https://pantheon.tomaspisar.cz/api/status'),{}, {},()=>{throw Error('cache miss');},{match:async()=>cached});
+ assert.equal(result.headers.get('Cache-Control'),'no-store');
+ assert.match(fs.readFileSync(path.join(base,'assets/site.mjs'),'utf8'),/cache:'no-store'/);
 });

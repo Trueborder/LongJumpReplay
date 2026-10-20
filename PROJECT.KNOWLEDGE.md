@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## PANTHEON production homepage cutover (2026-10-20)
+
+- Supersedes the pending-cutover status below. Owner installed EconomySuite 2.46.2 and restarted; repeated real signed public snapshots advance and return fresh:true, Java 1.21.11, capacity 20. No active tournament/community event was present. Homepage now runs on https://pantheon.tomaspisar.cz/ and /en/, Worker version 002f4763-c589-4cd8-883c-bae73e113e0d.
+- Backed up exact DNS before replacing only the root DNS-only Exaroton CNAME with the homepage's managed custom-domain record. The independent _minecraft._tcp CNAME to Exaroton, flattening=false, record ID and modification date remain unchanged. Never hardcode its transient IP/port. Rollback instructions are in website/pantheon/README.md.
+- Homepage's fixed anonymous summary GET now uses PUBLIC_API service binding to longjumpreplay-licensing-production with no forwarded user headers. Cloudflare rejects redirect:error at runtime; use redirect:manual and reject non-2xx. Added regression test. Existing backend/private routes, DNS for account/wiki/map and plugin are unchanged.
+- Validation: 139 website tests pass; HTTPS CZ/EN/status/account/wiki/map 200; Chrome displays real online status. Client polling bypasses browser cache and all status responses are no-store, while internal Cache API retains its ten-second TTL. Minecraft protocol status handshake using dynamic SRV passed both before and after cutover. This is not an authenticated Minecraft client login. No active Paper event or 30-player test was performed, and no additional restart was issued.
+
 ## PANTHEON public homepage and aggregate export (2026-10-20)
 
 - Independent static CZ/EN homepage source is `website/pantheon`, using Barlow, self-hosted licensed fonts, original imagegen temple artwork, dark/gold design and restrained CSS motion. Build from that directory with `node build.mjs`; invoke the existing licensing-api Wrangler binary there. Do not deploy it using the main public-site config. Preview `https://pantheon-home.xpisar10.workers.dev/` is noindex; existing account/wiki appearance is untouched.

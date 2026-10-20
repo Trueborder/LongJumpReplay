@@ -2,6 +2,7 @@
  "$schema":"../../licensing-api/node_modules/wrangler/config-schema.json",
  "name":"pantheon-home","main":"worker.mjs","compatibility_date":"2026-10-20","workers_dev":true,
  "observability":{"enabled":true},
+ "services":[{"binding":"PUBLIC_API","service":"longjumpreplay-licensing-production"}],
  "assets":{"directory":"./dist","binding":"ASSETS","run_worker_first":true,"not_found_handling":"404-page"},
- "routes":[],"build":{"command":"node build.mjs"}
+ "routes":[{"pattern":"pantheon.tomaspisar.cz","custom_domain":true}],"build":{"command":"node build.mjs"}
 }

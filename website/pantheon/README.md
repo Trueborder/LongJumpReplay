@@ -34,14 +34,15 @@ Homepage `GET /api/status` fetches only the fixed public API URL, forwards no co
 ## Deployment status — 2026-10-20
 
 - Preview: https://pantheon-home.xpisar10.workers.dev/ (CZ), `/en/` (EN). Workers.dev responses carry `X-Robots-Tag: noindex`.
-- Homepage Worker version: `7164814a-6de1-49c4-96a0-833edf0299a3`.
+- Production: https://pantheon.tomaspisar.cz/ and `/en/`. Homepage Worker version: `002f4763-c589-4cd8-883c-bae73e113e0d`.
 - Account API version: `33b1904d-38dd-409b-a898-99bc32554409`.
-- The production summary endpoint and preview proxy return HTTP 200 and truthful `fresh:false` until the new JAR supplies its first signed snapshot. No fake production snapshot was inserted.
-- The owner will install the JAR and restart personally. No production JAR replacement or restart was performed. Root DNS has NOT been changed.
+- The owner installed the JAR and restarted. Repeated real exports and production `/api/status` return `fresh:true`, Java 1.21.11, zero players and capacity 20; no tournament/community event is active. No fake snapshot was inserted.
+- The root web CNAME was backed up and replaced with the homepage custom domain. The independent Minecraft SRV CNAME is unchanged, including its record ID and modification timestamp. Before/after protocol status handshakes through the original address both returned Paper 1.21.11. No additional restart was performed.
+- Homepage uses a service binding to `longjumpreplay-licensing-production`, calling only the fixed anonymous GET on `account.pantheon.tomaspisar.cz`. No incoming cookies or paths are forwarded. Redirect mode is `manual`, with non-2xx responses rejected: Workers does not support `redirect:error`. Backend authentication is unchanged.
 
 ## DNS cutover and rollback
 
-The current root CNAME is `pantheon.tomaspisar.cz -> pnthsmp.exaroton.me`, DNS-only, TTL 60. Minecraft SRV discovery is delegated through the separate DNS-only CNAME `_minecraft._tcp.pantheon.tomaspisar.cz -> _minecraft._tcp.pnthsmp.exaroton.me`. Preserve the latter unchanged, including CNAME flattening disabled. Never hardcode Exaroton's current address or port. A dated backup of all relevant DNS records is in the task output directory.
+The previous root CNAME was `pantheon.tomaspisar.cz -> pnthsmp.exaroton.me`, DNS-only, TTL 60. The current root is Cloudflare's managed proxied AAAA placeholder for the homepage custom domain. Minecraft SRV discovery remains delegated through the separate DNS-only CNAME `_minecraft._tcp.pantheon.tomaspisar.cz -> _minecraft._tcp.pnthsmp.exaroton.me`. Preserve the latter unchanged, including CNAME flattening disabled. Never hardcode Exaroton's current address or port. The pre-cutover backup is `outputs/pantheon-dns-before-cutover-20261020.json` in the Codex task directory, outside this repository.
 
 1. Owner installs only EconomySuite 2.46.2 in place of the old EconomySuite JAR, preserving the plugin data folder, then restarts.
 2. Verify actual `fresh:true`, aggregate counts, tournament/community behavior and no leakage in the public endpoint.
@@ -55,7 +56,7 @@ The current root CNAME is `pantheon.tomaspisar.cz -> pnthsmp.exaroton.me`, DNS-o
 - Chrome checked desktop and 390px mobile, loaded fonts/images, no horizontal overflow, clipboard success, mobile menu/Escape, language changes preserving the section and no console errors. Reduced-motion policy and clipboard fallback are covered by automated source checks, not claimed as manually emulated browser states.
 - Signed API round-trip tests cover unknown/disabled export, zero counts, stale data, active/expired goals, unsafe input and existing private-route authentication.
 - Java: 615 tests pass with only the two pre-existing OrdersDatabaseTest cases requiring live Paper registries excluded by an external test init script. The initial complete run contained 617 tests and failed those same two cases. No exclusion was added to repository build configuration.
-- Real Paper execution, production export and actual Minecraft client joining after DNS cutover remain pending.
+- Cutover validation: 139 website tests pass, production HTTPS CZ/EN/status/account/wiki/map return 200, Chrome visibly shows real online status and no active events. Browser requests bypass local cache; only the Worker's internal cache retains responses for ten seconds, with no-store headers returned to clients even on cache hits. Both pre/post Minecraft protocol status checks pass using dynamically resolved SRV. Actual authenticated Minecraft client joining and active event rendering on Paper were not performed; the server has no active event to inspect.
 
 ## Artwork
 
