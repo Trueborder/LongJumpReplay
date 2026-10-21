@@ -1,0 +1,32 @@
+/* Only the Pantheon host is opted in by the account Worker. */
+html[data-pantheon-brand]{--bg:var(--pt-paper);--surface:var(--pt-surface);--text:var(--pt-ink);--muted:var(--pt-muted);--line:var(--pt-line);--cyan:var(--pt-accent);--amber:var(--pt-warning);--coral:var(--pt-danger);--font-body:var(--pt-font);--font-display:var(--pt-font);--account-panel:var(--pt-surface);--account-border:var(--pt-line);--account-shadow:none}
+html[data-pantheon-brand] body.account-page{background:var(--pt-paper);color:var(--pt-ink);font-family:var(--pt-font);padding-top:0}
+html[data-pantheon-brand] body.account-page :is(.login-card,.register-card) :is(h1,h2,h3){color:var(--pt-ink);font-family:var(--pt-font);letter-spacing:-.025em}
+html[data-pantheon-brand] .account-login{padding:clamp(24px,5vw,64px);min-height:100dvh}
+html[data-pantheon-brand] :is(.login-card,.register-card){background:var(--pt-surface);color:var(--pt-ink);border:1px solid var(--pt-line);border-top:1px solid var(--pt-line);border-radius:var(--pt-radius);box-shadow:none;backdrop-filter:none;animation:none;max-width:560px}
+html[data-pantheon-brand] .login-card-bar{gap:14px;flex-wrap:wrap}
+html[data-pantheon-brand] .login-card-bar .brand-mark{background:transparent;border-radius:0;box-shadow:none;width:32px;height:32px}
+html[data-pantheon-brand] .login-home-link{align-items:center;gap:8px;font-size:16px;text-decoration:none;border-radius:0}
+html[data-pantheon-brand] .login-card-bar .language-button{margin-left:auto}
+html[data-pantheon-brand] .pt-theme-control{margin-left:auto}
+html[data-pantheon-brand] .pt-theme-control>span{display:none}
+html[data-pantheon-brand] .account-panel :is(h1,h2){font-family:var(--pt-font);color:var(--pt-ink);font-weight:800;letter-spacing:-.035em}
+html[data-pantheon-brand] .account-panel h1{font-size:clamp(30px,5vw,42px);line-height:1.1}
+html[data-pantheon-brand] .account-panel :is(label,.register-product-label){color:var(--pt-muted);font:500 14px/1.5 var(--pt-font);letter-spacing:0;text-transform:none}
+html[data-pantheon-brand] .account-panel input:not([type=checkbox]){background:var(--pt-paper);color:var(--pt-ink);border:1px solid var(--pt-line);border-radius:var(--pt-radius);font:400 16px/1.5 var(--pt-font);min-height:48px;box-shadow:none}
+html[data-pantheon-brand] .account-panel input::placeholder{color:var(--pt-muted);opacity:1}
+html[data-pantheon-brand] .account-panel input:focus{border-color:var(--pt-accent);box-shadow:none;outline:3px solid var(--pt-accent);outline-offset:2px}
+html[data-pantheon-brand] :is(button,.button,.text-button){font-family:var(--pt-font);letter-spacing:0;text-transform:none}
+html[data-pantheon-brand] .account-panel :is(.button-primary,#login-submit,#register-submit){background:var(--pt-accent);color:var(--pt-accent-ink);border:1px solid var(--pt-accent);border-radius:var(--pt-radius);box-shadow:none;font-size:15px;min-height:48px}
+html[data-pantheon-brand] :is(.language-button,.login-options-toggle){background:var(--pt-paper);color:var(--pt-ink);border:1px solid var(--pt-line);border-radius:var(--pt-radius);font:600 13px/1.5 var(--pt-font);min-height:44px}
+html[data-pantheon-brand] .login-product-switcher{background:var(--pt-paper);border:1px solid var(--pt-line);border-radius:var(--pt-radius);padding:4px}
+html[data-pantheon-brand] .login-product-switcher a{font:600 13px/1.45 var(--pt-font);color:var(--pt-muted);background:transparent;box-shadow:none;border:0;border-radius:3px;text-transform:none;letter-spacing:0}
+html[data-pantheon-brand] .login-product-switcher a[aria-current=page]{background:var(--pt-stone);color:var(--pt-ink);box-shadow:none}
+html[data-pantheon-brand] :is(.text-button,.register-signin a,.register-terms a,.pt-auth-links a){color:var(--pt-accent)}
+html[data-pantheon-brand] :is(.status,.migration-note){color:var(--pt-muted)}
+html[data-pantheon-brand] .status[data-error=true]{color:var(--pt-danger)}
+html[data-pantheon-brand] :is(.register-pairing-guide,.es-onboarding-step){background:var(--pt-stone);color:var(--pt-ink);border-color:var(--pt-line);box-shadow:none;border-radius:var(--pt-radius)}
+html[data-pantheon-brand] :is(.register-pairing-guide p,.register-pairing-guide li span){color:var(--pt-muted)}
+html[data-pantheon-brand] .es-onboarding-number{background:var(--pt-accent);color:var(--pt-accent-ink);box-shadow:none}
+html[data-pantheon-brand] .pt-auth-links{display:flex;gap:24px;margin-top:24px;padding-top:18px;border-top:1px solid var(--pt-line);font:600 13px/1.4 var(--pt-font)}
+@media(max-width:480px){html[data-pantheon-brand] .account-login{padding:16px}html[data-pantheon-brand] .account-panel{padding:22px}html[data-pantheon-brand] .pt-theme-control select{min-width:92px}}

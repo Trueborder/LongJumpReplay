@@ -12,7 +12,6 @@ const publicPages = [
   'products/economysuite/index.html',
   'products/long-jump-replay/index.html',
   'account/login/index.html',
-  'account/economysuite/index.html',
 ];
 
 test('Novaryn Solutions logo assets and brand entry points are published', () => {
@@ -32,6 +31,10 @@ test('Novaryn Solutions logo assets and brand entry points are published', () =>
     assert.match(html, /Novaryn Solutions/);
     assert.match(html, /novaryn-solutions-symbol\.png/);
   }
+  const pantheon = fs.readFileSync(path.join(root, 'account/economysuite/index.html'), 'utf8');
+  assert.match(pantheon, /Novaryn Solutions/); // Legal/provider attribution remains.
+  assert.match(pantheon, /PANTHEON/);
+  assert.match(pantheon, /\/pantheon\/temple\.svg/);
   assert.ok(fs.existsSync(path.join(root, 'design-system', 'novaryn-solutions', 'MASTER.md')));
 });
 

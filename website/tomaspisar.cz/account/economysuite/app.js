@@ -365,6 +365,10 @@
     document.body.classList.toggle('es-games', route === 'games');
     document.documentElement.lang = lang;
     document.title = successfulOrder ? `${t('Děkujeme za nákup', 'Thank you for your purchase')} — Pantheon` : `${t(...(names[route] || names.overview))} — Pantheon`;
+    document.querySelectorAll('[data-pt-account-subtitle]').forEach(node => { node.textContent = t('Hráčský účet', 'Player account'); });
+    document.querySelectorAll('[data-pt-site=server]').forEach(node => { node.textContent = t('Server', 'Server'); });
+    document.querySelectorAll('[data-pt-site=wiki]').forEach(node => { node.textContent = t('Wiki', 'Wiki'); });
+    document.querySelectorAll('[data-pt-site=account]').forEach(node => { node.textContent = t('Hráčský účet', 'Player account'); });
     $('#language').textContent = lang === 'cs' ? 'EN' : 'CZ'; $('#logout').textContent = t('Odhlásit se', 'Sign out'); $('#logout').hidden = !account;
     $('#language-label').textContent = t('Jazyk', 'Language');
     $('#language').setAttribute('aria-label', t('Přepnout do angličtiny', 'Switch to Czech'));

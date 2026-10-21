@@ -1,0 +1,169 @@
+/* Pantheon account adapter. The legacy portal's behavior and game previews stay intact. */
+.es-portal {
+  --es-paper:var(--pt-paper);--es-ink:var(--pt-ink);--es-green:var(--pt-accent);
+  --es-line:var(--pt-line);--es-soft:var(--pt-stone);
+  --font-body:var(--pt-font);--display:var(--pt-font);--sans:var(--pt-font);
+  --text:var(--pt-ink);--muted:var(--pt-muted);--surface:var(--pt-surface);--bg:var(--pt-paper);--cyan:var(--pt-accent);--line:var(--pt-line);
+  background:var(--pt-paper);color:var(--pt-ink);font-family:var(--pt-font);
+}
+.es-portal :is(button,input,select,textarea,dialog){font-family:var(--pt-font)}
+.es-portal :is(h1,h2,h3,h4,h5,h6){font-family:var(--pt-font);color:var(--pt-ink);letter-spacing:-.025em}
+.es-portal .es-live-actions .es-connection{color:inherit}
+.es-portal .es-identity strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.es-portal :is(input,select,textarea){background:var(--pt-field);color:var(--pt-field-ink);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal :is(input,textarea)::placeholder{color:var(--pt-muted);opacity:1}
+.es-portal option{background:var(--pt-surface);color:var(--pt-ink)}
+.es-portal :is(button,.es-button){border-radius:var(--pt-radius);background:var(--pt-surface);color:var(--pt-ink);border-color:var(--pt-line)}
+.es-portal :is(button,.es-button):hover:not(:disabled){background:var(--pt-stone);border-color:var(--pt-accent)}
+.es-portal :is(button,.es-button):disabled{opacity:.6;cursor:not-allowed}
+.es-portal .es-primary,.es-portal .es-product-switch{background:var(--pt-accent)!important;color:var(--pt-accent-ink)!important;border-color:var(--pt-accent)!important}
+.es-portal .es-primary:hover:not(:disabled),.es-portal .es-product-switch:hover{background:var(--pt-accent-hover)!important}
+.es-portal .es-danger{background:var(--pt-danger-bg);color:var(--pt-danger)!important;border-color:var(--pt-danger)!important}
+.es-portal button[data-tone=danger]{background:var(--pt-danger-bg);border-color:var(--pt-danger);color:var(--pt-danger)}
+.es-portal button[data-tone=warning],.es-portal button[data-tone=coins]{background:var(--pt-warning-bg);border-color:var(--pt-warning);color:var(--pt-warning)}
+.es-portal button[data-tone=tokens]{background:var(--pt-tokens-bg);border-color:var(--pt-tokens);color:var(--pt-tokens)}
+.es-portal button[data-tone=success]{background:var(--pt-success-bg);border-color:var(--pt-success);color:var(--pt-success)}
+.es-portal button[data-tone=info]{background:var(--pt-info-bg);border-color:var(--pt-info);color:var(--pt-info)}
+.es-portal button[data-tone=accent]{background:var(--pt-special-bg);border-color:var(--pt-special);color:var(--pt-special)}
+.es-portal button[data-tone]:hover:not(:disabled){filter:none;border-color:currentColor}
+.es-portal button[data-tone=danger]:hover:not(:disabled){background:var(--pt-danger-bg)}
+.es-portal button[data-tone=warning]:hover:not(:disabled),.es-portal button[data-tone=coins]:hover:not(:disabled){background:var(--pt-warning-bg)}
+.es-portal button[data-tone=tokens]:hover:not(:disabled){background:var(--pt-tokens-bg)}
+.es-portal button[data-tone=success]:hover:not(:disabled){background:var(--pt-success-bg)}
+.es-portal button[data-tone=info]:hover:not(:disabled){background:var(--pt-info-bg)}
+.es-portal button[data-tone=accent]:hover:not(:disabled){background:var(--pt-special-bg)}
+.es-portal #tw-admin button[aria-busy=true],.es-portal #tw-live button[aria-busy=true]{background:var(--pt-stone);color:var(--pt-muted);border-color:var(--pt-line);opacity:1;cursor:wait}
+.es-portal .tw-button-hint[data-disabled=true]>button{cursor:help}
+.es-portal .tw-disabled-help{background:var(--pt-footer);color:var(--pt-footer-ink);border-color:var(--pt-line);border-radius:var(--pt-radius);font-family:var(--pt-font);box-shadow:none}
+.es-portal .tw-button-hint:focus-visible{outline-color:var(--pt-focus)}
+.es-portal :focus-visible{outline-color:var(--pt-focus)}
+.es-portal .es-skip{background:var(--pt-surface);color:var(--pt-ink)}
+.es-portal .es-header{background:var(--pt-surface);border-color:var(--pt-line);padding-inline:clamp(16px,3vw,42px);gap:clamp(15px,2vw,28px)}
+.es-portal .es-header-brand{min-width:0;flex:0 0 auto}
+.es-portal .es-brand{gap:10px;font-size:18px;line-height:1;white-space:nowrap}
+.es-portal .es-brand-text{color:var(--pt-ink)}
+.es-portal .es-brand small{font-size:11px;color:var(--pt-muted);font-weight:500;letter-spacing:0;text-transform:none}
+.es-portal .es-mark{width:34px;height:34px;background:none;border-radius:0;box-shadow:none;overflow:visible}
+.es-portal .es-mark img{width:34px;height:34px;object-fit:contain}
+[data-pantheon-theme=dark] .es-portal .es-mark img{filter:invert(1) brightness(1.4)}
+.es-portal .es-site-links{margin-inline:auto;gap:clamp(12px,1.6vw,26px)}
+.es-portal .es-site-links a{font-size:12px;white-space:nowrap}
+.es-portal .es-site-links a[aria-current=page]{text-decoration:underline;text-decoration-color:var(--pt-accent);text-underline-offset:6px}
+.es-portal .es-header-theme{font-size:12px}
+.es-portal .pt-theme-control select{width:auto;min-width:104px;min-height:40px;background:var(--pt-surface);color:var(--pt-ink);border-color:var(--pt-line);font-size:12px}
+.es-portal .es-sidebar-theme{display:none}
+.es-portal .es-sidebar-site-links{display:none}
+.es-portal .es-header-actions{gap:8px}
+.es-portal .es-account-link{background:transparent;border-color:transparent;color:var(--pt-ink)}
+.es-portal .es-account-link:hover{background:var(--pt-stone);border-color:var(--pt-line)}
+.es-portal .es-layout{max-width:1460px}
+.es-portal .es-sidebar{background:var(--pt-paper);border-color:var(--pt-line);padding-top:28px}
+.es-portal .es-identity{border-bottom:1px solid var(--pt-line);margin-bottom:16px;padding-bottom:18px}
+.es-portal .es-avatar{background:var(--pt-stone);color:var(--pt-accent);border-radius:var(--pt-radius)}
+.es-portal .es-identity small,.es-portal .es-support,.es-portal .es-language-row{color:var(--pt-muted)!important}
+.es-portal #navigation a{border-radius:var(--pt-radius);color:var(--pt-ink)}
+.es-portal #navigation a:hover{background:var(--pt-stone)}
+.es-portal #navigation a[aria-current=page]{background:var(--pt-stone);color:var(--pt-accent);box-shadow:inset 2px 0 var(--pt-accent)}
+.es-portal .es-menu-utilities{border-color:var(--pt-line)}
+.es-portal .es-main{padding-top:34px}
+.es-portal .es-title{margin-bottom:24px}
+.es-portal .es-title h1{font-size:clamp(27px,3vw,36px);line-height:1.15;letter-spacing:-.025em;color:var(--pt-ink)}
+.es-portal .es-title p:not(.es-eyebrow){color:var(--pt-muted)}
+.es-portal .es-eyebrow{color:var(--pt-muted);letter-spacing:.04em}
+.es-portal .es-panel,.es-portal .es-onboarding-card,.es-portal .es-thanks{background:var(--pt-surface);color:var(--pt-ink);border:1px solid var(--pt-line);border-radius:var(--pt-radius);box-shadow:none}
+.es-portal .es-panel p,.es-portal .es-muted,.es-portal .es-label,.es-portal .es-metric small,.es-portal .es-level-meta,.es-portal .es-level-head span,.es-portal .es-section-label,.es-portal .es-job-task-row span,.es-portal .es-xp-sources li span,.es-portal .es-empty-filter{color:var(--pt-muted)}
+.es-portal .es-metric{border-top:1px solid var(--pt-accent)}
+.es-portal .es-level-number{background:var(--pt-stone);border:1px solid var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal .es-progress,.es-portal .es-job-task-progress{background:var(--pt-stone)}
+.es-portal .es-progress span,.es-portal .es-job-task-progress span{background:var(--pt-accent)}
+.es-portal .es-table th{color:var(--pt-muted);font-weight:650}
+.es-portal .es-table :is(th,td){border-color:var(--pt-line)}
+.es-portal .es-detail,.es-portal .es-xp-sources li,.es-portal .es-subsection{border-color:var(--pt-line)}
+.es-portal .es-command,.es-portal .es-empty code{background:var(--pt-stone);color:var(--pt-ink);border-radius:var(--pt-radius)}
+.es-portal .es-calendar .earned,.es-portal .es-task-ready{background:var(--pt-success-bg);color:var(--pt-success);border-radius:var(--pt-radius)}
+.es-portal .es-form input:not([type=checkbox]),.es-portal .es-form select,.es-portal .es-controls select,.es-portal .es-game-form input,.es-portal .es-game-form select{background:var(--pt-field);color:var(--pt-field-ink);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal .es-status:not(:empty){border-color:var(--pt-info);background:var(--pt-info-bg);color:var(--pt-ink)}
+.es-portal .es-status[data-error=true],.es-portal .es-content-error{border-color:var(--pt-danger)!important;background:var(--pt-danger-bg)!important;color:var(--pt-ink)}
+.es-portal .es-live-actions{background:var(--pt-surface);border-radius:var(--pt-radius);color:var(--pt-ink)}
+.es-portal .es-live-actions[data-state=connected]{background:var(--pt-success-bg);border-color:var(--pt-success);color:var(--pt-success)}
+.es-portal .es-live-actions[data-state=connecting]{background:var(--pt-warning-bg);border-color:var(--pt-warning);color:var(--pt-warning)}
+.es-portal .es-live-actions[data-state=disconnected]{background:var(--pt-danger-bg);border-color:var(--pt-danger);color:var(--pt-danger)}
+.es-portal .es-connection-control{border-radius:var(--pt-radius)!important}
+.es-portal .es-connection-control:hover,.es-portal .es-connection-control:focus-visible{background:var(--pt-stone)!important}
+.es-portal .es-connection-control::after{background:var(--pt-footer);color:var(--pt-footer-ink);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal .es-store-note{background:var(--pt-special-bg);color:var(--pt-special);border-left:1px solid var(--pt-special);border-radius:var(--pt-radius)}
+.es-portal .es-store-note span{color:var(--pt-muted)}
+.es-portal .es-modal-card,.es-portal .es-rank-dialog,.es-portal .tw-dialog{background:var(--pt-surface);color:var(--pt-ink);border-color:var(--pt-line);border-radius:var(--pt-radius);box-shadow:none}
+.es-portal :is(.es-modal-backdrop,.es-rank-dialog,.tw-dialog)::backdrop{background:rgb(0 0 0 / .62)}
+.es-portal .es-modal-backdrop{background:rgb(0 0 0 / .62)}
+.es-portal .es-modal-close{background:var(--pt-surface)!important;color:var(--pt-ink)!important}
+.es-portal .es-order-summary,.es-portal .es-onboarding-card,.es-portal .es-rank-rules{background:var(--pt-stone);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal .es-skeleton,.es-portal .es-skeleton-grid::before{background:var(--pt-stone);border-radius:var(--pt-radius)}
+.es-portal .es-skeleton{animation:es-loading-fade 1350ms ease-in-out infinite}
+.es-portal .toast{--text:var(--pt-ink);--muted:var(--pt-muted);--surface:var(--pt-surface);--apple-border-strong:var(--pt-line);font-family:var(--pt-font)}
+.es-portal .toast-success{border-left-color:var(--pt-success)}
+.es-portal .toast-success .toast-icon{color:var(--pt-success);background:var(--pt-success-bg)}
+.es-portal .es-nav-dialog{background:var(--pt-paper);color:var(--pt-ink);border-color:var(--pt-line);box-shadow:none;border-radius:0 var(--pt-radius) var(--pt-radius) 0}
+.es-portal .es-nav-dialog-header{border-color:var(--pt-line)}
+.es-portal .es-nav-dialog-header h2{font-family:var(--pt-font)}
+.es-portal .es-nav-product{color:var(--pt-accent)}
+.es-portal .es-footer{background:var(--pt-paper);color:var(--pt-muted);border-color:var(--pt-line)}
+.es-portal .es-footer a{color:var(--pt-ink)}
+
+/* Rank colors describe the in-game tiers; shared surfaces provide theme contrast. */
+.es-portal .es-rank-card{background:var(--pt-surface);border-radius:var(--pt-radius);border-top-width:1px}
+.es-portal .es-rank-details-trigger:hover{background:var(--pt-stone);color:var(--pt-ink)}
+.es-portal .es-rank-crest{background:var(--pt-stone);border-radius:var(--pt-radius)}
+.es-portal .es-rank-name,.es-portal .es-rank-details-link,.es-portal .es-rank-detail-header h2,.es-portal .es-rank-detail-header .es-rank-symbol{color:var(--pt-ink)}
+.es-portal .es-rank-tagline,.es-portal .es-rank-benefits dt,.es-portal .es-rank-benefits .is-unavailable dd,.es-portal .es-rank-intro>p:last-child{color:var(--pt-muted)}
+.es-portal .es-rank-detail-header{background:var(--pt-stone);border-color:var(--pt-line);border-top-width:1px}
+.es-portal .es-rank-benefits>div,.es-portal .es-rank-table-scroll,.es-portal .es-rank-table :is(th,td){border-color:var(--pt-line)}
+.es-portal .es-rank-table :is(thead th,tbody th,tbody td){background:var(--pt-surface);color:var(--pt-ink)}
+.es-portal .es-rank-table thead th:not(:first-child){border-top-color:var(--rank-accent)}
+
+/* Tournament reading and admin controls use the same account palette. */
+.es-portal .tw-hero,.es-portal .tw-standings,.es-portal .tw-next{background:var(--pt-stone);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal .tw-match{background:var(--pt-surface);color:var(--pt-ink)!important;border-color:var(--pt-line)!important;border-radius:var(--pt-radius)!important;box-shadow:none}
+.es-portal .tw-match.is-own{background:var(--pt-warning-bg);border-color:var(--pt-warning)!important}
+.es-portal .tw-match.is-live{border-color:var(--pt-special)!important;box-shadow:none}
+.es-portal .tw-match:hover{border-color:var(--pt-accent)!important;box-shadow:none}
+.es-portal .tw-head,.es-portal .tw-admin-tabs,.es-portal .tw-reward-suggestions{background:var(--pt-stone);color:var(--pt-ink);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal .tw-admin-tabs button[aria-pressed=true],.es-portal .tw-admin-section .tw-reward-suggestions button{background:var(--pt-surface)!important;color:var(--pt-ink);border-color:var(--pt-line)!important;box-shadow:none!important}
+.es-portal .tw-round h3,.es-portal .tw-match-meta,.es-portal .tw-running-time,.es-portal .tw-next small,.es-portal .tw-admin-state strong,.es-portal .tw-inline-details>summary{color:var(--pt-special)}
+.es-portal .tw-live,.es-portal .tw-player.is-winner{color:var(--pt-success)}
+.es-portal .tw-live.is-stale,.es-portal .tw-prize-total,.es-portal .tw-prize-edit,.es-portal .tw-reward-place header strong{color:var(--pt-warning)}
+.es-portal .tw-empty h3{color:var(--pt-ink)}
+.es-portal .tw-prize-total,.es-portal .tw-notice{background:var(--pt-warning-bg);border-color:var(--pt-warning);border-radius:var(--pt-radius)}
+.es-portal :is(.tw-live small,.tw-section-heading>span,.tw-match-arena,.tw-empty,.tw-roster>span:last-child,.tw-admin-state span,.tw-policy-hint,.tw-operation-log small,.tw-player-identity small,.tw-seed,.tw-reward-suggestions small){color:var(--pt-muted)}
+.es-portal :is(.tw-form input,.tw-form select,.tw-admin-section>label input,.tw-admin-section>label select,.tw-catalog-filters input,.tw-catalog-filters select,.tw-dialog input){background:var(--pt-field);color:var(--pt-field-ink);border-color:var(--pt-line);border-radius:var(--pt-radius)}
+.es-portal :is(.tw-form,.tw-admin-player,.tw-match-settings,.tw-reward-place,.tw-prize-row,.tw-bronze){border-color:var(--pt-line)}
+.es-portal .tw-reward-suggestions button:focus-visible{outline-color:var(--pt-focus)}
+.es-portal .es-onboarding-step{color:var(--pt-muted)}
+.es-portal .es-onboarding-step.is-active{background:var(--pt-success-bg);color:var(--pt-success);border:1px solid var(--pt-success);border-radius:var(--pt-radius);box-shadow:none}
+.es-portal .es-onboarding-step.is-active::after{display:none}
+.es-portal .es-onboarding-step.is-done,.es-portal .es-onboarding-step .es-next-label{color:var(--pt-success)}
+.es-portal .es-onboarding-number,.es-portal .es-onboarding-step.is-done .es-onboarding-number{background:var(--pt-stone);color:var(--pt-ink);border-color:var(--pt-line)}
+.es-portal .es-onboarding-card.is-next{box-shadow:none;border-color:var(--pt-success)}
+.es-portal .es-onboarding-card.is-next #copy-pair-command{background:var(--pt-accent);color:var(--pt-accent-ink);border-color:var(--pt-accent)}
+.es-portal .es-game-dice{background:var(--pt-stone);box-shadow:none}
+
+@media(max-width:1180px){
+  .es-portal .es-header-theme>span{display:none}
+  .es-portal .es-site-links{gap:12px}
+}
+@media(max-width:950px){
+  .es-portal .es-site-links{display:none}
+  .es-portal .es-sidebar-site-links{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0 4px 10px}
+  .es-portal .es-sidebar-site-links a{min-height:40px}
+}
+@media(max-width:650px){
+  .es-portal .es-header{padding-inline:12px}
+  .es-portal .es-header-theme{display:none}
+  .es-portal .es-sidebar-theme{display:flex;justify-content:space-between;padding:0 4px}
+  .es-portal .es-sidebar-site-links{display:flex}
+  .es-portal .es-main{padding-top:26px}
+  .es-portal .es-brand{font-size:16px}
+  .es-portal .es-brand small{font-size:10px}
+}
+@media(max-width:380px){.es-portal .es-brand{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.es-portal .es-skeleton{animation:none}}

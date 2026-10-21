@@ -23,16 +23,21 @@ const collectHtml = (directory) => {
 };
 collectHtml(siteRoot);
 
-test('every page is explicitly light and exposes no theme control or resolver', () => {
+test('Pantheon opts into shared appearance while other products remain explicitly light', () => {
   assert.ok(htmlFiles.length >= 12);
   for (const file of htmlFiles) {
     const html = fs.readFileSync(file, 'utf8');
+    if (/<html\b[^>]*data-pantheon-brand/.test(html)) {
+      assert.match(html, /\/pantheon\/theme\.js/);
+      assert.match(html, /data-pt-theme/);
+      continue;
+    }
     assert.match(html, /<html\b[^>]*data-theme="light"/, path.relative(siteRoot, file));
     assert.doesNotMatch(html, /data-theme-toggle|site-theme|prefers-color-scheme/, path.relative(siteRoot, file));
   }
 });
 
-test('runtime has no dark or system appearance mode', () => {
+test('the unrelated Novaryn runtime keeps its existing light-only appearance', () => {
   assert.doesNotMatch(script, /data-theme-toggle|themePreference|prefers-color-scheme|themeSystem|themeLight|themeDark|setTheme/);
   assert.doesNotMatch(css, /html\[data-theme|color-scheme:\s*dark|--bg:\s*#(?:0b1013|081018)/i);
   assert.match(css, /color-scheme:\s*light/);

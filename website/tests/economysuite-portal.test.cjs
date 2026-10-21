@@ -7,6 +7,7 @@ const root = path.join(__dirname, '..', 'tomaspisar.cz', 'account', 'economysuit
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const script = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'app.css'), 'utf8');
+const pantheonCss = fs.readFileSync(path.join(root, 'pantheon.css'), 'utf8');
 
 test('EconomySuite portal exposes live server state and full data refresh', () => {
   assert.match(html, /class="es-live-actions"[^>]*data-state="connecting"[^>]*role="group"/);
@@ -62,7 +63,18 @@ test('compact sticky header keeps account and logout while secondary controls li
   assert.match(css, /\.es-header\{height:60px;min-height:60px/);
   assert.match(css, /\.es-menu-utilities\{[^}]*margin-top:auto/);
   assert.match(css, /\.es-header-brand\{width:auto;flex:1/);
-  assert.match(html, /EconomySuite • Novaryn Solutions/);
+  assert.match(html, /class="es-brand-text pt-brand">PANTHEON<small data-pt-account-subtitle>/);
+  assert.match(html, /src="\/pantheon\/temple\.svg"/);
+  assert.match(html, /data-pantheon-brand/);
+  assert.match(html, /<script src="\/pantheon\/theme\.js\?v=[\w-]+"><\/script>/);
+  assert.match(html, /href="\/pantheon\/design\.css\?v=[\w-]+"/);
+  assert.match(html, /href="\/economysuite\/pantheon\.css\?v=[\w-]+"/);
+  assert.match(html, /data-pt-site="server"/);
+  assert.match(html, /data-pt-site="wiki"/);
+  assert.match(html, /data-pt-site="account" aria-current="page"/);
+  assert.equal((html.match(/data-pt-theme(?=\s|>)/g) || []).length, 2);
+  assert.match(script, /\[data-pt-account-subtitle\]/);
+  assert.match(pantheonCss, /--es-paper:var\(--pt-paper\)/);
 });
 
 test('purchase return renders instructions and Minecraft currency icons', () => {

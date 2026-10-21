@@ -12,6 +12,8 @@ The wordmark spans most of the first viewport width. A short factual description
 
 ## Interaction and accessibility
 
+The same Chivo, temple mark, stone surfaces and moss controls extend to the wiki (reading) and player account (operations). Layouts follow each surface's purpose. Shared semantic colors retain danger, warning, token, success and information meanings in both themes. Light / Dark / System controls use a common runtime and a parent-domain preference cookie so the choice follows visitors across Pantheon sites. The default follows the operating system.
+
 Keep the existing copy button, selection fallback, language anchors, mobile navigation, native disclosures, and live-status semantics. Never imply the illustrated scene is an actual server view. Quiet 160–240ms feedback is limited to interactions; live refresh and keyboard actions remain immediate. Reduced motion disables entrance effects. At narrow widths the name remains readable, the primary action stays reachable, and no columns overflow.
 
 ## Validation

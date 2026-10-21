@@ -1,4 +1,5 @@
 import { AUTH_PATHS, accountEnv, requestProduct, sessionCookieName, csrfCookieName, retiredAccountLocation, isMinecraftHost, legacyMinecraftLocation } from './portal-domains';
+import { pantheonAuthBrand } from './pantheon-brand';
 /**
  * LongJumpReplay licensing API.
  *
@@ -336,7 +337,7 @@ function portalRedirect(request: Request, location: string): Response {
 
 async function portalPage(request: Request, env: Env, path: string): Promise<Response | null> {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
-  if (['/economysuite/app.js', '/economysuite/app.css', '/economysuite/games.js', '/economysuite/tournament.js'].includes(path)) return env.ASSETS.fetch(request);
+  if (['/economysuite/app.js', '/economysuite/app.css', '/economysuite/pantheon.css', '/economysuite/games.js', '/economysuite/tournament.js'].includes(path)) return env.ASSETS.fetch(request);
   const product = env.PORTAL_PRODUCT;
   if (path === '/economysuite' || path.startsWith('/economysuite/')) {
     if (product !== 'economysuite') return new Response('Not found', { status: 404 });
@@ -365,7 +366,7 @@ async function portalPage(request: Request, env: Env, path: string): Promise<Res
     }
     if (path === '/') return portalRedirect(request, '/login');
     const asset = await env.ASSETS.fetch(new Request(new URL(path.startsWith('/register') ? '/register/' : '/login/', request.url), request));
-    return new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } });
+    return pantheonAuthBrand(new Response(asset.body, { status: asset.status, headers: { ...Object.fromEntries(asset.headers), 'Cache-Control': 'no-store' } }));
   }
   if (product === 'economysuite') return new Response('Not found', { status: 404 });
   const route = portalPageRoute(path, Boolean(auth), Boolean(auth?.requiresSetup));

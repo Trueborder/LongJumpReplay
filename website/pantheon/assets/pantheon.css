@@ -1,0 +1,18 @@
+/* Homepage adapter: shared brand tokens, marketing composition. */
+:root[data-pantheon-brand]{--paper:var(--pt-paper);--stone:var(--pt-stone);--ink:var(--pt-ink);--moss:var(--pt-accent);--line:var(--pt-line);font-family:var(--pt-font);background:var(--pt-paper);color:var(--pt-ink)}
+body{font-family:var(--pt-font)}
+.nav-shell{height:64px;gap:20px}
+.header .pt-brand{font-size:16px}
+.copy-button{color:var(--pt-accent-ink)}
+.community-section{background:var(--pt-field);color:var(--pt-field-ink)}
+.panorama figcaption{color:var(--pt-muted)}
+footer{background:var(--pt-footer);color:var(--pt-footer-ink)}
+.footer-bottom{color:var(--pt-footer-ink)}
+.footer-main{border-color:var(--pt-line)}
+.pt-theme-mobile{display:none}
+@media(hover:hover) and (pointer:fine){.copy-button:hover{background:var(--pt-accent-hover)}.button:hover{background:var(--pt-stone)}}
+@media(max-width:1060px){
+ .nav-shell{height:60px;gap:12px}.menu-button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;width:44px;height:44px;margin-left:auto;border:1px solid var(--pt-line);background:transparent}.menu-button span{width:18px;height:1px;background:var(--pt-ink)}
+ .header nav{display:none}.header nav.open{display:flex;position:absolute;top:59px;left:0;right:0;flex-direction:column;align-items:stretch;gap:0;max-height:calc(100svh - 60px);overflow:auto;padding:14px var(--margin) 25px;background:var(--pt-paper);border-bottom:1px solid var(--pt-line)}
+ .header nav>a,.explore summary{min-height:48px}.header .account-link span{display:inline}.explore>div{position:static;border:0;border-left:1px solid var(--pt-line);padding-left:15px}.language{border:0;padding:0}.pt-theme-desktop{display:none}.pt-theme-mobile{display:block;padding-top:16px}
+}

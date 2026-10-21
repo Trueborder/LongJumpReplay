@@ -8,6 +8,8 @@ The homepage uses a monumental Pantheon wordmark, warm stone surfaces, charcoal 
 
 ## Build and preview
 
+Shared theme assets live in `../shared/pantheon`; `../shared/README.md` documents synchronization to the account and separate wiki checkout. The homepage build copies these directly. All three sites offer Light / Dark / System, localized to Czech/English where available. Theme choice is shared across Pantheon subdomains. Release 2026-10-21 versions: homepage `86f5457a-52c1-462d-a464-60292ec36123`, account `32000fcb-79ce-4421-b90b-b726c2571178`, wiki `5246ac53-f414-4c96-a9b4-ba960f5223ca`. These supersede the historical deployment records below.
+
 Run from this directory (custom build commands use the current directory):
 
 ```powershell
