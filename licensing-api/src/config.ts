@@ -4,7 +4,7 @@
  * two cannot silently drift.
  */
 
-export interface Env {
+export interface Env extends Partial<Pick<Cloudflare.Env,'ECONOMYSUITE_READ_LIMIT'>> {
   DB: D1Database;
   ASSETS: Fetcher;
   ECONOMYSUITE_DB?: D1Database;

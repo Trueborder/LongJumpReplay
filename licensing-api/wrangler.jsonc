@@ -107,6 +107,7 @@
       ]
     },
     "production": {
+      "ratelimits": [{"name":"ECONOMYSUITE_READ_LIMIT","namespace_id":"2026102101","simple":{"limit":90,"period":60}}],
       "vars": {
         "ENVIRONMENT": "production",
         "ECONOMYSUITE_GAMES_ENABLED": "true",

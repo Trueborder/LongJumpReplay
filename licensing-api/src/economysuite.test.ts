@@ -45,7 +45,7 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     }
     env = { DB: shared, ECONOMYSUITE_DB: db, PORTAL_ORIGIN: 'https://ljr.tomaspisar.cz', ECONOMYSUITE_PORTAL_ORIGIN: 'https://account.pantheon.tomaspisar.cz', STRIPE_SECRET_KEY: 'sk_test_fixture', ECONOMYSUITE_WEBHOOK_SECRET: 'whsec_test', ECONOMYSUITE_BRIDGE_SECRET: 'a'.repeat(64), ECONOMYSUITE_PURCHASES_ENABLED: 'true', VERIFICATION_PEPPER: 'test-pepper', MAIL_API_KEY: 're_test', MAIL_FROM: 'info@example.com', MAIL_FROM_NAME: 'Novaryn Solutions' } as Env;
   });
-  afterEach(async () => { vi.unstubAllGlobals(); await runtime?.dispose(); });
+  afterEach(async () => { vi.unstubAllGlobals(); vi.restoreAllMocks(); await runtime?.dispose(); });
   it('accepts signed public snapshots without exposing player or admin data and leaves older polls compatible',async()=>{
     const posted=await bridge('public/sync',{snapshot:{version:1,enabled:true,server:{players:0,capacity:50,version:'1.21.11',accounts:['private']},tournament:{state:'REGISTRATION',size:4,players:2,best_of:1,mode:'Mace',summary:'Keys',players_private:['private']},community:{active:true,title:'Hunting',progress:20,target:100,ends_at:Math.floor(Date.now()/1000)+100}}});
     expect(posted.status).toBe(200);
@@ -105,12 +105,43 @@ describe('EconomySuite D1 ownership, pairing and fulfillment', () => {
     }
   });
   const request = (path: string, payload?: unknown) => new Request(`https://account.pantheon.tomaspisar.cz/api/economysuite/${path}`, payload ? { method: 'POST', body: JSON.stringify(payload) } : undefined);
-  async function bridge(path: string, payload: unknown, nonce = crypto.randomUUID()) {
+  async function bridge(path: string, payload: unknown, nonce = crypto.randomUUID(), advance = true) {
+    if (path === 'poll' && advance) vi.spyOn(Date,'now').mockReturnValue(Date.now()+21_000);
     const timestamp = Math.floor(Date.now() / 1000).toString(), raw = JSON.stringify(payload), route = `/api/economysuite/bridge/${path}`;
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.ECONOMYSUITE_BRIDGE_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}\n${nonce}\n${route}\n${raw}`)))].map(b => b.toString(16).padStart(2, '0')).join('');
     return economySuite(new Request(`https://account.pantheon.tomaspisar.cz${route}`, { method: 'POST', body: raw, headers: { 'X-ES-Time': timestamp, 'X-ES-Nonce': nonce, 'X-ES-Signature': signature } }), env, auth);
   }
+  it('coalesces v2 heartbeats and rejects noisy background writes without recording rejected nonces',async()=>{
+    const payload={bridge_version:2,public_snapshot:{version:1,enabled:true,server:{players:0,capacity:20}}};
+    expect((await bridge('poll',payload)).status).toBe(200);
+    const rejected=crypto.randomUUID();
+    const response=await bridge('poll',payload,rejected,false);
+    expect(response.status).toBe(429);expect(response.headers.get('Retry-After')).toBe('10');
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT nonce FROM bridge_nonces WHERE nonce=?').bind(rejected).first()).toBeNull();
+    expect(await env.ECONOMYSUITE_DB!.prepare('SELECT COUNT(*) n FROM public_server_snapshot').first('n')).toBe(1);
+  });
+  it('skips unchanged background exports but preserves explicit refresh acknowledgments',async()=>{
+    const db=env.ECONOMYSUITE_DB!;
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('owner',uuid,'Player',1).run();
+    const payload={snapshots:[{uuid,coins:10}]};
+    await bridge('sync',payload);
+    const initial=await db.prepare('SELECT synced_at FROM player_snapshots WHERE uuid=?').bind(uuid).first<number>('synced_at');
+    vi.spyOn(Date,'now').mockReturnValue(Date.now()+60_000);
+    await bridge('sync',payload);
+    expect(await db.prepare('SELECT synced_at FROM player_snapshots WHERE uuid=?').bind(uuid).first('synced_at')).toBe(initial);
+    await bridge('sync',{...payload,force:true});
+    expect(await db.prepare('SELECT synced_at FROM player_snapshots WHERE uuid=?').bind(uuid).first<number>('synced_at')).toBeGreaterThan(initial!);
+  });
+  it('uses the native limiter for authenticated reads without writing D1 rate counters',async()=>{
+    const limiter={limit:vi.fn().mockResolvedValue({success:true})};env.ECONOMYSUITE_READ_LIMIT=limiter;
+    expect((await economySuite(request('account'),env,auth)).status).toBe(200);
+    expect(limiter.limit).toHaveBeenCalledWith({key:'pantheon:account:read:v1:owner'});
+    expect(await env.DB.prepare('SELECT COUNT(*) n FROM rate_limits').first('n')).toBe(0);
+    limiter.limit.mockResolvedValue({success:false});expect((await economySuite(request('account'),env,auth)).status).toBe(429);
+    expect((await economySuite(request('refresh',{}),env,auth)).status).toBe(409);
+    expect(await env.DB.prepare('SELECT COUNT(*) n FROM rate_limits').first('n')).toBe(1);
+  });
   async function event(id: string, type: string, value: unknown) {
     const raw = JSON.stringify({ id, type, data: { object: value } }), timestamp = Math.floor(Date.now() / 1000);
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('whsec_test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);

@@ -1366,7 +1366,8 @@ async function authenticatedPortal(request: Request, env: Env) {
   }
   const customer = await findCustomerById(env.DB, session.customer_id);
   if (!customer) return null;
-  await touchPortalSession(env.DB, session.id);
+  if (env.PORTAL_PRODUCT !== 'economysuite' || now() - session.last_seen_at >= 300)
+    await touchPortalSession(env.DB, session.id);
   const credential = await findPasswordCredential(env.DB, customer.id);
   const profile = await findPortalProfile(env.DB, customer.id);
   return { token, session, customer, credential, profile, requiresSetup: !credential || (env.PORTAL_PRODUCT !== 'economysuite' && !profile) };

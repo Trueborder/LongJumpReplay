@@ -62,7 +62,7 @@ export async function tournamentBridge(db: D1Database, path: string, data: Obj):
 export async function tournamentRoute(request: Request, env: Env, db: D1Database, player: PlayerAuth, linkedUuid: string|null, data: Obj): Promise<Response> {
   const path=new URL(request.url).pathname,admin=await tournamentAdmin(db,player),at=now();
   const stored=await db.prepare("SELECT payload,synced_at FROM tournament_snapshots WHERE id='current'").first<{payload:string;synced_at:number}>();
-  const snap=stored?tournamentSnapshot(JSON.parse(stored.payload)):null,fresh=!!stored&&at-stored.synced_at<=10&&snap?.version===1;
+  const snap=stored?tournamentSnapshot(JSON.parse(stored.payload)):null,fresh=!!stored&&at-stored.synced_at<=45&&snap?.version===1;
   if(request.method==='GET'&&path==='/api/economysuite/tournament') {
     await db.prepare("UPDATE tournament_operations SET state='expired',result='Request expired; refresh and try again.',completed_at=? WHERE state='pending' AND expires_at<?").bind(at,at).run();
     const history=await db.prepare("SELECT payload FROM tournament_snapshots WHERE id!='current' AND json_extract(payload,'$.state') IN ('COMPLETED','CANCELLED') ORDER BY synced_at DESC LIMIT 20").all<{payload:string}>();

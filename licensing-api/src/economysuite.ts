@@ -179,7 +179,7 @@ async function webhook(request: Request, env: Env, db: D1Database): Promise<Resp
   if (!changed[1].meta.changes) return error('retry', 'Concurrent order update. Retry.', 503);
   return reply({ received: true });
 }
-async function signedBridge(request: Request, env: Env, db: D1Database): Promise<Record<string, unknown> | null> {
+async function signedBridge(request: Request, env: Env, db: D1Database): Promise<Record<string, unknown> | Response | null> {
   const timestamp = request.headers.get('X-ES-Time') || '', nonce = request.headers.get('X-ES-Nonce') || '', signature = request.headers.get('X-ES-Signature') || '';
   if (!env.ECONOMYSUITE_BRIDGE_SECRET || !/^\d{10}$/.test(timestamp) || Math.abs(now() - Number(timestamp)) > 120 || !/^[a-f0-9-]{36}$/i.test(nonce)) return null;
   const raw = await boundedText(request, 512_000);
@@ -187,15 +187,29 @@ async function signedBridge(request: Request, env: Env, db: D1Database): Promise
   const signed = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}\n${nonce}\n${new URL(request.url).pathname}\n${raw}`)));
   const expected = [...signed].map(b => b.toString(16).padStart(2, '0')).join('');
   if (!timingSafeEqual(signature, expected)) return null;
+  if (await db.prepare('SELECT nonce FROM bridge_nonces WHERE nonce=?').bind(nonce).first()) return null;
+  const data = object(JSON.parse(raw)), path = new URL(request.url).pathname;
+  // Reject excess background heartbeats BEFORE persisting their nonce. Rejected
+  // requests perform no mutation; all accepted requests retain replay protection.
+  const gate = path.endsWith('/bridge/poll') ? "SELECT last_seen AS at FROM bridge_status WHERE server='pantheon'"
+    : path.endsWith('/bridge/public/sync') ? "SELECT synced_at AS at FROM public_server_snapshot WHERE id='pantheon'"
+    : path.endsWith('/bridge/tournament/sync') ? "SELECT synced_at AS at FROM tournament_snapshots WHERE id='current'" : null;
+  if (gate) {
+    const previous = await db.prepare(gate).first<{at:number}>();
+    const interval = data.bridge_version === 2 ? 10 : 20;
+    if (previous && now() >= previous.at && now() - previous.at < interval)
+      return Response.json({error:'bridge_backoff',message:'Heartbeat already current.'},{status:429,headers:{'Retry-After':String(interval),'Cache-Control':'no-store'}});
+  }
   const result = await db.prepare('INSERT OR IGNORE INTO bridge_nonces(nonce,expires_at) VALUES(?,?)').bind(nonce, now() + 300).run();
   if (!result.meta.changes) return null;
-  return object(JSON.parse(raw));
+  return data;
 }
 async function bridge(request: Request, env: Env, db: D1Database, path: string): Promise<Response> {
   if (request.method !== 'POST') return error('method_not_allowed', 'POST required.', 405);
   const data = await signedBridge(request, env, db);
+  if (data instanceof Response) return data;
   if (!data) return error('forbidden', 'Invalid bridge request.', 403);
-  await db.prepare("INSERT INTO bridge_status(server,last_seen) VALUES('pantheon',?) ON CONFLICT(server) DO UPDATE SET last_seen=excluded.last_seen").bind(now()).run();
+  if (path.endsWith('/poll')) await db.prepare("INSERT INTO bridge_status(server,last_seen) VALUES('pantheon',?) ON CONFLICT(server) DO UPDATE SET last_seen=excluded.last_seen").bind(now()).run();
   if(path.startsWith('/api/economysuite/bridge/tournament/'))return tournamentBridge(db,path,data);
   if(path==='/api/economysuite/bridge/public/sync'){
     await savePublicSnapshot(db,data.snapshot,now());return reply({synced:true});
@@ -224,22 +238,32 @@ async function bridge(request: Request, env: Env, db: D1Database, path: string):
       if (!UUID.test(uuid) || !(await db.prepare('SELECT uuid FROM player_links WHERE uuid=?').bind(uuid).first())) continue;
       const payload = JSON.stringify(playerSnapshot(item));
       if (payload.length > 100_000) continue;
-      statements.push(db.prepare('INSERT INTO player_snapshots(uuid,payload,synced_at) VALUES(?,?,?) ON CONFLICT(uuid) DO UPDATE SET payload=excluded.payload,synced_at=excluded.synced_at').bind(uuid, payload, now()));
+      statements.push(db.prepare("INSERT INTO player_snapshots(uuid,payload,synced_at) VALUES(?,?,?) ON CONFLICT(uuid) DO UPDATE SET payload=excluded.payload,synced_at=excluded.synced_at WHERE ?=1 OR player_snapshots.payload IS NOT excluded.payload OR player_snapshots.synced_at <= excluded.synced_at-300 OR EXISTS(SELECT 1 FROM bridge_operations o WHERE o.uuid=excluded.uuid AND o.kind='refresh' AND o.state='pending')").bind(uuid, payload, now(),data.force===true?1:0));
     }
     if (statements.length) await db.batch(statements);
     return reply({ synced: true });
   }
   if (path.endsWith('/poll')) {
     const version = data.games_version === RULES_VERSION ? RULES_VERSION : null;
-    await db.prepare("UPDATE bridge_status SET ranks_version=? WHERE server='pantheon'").bind(data.ranks_version === 1 ? 1 : 0).run();
-    await db.prepare("UPDATE bridge_status SET web_daily_version=? WHERE server='pantheon'").bind(data.web_daily_version === 1 ? 1 : 0).run();
-    await db.prepare("UPDATE bridge_status SET games_version=?,games_enabled=? WHERE server='pantheon'").bind(version, version && data.games_enabled === true ? 1 : 0).run();
+    const ranks = data.ranks_version === 1 ? 1 : 0, dailyVersion = data.web_daily_version === 1 ? 1 : 0, games = version && data.games_enabled === true ? 1 : 0;
+    await db.prepare("UPDATE bridge_status SET ranks_version=?,web_daily_version=?,games_version=?,games_enabled=? WHERE server='pantheon' AND (ranks_version IS NOT ? OR web_daily_version IS NOT ? OR games_version IS NOT ? OR games_enabled IS NOT ?)").bind(ranks,dailyVersion,version,games,ranks,dailyVersion,version,games).run();
     await db.prepare('DELETE FROM bridge_nonces WHERE expires_at<?').bind(now()).run();
     const links = await db.prepare('SELECT uuid,name FROM player_links').all();
     const operations = await db.prepare("SELECT id,uuid,kind,payload FROM bridge_operations WHERE state='pending' AND (kind!='game_round' OR ?=?) AND (kind!='rank_purchase' OR ?=1) AND (kind!='web_daily' OR ?=1) ORDER BY created_at,rowid LIMIT 30").bind(version, RULES_VERSION, data.ranks_version === 1 ? 1 : 0, data.web_daily_version === 1 ? 1 : 0).all<{ id: string; uuid: string; kind: string; payload: string }>();
     const day = rewardDay(now());
     const daily = await db.prepare('SELECT l.uuid,r.day,o.state FROM player_links l LEFT JOIN web_daily_rewards r ON r.uuid=l.uuid AND r.day=? LEFT JOIN bridge_operations o ON o.id=r.operation_id').bind(day).all();
-    return reply({ links: links.results, web_daily_day: day, web_daily: daily.results, operations: operations.results.map(o => ({ ...o, payload: JSON.parse(o.payload) })) });
+    let tournamentOperations: unknown[] = [];
+    if (data.bridge_version === 2) {
+      try { if (data.public_snapshot) await savePublicSnapshot(db,data.public_snapshot,now()); }
+      catch { console.warn('EconomySuite public heartbeat unavailable'); }
+      try {
+        if (data.tournament_snapshot) {
+          const result = await tournamentBridge(db,'/api/economysuite/bridge/tournament/sync',{snapshot:data.tournament_snapshot});
+          if (result.ok) tournamentOperations = object(await result.json()).operations as unknown[] || [];
+        }
+      } catch { console.warn('EconomySuite tournament heartbeat unavailable'); }
+    }
+    return reply({ links: links.results, tournament_operations:tournamentOperations, web_daily_day: day, web_daily: daily.results, operations: operations.results.map(o => ({ ...o, payload: JSON.parse(o.payload) })) });
   }
   if (path.endsWith('/ack')) {
     const gameAck = await gameAcknowledgment(db, data);
@@ -264,7 +288,10 @@ export async function economySuite(request: Request, env: Env, auth: EconomyAuth
   if (!player) return error('not_authenticated', 'Sign in to your player account.', 401);
   if (!player.credential) return error('password_required', 'Set an account password before pairing.', 428);
   if (request.method !== 'GET' && !(await auth.mutation(request))) return error('forbidden', 'Invalid request.', 403);
-  if (!(await rateLimit(env.DB, `es:${player.customer.id}`, 60, 90))) return error('rate_limited', 'Please try again shortly.', 429);
+  const allowed = request.method==='GET'&&env.ECONOMYSUITE_READ_LIMIT
+    ? (await env.ECONOMYSUITE_READ_LIMIT.limit({key:`pantheon:account:read:v1:${player.customer.id}`})).success
+    : await rateLimit(env.DB, `es:${player.customer.id}`, 60, 90);
+  if (!allowed) return error('rate_limited', 'Please try again shortly.', 429);
   const link = await db.prepare('SELECT * FROM player_links WHERE customer_id=?').bind(player.customer.id).first<Link>();
   const data = request.method === 'POST' ? await body(request) : {};
   if(path==='/api/economysuite/tournament'||path.startsWith('/api/economysuite/tournament/'))return tournamentRoute(request,env,db,player,link?.uuid??null,data);
