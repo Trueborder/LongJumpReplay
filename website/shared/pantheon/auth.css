@@ -29,4 +29,7 @@ html[data-pantheon-brand] :is(.register-pairing-guide,.es-onboarding-step){backg
 html[data-pantheon-brand] :is(.register-pairing-guide p,.register-pairing-guide li span){color:var(--pt-muted)}
 html[data-pantheon-brand] .es-onboarding-number{background:var(--pt-accent);color:var(--pt-accent-ink);box-shadow:none}
 html[data-pantheon-brand] .pt-auth-links{display:flex;gap:24px;margin-top:24px;padding-top:18px;border-top:1px solid var(--pt-line);font:600 13px/1.4 var(--pt-font)}
+html[data-pantheon-brand] .pt-auth-note{color:var(--pt-muted);font:400 14px/1.6 var(--pt-font);margin:24px 0 0}
+html[data-pantheon-brand] .pt-auth-links{flex-wrap:wrap;gap:8px 24px}
+html[data-pantheon-brand] .pt-auth-links a{min-height:44px;display:inline-flex;align-items:center}
 @media(max-width:480px){html[data-pantheon-brand] .account-login{padding:16px}html[data-pantheon-brand] .account-panel{padding:22px}html[data-pantheon-brand] .pt-theme-control select{min-width:92px}}

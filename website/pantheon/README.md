@@ -24,6 +24,10 @@ Edit `assets/content.mjs` for both languages, version labels, links, FAQ and fea
 
 ## Public API
 
+Latest journey/discovery release (2026-10-21): homepage `3136ea1a-0763-4717-83a9-b5128f319e89`, account `2417f4b2-c6db-4b42-aea3-792809fe14e0`, wiki `7cd64405-e542-4ea9-b049-92be534316ee`. Joining links now lead to `/zacni-tady`; account linking still requires confirming the actual player and finishing in Minecraft. No server PIN belongs in a website form.
+
+Status recovery: `availability` is `live`, `waiting`, `disabled` or `stale`; a network failure is shown locally as unreachable. An intentionally stopped server naturally stops publishing snapshots. Check the public timestamp and the main bridge heartbeat before diagnosing an export fault; do not change timestamps or extend freshness to disguise a stopped bridge. The anonymous endpoint is no-store, the homepage Worker retains a ten-second edge cache, and the browser expires a fresh display at 30 seconds, polls while visible, checks again when network/visibility returns and offers a seven-second-bounded manual retry. Old timestamps include their date. The production test start restored fresh zero-player snapshots without any backend/plugin repair.
+
 `GET /api/economysuite/public/summary` lives in the account Worker and is separately projected from authenticated responses. It returns `version:1`, `updated_at`, `fresh`, `server`, `tournament`, `community`. The latter three are null when export is disabled, absent or older than 30 seconds. Zero players is a valid online count. Finished/expired goals and nonpublic tournament phases are omitted.
 
 The signed `POST /api/economysuite/bridge/public/sync` accepts a versioned snapshot with `enabled`, server aggregate (players, capacity, version), tournament aggregate (phase, enrolled count, size, BO, mode/policy, reward summary) and community aggregate (title, progress, target, deadline). Ingest and read use the same idempotent allowlist; no player identities, IPs, inventories, operations or catalogue are returned.

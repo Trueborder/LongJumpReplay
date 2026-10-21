@@ -20,12 +20,12 @@ describe('anonymous public summary with isolated D1 storage',()=>{
  beforeEach(async()=>{runtime=new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['ES'],compatibilityDate:'2026-08-01'}));db=await runtime.getD1Database('ES') as unknown as D1Database;await db.exec(readFileSync('economysuite-migrations/0010_public_summary.sql','utf8'));});
  afterEach(async()=>{await runtime?.dispose();});
  it('returns unavailable before sync, expires at 30 seconds and clears disabled exports',async()=>{
-  expect(await (await publicSummary(db,100)).json()).toMatchObject({fresh:false,server:null});
+  const waiting=await publicSummary(db,100);expect(waiting.headers.get('Cache-Control')).toBe('no-store');expect(await waiting.json()).toMatchObject({fresh:false,availability:'waiting',server:null});
   await savePublicSnapshot(db,{version:1,enabled:true,server:{players:0,capacity:20},community:{active:true,progress:1,target:2,ends_at:120}},100);
-  expect(await (await publicSummary(db,110)).json()).toMatchObject({fresh:true,server:{players:0},community:{progress:1}});
+  expect(await (await publicSummary(db,110)).json()).toMatchObject({fresh:true,availability:'live',server:{players:0},community:{progress:1}});
   expect(await (await publicSummary(db,130)).json()).toMatchObject({fresh:true,community:null});
-  expect(await (await publicSummary(db,131)).json()).toMatchObject({fresh:false,server:null,community:null});
-  await savePublicSnapshot(db,{version:1,enabled:false},132);expect(await (await publicSummary(db,132)).json()).toMatchObject({fresh:false,server:null});
+  expect(await (await publicSummary(db,131)).json()).toMatchObject({fresh:false,availability:'stale',server:null,community:null});
+  await savePublicSnapshot(db,{version:1,enabled:false},132);expect(await (await publicSummary(db,132)).json()).toMatchObject({fresh:false,availability:'disabled',server:null});
   expect(await db.prepare('SELECT COUNT(*) n FROM public_server_snapshot').first('n')).toBe(1);
  });
  it('permits only anonymous GET to the exact public route and protects all existing routes',async()=>{

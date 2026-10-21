@@ -10,6 +10,10 @@ footer{background:var(--pt-footer);color:var(--pt-footer-ink)}
 .footer-bottom{color:var(--pt-footer-ink)}
 .footer-main{border-color:var(--pt-line)}
 .pt-theme-mobile{display:none}
+#retry-status{min-height:44px;padding:8px 14px;border:1px solid var(--pt-line);border-radius:var(--pt-radius);background:var(--pt-surface);color:var(--pt-ink);font:600 13px var(--pt-font)}
+#retry-status:hover:not(:disabled){border-color:var(--pt-accent);background:var(--pt-stone)}
+#retry-status:disabled{cursor:wait;color:var(--pt-muted)}
+.live-heading{flex-wrap:wrap;gap:12px 24px}.steps .text-link{margin-top:14px;font-size:14px;min-height:44px}.event-unavailable .text-link{margin-top:18px}
 @media(hover:hover) and (pointer:fine){.copy-button:hover{background:var(--pt-accent-hover)}.button:hover{background:var(--pt-stone)}}
 @media(max-width:1060px){
  .nav-shell{height:60px;gap:12px}.menu-button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;width:44px;height:44px;margin-left:auto;border:1px solid var(--pt-line);background:transparent}.menu-button span{width:18px;height:1px;background:var(--pt-ink)}

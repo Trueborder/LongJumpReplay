@@ -17,3 +17,8 @@ html[data-pantheon-brand] :focus-visible{outline:3px solid var(--pt-focus);outli
 .pt-site-links a{display:inline-flex;align-items:center;min-height:44px;color:var(--pt-ink);text-decoration:none}
 .pt-site-links a:hover,.pt-site-links a[aria-current=page]{color:var(--pt-accent)}
 @media(prefers-reduced-motion:reduce){.pt-theme-control select{transition:none}}
+html[data-pantheon-brand] :is(.cookie-banner,.consent-dialog){background:var(--pt-surface);color:var(--pt-ink);border:1px solid var(--pt-line);border-radius:var(--pt-radius);box-shadow:none;backdrop-filter:none;font-family:var(--pt-font)}
+html[data-pantheon-brand] :is(.cookie-banner,.consent-dialog) p{color:var(--pt-muted)}
+html[data-pantheon-brand] :is(.cookie-banner,.consent-dialog) :is(button,.button){font:600 14px/1.5 var(--pt-font);letter-spacing:0;text-transform:none;min-height:44px;border:1px solid var(--pt-line);border-radius:var(--pt-radius);background:var(--pt-paper);color:var(--pt-ink);box-shadow:none}
+html[data-pantheon-brand] :is(.cookie-banner,.consent-dialog) a{color:var(--pt-accent)}
+html[data-pantheon-brand] :is(.cookie-banner,.consent-dialog)::backdrop{background:rgb(0 0 0 / .55)}

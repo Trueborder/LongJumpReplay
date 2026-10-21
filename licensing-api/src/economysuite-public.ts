@@ -22,5 +22,6 @@ export async function publicSummary(db:D1Database,at:number):Promise<Response> {
   let snapshot=publicSnapshot(null);try{if(row)snapshot=publicSnapshot(JSON.parse(row.payload));}catch{/* Corrupt/old data is unavailable, never speculative. */}
   const fresh=!!row&&snapshot.enabled&&at>=row.synced_at&&at-row.synced_at<=30;
   const community=snapshot.community;
-  return Response.json({version:1,updated_at:row?.synced_at??null,fresh,server:fresh?snapshot.server:null,tournament:fresh?snapshot.tournament:null,community:fresh&&community&&(community.ends_at===0||community.ends_at>at)&&community.progress<community.target?community:null},{headers:{'Cache-Control':'public, max-age=0, s-maxage=10','X-Content-Type-Options':'nosniff'}});
+  const availability=fresh?'live':!row?'waiting':!snapshot.enabled?'disabled':'stale';
+  return Response.json({version:1,updated_at:row?.synced_at??null,fresh,availability,server:fresh?snapshot.server:null,tournament:fresh?snapshot.tournament:null,community:fresh&&community&&(community.ends_at===0||community.ends_at>at)&&community.progress<community.target?community:null},{headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 }

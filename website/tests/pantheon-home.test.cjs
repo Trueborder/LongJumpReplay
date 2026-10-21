@@ -47,3 +47,8 @@ test('edge cache remains ten seconds without making the browser reuse stale stat
  assert.equal(result.headers.get('Cache-Control'),'no-store');
  assert.match(fs.readFileSync(path.join(base,'assets/site.mjs'),'utf8'),/cache:'no-store'/);
 });
+test('freshness expires without a new network response and reasoned unavailable states stay safe',async()=>{
+ const {isFresh,eventMarkup}=await import('../pantheon/assets/site.mjs');const {content}=await import('../pantheon/assets/content.mjs');const data={version:1,fresh:true,updated_at:100,server:{players:0}};
+ assert.equal(isFresh(data,130),true);assert.equal(isFresh(data,131),false);assert.equal(isFresh({...data,version:2},110),false);assert.equal(isFresh({...data,updated_at:NaN},110),false);
+ for(const lang of ['cs','en']){const html=eventMarkup({...data,fresh:false,availability:'stale'},content[lang],110);assert.match(html,/\/zacni-tady/);assert.doesNotMatch(html,/No tournament|žádný turnaj/);const rendered=(await load()).render(lang);assert.match(rendered,/id="retry-status"/);assert.match(rendered,/zacni-tady#propoj-webovy-ucet/);}
+});

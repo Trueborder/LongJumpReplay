@@ -65,7 +65,7 @@ function harness(options = {}) {
   };
   vm.runInNewContext(script, {
     document: { addEventListener: (name, listener) => { documentHandlers[name] = listener; }, querySelector: key => nodes.get(key) || null, querySelectorAll: selector => selector === '[data-rank]' ? rankButtons : [], body: { classList: classes() }, documentElement, cookie: '', hidden: false },
-    window: { LJR_FEEDBACK: feedback }, matchMedia: () => media,
+    window: { LJR_FEEDBACK: feedback, PantheonNext: require('../shared/pantheon/next-steps.js') }, matchMedia: () => media,
     localStorage: { getItem: () => null, setItem() {} }, sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
     location: { pathname: '/economysuite/'+(options.route||'store'), search: '', hash: '', replace() {}, assign() {} },
     URLSearchParams, Intl, Date: class extends Date { static now() { return clock; } },

@@ -5,9 +5,10 @@
   document.addEventListener('pointerdown', () => { document.documentElement.dataset.motionInput = 'pointer'; }, true);
   const $ = s => document.querySelector(s);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  let lang = localStorage.getItem('es-language') === 'en' ? 'en' : 'cs';
+  let lang = 'cs';try { if(localStorage.getItem('es-language')==='en')lang='en'; } catch { /* current-language controls still work */ }
   let account = null, packages = [], purchasesEnabled = false, orders = [], rankings = [], metric = 'playtime', purchaseFilter = 'paid', pendingPurchase = null, dailyClaimPending = false;
   let refreshBaseline = null, refreshStarted = 0, refreshOperation = '', finishRefresh = null;
+  let overviewEvents = null, overviewEventsChecked = 0;
   const feedback = window.LJR_FEEDBACK;
   const route = location.pathname.split('/')[2] || 'overview';
   const successfulOrder = route === 'purchases' && /^[a-f0-9-]{36}$/i.test(new URLSearchParams(location.search).get('order') || '') ? new URLSearchParams(location.search).get('order') : '';
@@ -97,7 +98,7 @@
     return result;
   }
   const panel = (title, content, cls = '') => `<section class="es-panel ${cls}"><h2>${escape(title)}</h2>${content}</section>`;
-  const empty = () => panel(t('Tvůj hráčský účet začíná propojením.', 'Your player account starts with pairing.'), `<p>${escape(t('Přihlas se na Pantheon a spusť příkaz. Na webu potvrď hráče a poté dokonči propojení ve hře.', 'Sign in to Pantheon and run the command. Confirm your player on the website, then finish pairing in-game.'))}</p><code>/web link</code>`, 'es-empty');
+  const empty = () => panel(t('Propoj si Minecraft a webový účet', 'Link Minecraft and your website account'), `<p>${escape(t('Webový účet už máš. Teď připoj svého hráče; herní PIN a heslo k webu jsou dvě různá přihlášení.', 'Your website account is ready. Now link your player; the in-game PIN and website password are separate sign-ins.'))}</p>${onboardingGuide(1)}<div class="es-button-row"><button type="button" data-copy-command="/web link">${t('Zkopírovat /web link', 'Copy /web link')}</button><a href="https://wiki.pantheon.tomaspisar.cz/zacni-tady#propoj-webovy-ucet">${t('Celý návod k propojení', 'Full linking guide')}</a></div><p class="es-muted">${t('Příkaz odešli v chatu Minecraftu. PIN ani heslo sem nevkládej.', 'Send the command in Minecraft chat. Do not enter your PIN or password here.')}</p>`, 'es-empty');
   const waiting = () => panel(t('Čekáme na první synchronizaci.', 'Waiting for the first sync.'), `<p>${escape(t('Účet je propojený. Přehled se naplní, jakmile se připojí server.', 'Your account is paired. Your overview will populate when the server connects.'))}</p>`);
   const loading = () => `<div class="es-skeleton-grid" aria-label="${escape(t('Načítám obsah', 'Loading content'))}"><span class="es-skeleton es-skeleton-large"></span><span class="es-skeleton"></span><span class="es-skeleton"></span></div>`;
   const loadError = failure => panel(t('Data se nepodařilo načíst.', 'We could not load this dashboard.'), `<p>${escape(failure?.message || t('Zkontroluj připojení a zkus to znovu.', 'Check your connection and try again.'))}</p><button id="retry-load" class="es-primary es-retry" type="button">${t('Zkusit znovu', 'Try again')}</button>`, 'es-empty es-content-error');
@@ -133,6 +134,25 @@
     const chapter = number(task.chapter);
     const reward = task.reward_ready ? '<span class="es-task-ready">' + escape(t('Odm\u011bna p\u0159ipravena', 'Reward ready')) + '</span>' : '';
     return '<div class="es-subsection es-job-task"><div class="es-section-label">' + escape(t('Profesn\u00ed \u00fakol', 'Job task')) + '<span>' + escape(t('Kapitola ', 'Chapter ')) + chapter + ' \u00b7 ' + escape(strip(job.display || job.id)) + '</span></div><div class="es-job-task-list">' + tasks.map(item => '<div class="es-job-task-row"><div><strong>' + escape(strip(item.name || item.id)) + '</strong><span>' + (item.unlocked === false ? escape(t('Uzam\u010deno', 'Locked')) : item.complete ? escape(t('Dokon\u010deno', 'Complete')) : escape(t('Prob\u00edh\u00e1', 'In progress'))) + '</span></div><strong>' + number(item.progress) + ' / ' + number(item.target) + '</strong></div><div class="es-progress es-job-task-progress" role="progressbar" aria-label="' + escape(strip(item.name || item.id)) + '" aria-valuemin="0" aria-valuemax="' + number(item.target) + '" aria-valuenow="' + number(item.progress) + '"><span style="--es-progress-scale:' + (item.target ? Math.min(1, Number(item.progress) / Number(item.target)) : 0) + '"></span></div>').join('') + '</div>' + reward + '</div>';
+  }
+  function nextStepsBody() {
+    if (!account?.link || !account.snapshot) return '';
+    const saved = !account.server_online || !account.synced_at || Date.now()/1000-account.synced_at>60;
+    const notice = saved ? `<p class="es-saved-notice">${escape(t('Zobrazuje se poslední uložený postup.', 'Showing your last saved progress.'))} ${account.synced_at ? escape(date(account.synced_at)) : ''} ${escape(t('Aktuální úkoly a dostupnost akcí ověříš po připojení serveru.', 'Current quests and action availability will be checked when the server connects.'))}</p>` : '';
+    const items = window.PantheonNext.actions(account, overviewEvents, levelProgress(account.snapshot.level), lang);
+    return `<h2>${t('Co můžeš udělat dál', 'What to do next')}</h2>${notice}<ul class="es-next-list">${items.map(item=>`<li><div><a class="es-next-title" href="${item.href}">${escape(strip(item.title))}</a><p>${escape(item.detail)}</p></div><a class="es-next-guide" href="https://wiki.pantheon.tomaspisar.cz${item.guide}">${t('Návod', 'Guide')}<span class="es-sr-only">: ${escape(strip(item.title))}</span></a></li>`).join('')}</ul>`;
+  }
+  function refreshNextSteps() {
+    const host = $('#next-steps');
+    if (!host || host.contains(document.activeElement)) return;
+    const html=nextStepsBody();if(host.innerHTML!==html)host.innerHTML=html;
+  }
+  async function refreshOverviewEvents() {
+    if(route!=='overview'||!account?.link||Date.now()-overviewEventsChecked<15000)return;
+    overviewEventsChecked=Date.now();
+    try { const response=await fetch('/api/economysuite/public/summary',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(7000)});if(!response.ok)throw Error();overviewEvents=await response.json(); }
+    catch { overviewEvents=null; }
+    refreshNextSteps();
   }
   function overview(snapshot) {
     const level = snapshot.level || {};
@@ -324,7 +344,7 @@
   } catch { /* pairing can be restarted in-game */ }
   function onboardingGuide(active) {
     const steps = [
-      [t('Otevři portál a přihlas se', 'Open the portal and sign in'), t('Ve hře zadej /web link, otevři odkaz a přihlas se nebo si vytvoř účet.', 'Run /web link in game, open the link and sign in or create an account.')],
+      [t('Začni ve hře příkazem /web link', 'Start in-game with /web link'), t('Ve hře zadej /web link a otevři odkaz. Webový účet už máš? Pokračuj přihlášením.', 'Run /web link in game and open the link. Already have a website account? Sign in to continue.')],
       [t('Potvrď svého hráče', 'Confirm your player'), t('Zkontroluj Minecraft jméno a potvrď, že patří tobě.', 'Check the Minecraft name and confirm that it belongs to you.')],
       [t('Dokonči propojení ve hře', 'Finish in Minecraft'), t('Zkopíruj příkaz z této stránky a odešli ho v chatu hry.', 'Copy the command from this page and send it in game chat.')]
     ];
@@ -396,12 +416,14 @@
     else if (!account?.link) html = empty();
     else if (!account.snapshot) html = waiting();
     else html = ({ overview, statistics, progress, appearance }[route] || overview)(account.snapshot);
-    if (route === 'overview' || route === 'store') html = dailyRewardCard() + html;
+    if (route === 'store' || (route === 'overview' && account?.link)) html = dailyRewardCard() + html;
+    if (route === 'overview' && account?.snapshot && account?.link) html = '<section class="es-panel es-next-steps" id="next-steps">' + nextStepsBody() + '</section>' + html;
     $('#content').innerHTML = html; $('#content').setAttribute('aria-busy', 'false');
     bind();
   }
   async function action(button, work) { feedback?.busy(button, true); try { await work(); } catch (failure) { status(failure.message, true); } finally { if (button.isConnected) feedback?.busy(button, false); } }
   function bind() {
+    document.querySelectorAll('[data-copy-command]').forEach(button=>button.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(button.dataset.copyCommand);status(t('Příkaz zkopírován. Vlož ho do chatu Minecraftu.', 'Command copied. Paste it into Minecraft chat.'),false,'success');}catch{status(t('Označ a zkopíruj příkaz /web link ručně.', 'Select and copy /web link manually.'),true);}}));
     if(route==='tournament'||route==='tournament-admin')window.ESTournament.bind({api,t,escape,status,admin:route==='tournament-admin'});
     bindDailyReward();
     const rankDialogNode = $('#rank-details-dialog');
@@ -515,8 +537,9 @@
       if (route === 'pair' && account && pairingToken) pairing = await api('/api/economysuite/pair/inspect', { token: pairingToken });
     } catch (failure) { $('#content').innerHTML = loadError(failure); $('#content').setAttribute('aria-busy', 'false'); bind(); if (options.refresh) throw failure; status(failure.message, true); return; }
     render();
+    if(route==='overview')void refreshOverviewEvents();
   }
-  $('#language').addEventListener('click', () => { lang = lang === 'cs' ? 'en' : 'cs'; localStorage.setItem('es-language', lang); render(); });
+  $('#language').addEventListener('click', () => { lang = lang === 'cs' ? 'en' : 'cs'; try{localStorage.setItem('es-language', lang);}catch{/* in-page choice remains available */}render(); });
   $('#logout').addEventListener('click', () => action($('#logout'), async () => { await api('/api/portal/logout', {}); location.assign('/login?product=economysuite'); }));
   load();
   setInterval(async () => {
@@ -526,6 +549,7 @@
       const dailyChanged = JSON.stringify(account?.daily_reward) !== JSON.stringify(latest.daily_reward) || !!account?.link !== !!latest.link;
       const rankChanged = JSON.stringify(account?.snapshot?.rank) !== JSON.stringify(latest.snapshot?.rank);
       account = latest; renderConnection();
+      if(route==='overview'){refreshNextSteps();void refreshOverviewEvents();}
       if (dailyChanged && !dailyClaimPending) refreshDailyReward();
       if (rankChanged || (latest.snapshot?.rank?.id && Number(latest.snapshot.rank.expires_at) <= Date.now())) {
         const rankHost = $('.es-rank-section');

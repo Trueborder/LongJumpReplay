@@ -18,7 +18,8 @@
   }
   const card=document.querySelector('.login-card,.register-card');
   if(card){const nav=document.createElement('nav');nav.className='pt-auth-links';nav.setAttribute('aria-label','Pantheon');
-    for(const [href,cs,en] of [['https://pantheon.tomaspisar.cz/','Server','Home'],['https://wiki.pantheon.tomaspisar.cz/','Wiki','Wiki']]){const link=document.createElement('a');link.href=href;link.dataset.cs=cs;link.dataset.en=en;link.textContent=document.documentElement.lang==='cs'?cs:en;nav.append(link);}
+    for(const [href,cs,en] of [['https://pantheon.tomaspisar.cz/','Server','Home'],['https://wiki.pantheon.tomaspisar.cz/','Wiki','Wiki'],['https://wiki.pantheon.tomaspisar.cz/zacni-tady','Začni tady','Start here']]){const link=document.createElement('a');link.href=href;link.dataset.cs=cs;link.dataset.en=en;link.textContent=document.documentElement.lang==='cs'?cs:en;nav.append(link);}
+    const note=document.createElement('p');note.className='pt-auth-note';note.dataset.cs='Na webu používáš e-mail a heslo. Herní PIN zadávej pouze v Minecraftu. Propojení začneš příkazem /web link ve hře.';note.dataset.en='Use email and password on the website. Enter your game PIN only in Minecraft. Start linking with /web link in the game.';note.textContent=document.documentElement.lang==='cs'?note.dataset.cs:note.dataset.en;card.append(note);
     card.append(nav);
   }
 })();

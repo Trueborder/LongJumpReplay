@@ -18,4 +18,6 @@ Keep the existing copy button, selection fallback, language anchors, mobile navi
 
 ## Validation
 
+The joining sequence links into the wiki's Start here route. The operational overview prioritizes real next steps before the optional daily reward, labels saved progress and keeps gameplay actions in Minecraft. Wiki discovery uses plain-text previews, title relevance and curated related guides. New states reuse shared semantic colors and native controls; mobile drawers make covered content inert. Theme-correct cookie/consent feedback preserves existing decisions and handlers.
+
 Review rendered Czech and English pages on desktop and mobile; exercise copying, mobile menu/Escape, FAQ, language anchors, loading/stale/active public event states, and keyboard focus. Run website tests, build, JavaScript syntax checks, deployment dry run, and source-matched live asset checks. Record actual results separately from design intent.
