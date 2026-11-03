@@ -1,3 +1,5 @@
+import { isCoordinatedBridgePoll } from './economysuite-bridge-coordinator';
+export { EconomyBridgeCoordinator } from './economysuite-bridge-coordinator';
 import { AUTH_PATHS, accountEnv, requestProduct, sessionCookieName, csrfCookieName, retiredAccountLocation, isMinecraftHost, legacyMinecraftLocation } from './portal-domains';
 import { pantheonAuthBrand } from './pantheon-brand';
 /**
@@ -2150,6 +2152,12 @@ export default {
       }
       if (path.startsWith('/api/economysuite/')) {
         if (request.method === 'OPTIONS') return withPortalCors(new Response(null, { status: 204 }), request, env);
+        if (request.method === 'POST' && isCoordinatedBridgePoll(url.pathname)) {
+          const coordinator = bindings.ECONOMYSUITE_BRIDGE_COORDINATOR;
+          if (coordinator) return withPortalCors(await coordinator.getByName('pantheon').fetch(request), request, env);
+          if (bindings.ENVIRONMENT === 'production')
+            return withPortalCors(fail('bridge_unavailable', 'Bridge synchronization is unavailable.', 503), request, env);
+        }
         const response = await economySuite(request, env, {
           authenticate: (r) => authenticatedPortal(r, env),
           mutation: async (r) => { const auth = await authenticatedPortal(r, env); return Boolean(auth && await portalPasswordMutationAllowed(r, env, auth.session.token_hash, auth.session.csrf_token_hash ?? null)); },

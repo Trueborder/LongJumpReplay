@@ -8,6 +8,7 @@ export interface Env extends Partial<Pick<Cloudflare.Env,'ECONOMYSUITE_READ_LIMI
   DB: D1Database;
   ASSETS: Fetcher;
   ECONOMYSUITE_DB?: D1Database;
+  ECONOMYSUITE_BRIDGE_COORDINATOR?: DurableObjectNamespace;
   ECONOMYSUITE_BRIDGE_SECRET?: string;
   ECONOMYSUITE_WEBHOOK_SECRET?: string;
   ECONOMYSUITE_STRIPE_KEY?: string;

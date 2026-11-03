@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   "observability": { "enabled": true },
+  "migrations": [{ "tag": "economy-bridge-coordinator-v1", "new_sqlite_classes": ["EconomyBridgeCoordinator"] }],
   "triggers": { "crons": ["17 3 * * *"] },
   "assets": {
     "directory": "../website/tomaspisar.cz/account",
@@ -107,6 +108,9 @@
       ]
     },
     "production": {
+      "durable_objects": {
+        "bindings": [{ "name": "ECONOMYSUITE_BRIDGE_COORDINATOR", "class_name": "EconomyBridgeCoordinator" }]
+      },
       "ratelimits": [{"name":"ECONOMYSUITE_READ_LIMIT","namespace_id":"2026102101","simple":{"limit":90,"period":60}}],
       "vars": {
         "ENVIRONMENT": "production",
