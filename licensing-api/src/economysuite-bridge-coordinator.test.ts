@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFileSync, readdirSync } from 'node:fs';
-import { BridgePollQueue } from './economysuite-bridge-coordinator';
+import { BridgeRequestQueue } from './economysuite-bridge-coordinator';
 import worker from './index';
 import type { Env } from './config';
 
@@ -11,7 +11,7 @@ describe('bounded bridge scheduling', () => {
   afterEach(() => vi.useRealTimers());
 
   it('serializes polls in arrival order and recovers after a handler throws', async () => {
-    const queue = new BridgePollQueue();
+    const queue = new BridgeRequestQueue();
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const events: string[] = [];
@@ -28,7 +28,7 @@ describe('bounded bridge scheduling', () => {
 
   it('rejects overflow and removes expired waiters without running them later', async () => {
     vi.useFakeTimers();
-    const queue = new BridgePollQueue(1, 50);
+    const queue = new BridgeRequestQueue(1, 50);
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const first = queue.run(async () => { await gate; return new Response(); });
@@ -53,6 +53,7 @@ describe('bundled Worker and SQLite Durable Object with real D1', () => {
   const origin = 'https://account.pantheon.tomaspisar.cz';
   const main = '/api/economysuite/bridge/poll';
   const staff = '/api/economysuite/bridge/staff/poll';
+  const sync = '/api/economysuite/bridge/sync';
   const uuid = '11111111-1111-4111-8111-111111111111';
 
   beforeAll(async () => {
@@ -102,7 +103,26 @@ describe('bundled Worker and SQLite Durable Object with real D1', () => {
     expect(await db.prepare("SELECT last_seen FROM bridge_status WHERE server='pantheon'").first<number>('last_seen')).toBeGreaterThan(Math.floor(Date.now() / 1000) - 10);
   });
 
-  it.each([main, staff])('rejects unsigned, stale, tampered and replayed requests on %s', async path => {
+  it('preserves allowlisted player snapshots and explicit refreshes through the coordinator', async () => {
+    await db.prepare('INSERT INTO player_links(customer_id,uuid,name,linked_at) VALUES(?,?,?,?)').bind('sync-fixture', uuid, 'Fixture', 1).run();
+    try {
+      const payload = { snapshots: [{ uuid, coins: 42, tokens: 7, private_field: 'omit', progress: { achievements: ['fixture'] } }] };
+      const response = await poll(sync, payload);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('X-ES-Bridge-Execution')).toBe('coordinator-v1');
+      const row = await db.prepare('SELECT payload,synced_at FROM player_snapshots WHERE uuid=?').bind(uuid).first<{ payload: string; synced_at: number }>();
+      expect(JSON.parse(row!.payload)).toMatchObject({ uuid, coins: 42, tokens: 7 });
+      expect(JSON.parse(row!.payload)).not.toHaveProperty('private_field');
+      await db.prepare('UPDATE player_snapshots SET synced_at=1 WHERE uuid=?').bind(uuid).run();
+      expect((await poll(sync, { ...payload, force: true })).status).toBe(200);
+      expect(await db.prepare('SELECT synced_at FROM player_snapshots WHERE uuid=?').bind(uuid).first<number>('synced_at')).toBeGreaterThan(1);
+    } finally {
+      await db.prepare('DELETE FROM player_snapshots WHERE uuid=?').bind(uuid).run();
+      await db.prepare('DELETE FROM player_links WHERE uuid=?').bind(uuid).run();
+    }
+  });
+
+  it.each([main, staff, sync])('rejects unsigned, stale, tampered and replayed requests on %s', async path => {
     expect((await runtime.dispatchFetch(origin + path, { method: 'POST', body: '{}' })).status).toBe(403);
     expect((await poll(path, {}, { time: Math.floor(Date.now() / 1000) - 180 })).status).toBe(403);
     const request = await signed(path, {});
