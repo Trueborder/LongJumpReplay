@@ -1,5 +1,12 @@
 # Long Jump Replay — Project Knowledge
 
+## EconomySuite bridge CPU execution boundary (2026-11-03)
+
+- The user approved a free-plan SQLite Durable Object coordinator to address recurring shared API CPU-limit failures. The exact signed POST main poll, staff poll and player snapshot sync routes execute in `EconomyBridgeCoordinator`, named `pantheon` for the existing single game server. Existing host/product guards run in the front Worker before forwarding the unchanged signed envelope; production fails closed if the binding is missing.
+- A bounded FIFO permits one active request and eight waiters with a five-second wait deadline. Only scheduling is transient; all signatures/timestamps, D1 nonces, backoff, permissions, snapshots, pending operations and durable acknowledgments retain their existing ownership and handler. No game database or D1 schema move. Other bridge routes, account APIs and web assets keep existing routing.
+- Class migration `economy-bridge-coordinator-v1` creates the SQLite-backed namespace; no paid subscription change. Initial live front poll CPU is 0–1 ms. Player snapshot sync was subsequently included after a live 16 ms front-Worker sample exposed remaining CPU-limit risk. Tests/releases and measured verification limits: `licensing-api/docs/codex/CPU_COORDINATOR_2026-11-03.md`. Preserve databases and the namespace on code rollback. Daily-alert resolution still requires a representative 24-hour post-release observation.
+
+
 ## PANTHEON D1 write-budget incident (2026-10-21)
 
 - Owner reported Cloudflare's 100,000 daily row-write limit email and chose to wait for the midnight UTC reset (02:00 Prague), not upgrade billing. Static page HTTP success is not evidence that authentication or mutations work during a quota block. Map HTTP 404 is a separate upstream issue.

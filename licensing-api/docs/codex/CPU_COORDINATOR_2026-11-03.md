@@ -13,11 +13,11 @@ User explicitly approved implementation, testing and deployment of the proposed 
 
 ## Baseline and scope
 
-Current production rollback version: `0370770f-13e7-47ab-b2a9-0b4bf22759ce`. Source-before snapshots, remote settings/deployment metadata and bundles are under `outputs/cpu-coordinator-20261103/`. Before-change local bundle exactly matches downloaded production bundle, SHA256 `98051b2bb881796c95b7bb3989259c0694c3a755031cb442377d3dffe65f8c53`.
+Pre-coordinator production baseline: `0370770f-13e7-47ab-b2a9-0b4bf22759ce`. Source-before snapshots, remote settings/deployment metadata and bundles are under `outputs/cpu-coordinator-20261103/`. Before-change local bundle exactly matches downloaded production bundle, SHA256 `98051b2bb881796c95b7bb3989259c0694c3a755031cb442377d3dffe65f8c53`.
 
 Asset preflight built the same 47-file manifest as Wrangler (its reported 59 entries include directories). Cloudflare assets-upload-session reported zero missing asset hashes. No asset bytes were uploaded by that preflight. Preserve existing variables/secrets with --keep-vars and publish only the accounts/API Worker through Wrangler; do not use migrate-bearing deploy:production.
 
-Rollback snapshot: `../../../../Website/qa/results/release/snapshot-1793718288299.json`. Roll back code/routing to the preceding version while retaining databases and the unused coordinator namespace. Never delete the class/namespace or restore a database to undo this release.
+Baseline snapshot: `../../../../Website/qa/results/release/snapshot-1793718288299.json`. Cloudflare prohibits direct version rollback across a Durable Object class lifecycle change. Do not attempt a direct rollback to pre-class version 0370770f. The first coordinator-compatible version `f67ef0f3-fb39-4d5b-901f-b0e9445b3477` is the immediate rollback target for the sync follow-up, but it leaves snapshot sync at the old CPU boundary. A full behavior rollback requires a new validated deployment restoring the source-before routing while retaining the exported class, binding and existing migration history. Never delete the class/namespace or restore a database to undo this release. Reference: https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/.
 
 ## Validation before release
 
@@ -49,3 +49,29 @@ Unsigned polls return 403 with coordinator-v1 header; the LJR host returns 404 w
 One player snapshot sync used 16 ms in the front Worker. The subsequent change routes it through the same coordinator, adding no new infrastructure or migrations. Do not call the first rollout a complete CPU fix.
 
 Wrangler tail's actual timing field is cpuTime (milliseconds), not cpuTimeMs. Earlier audit parsers omitted that field; their claim that the tail lacked timing fields was a parser limitation. The corrected parser also uses entrypoint/durableObjectId to separate coordinator requests from front-Worker requests. Initial GraphQL aggregates can include both; do not treat their combined p50/p99 as front-Worker-only measurements. The separate Durable Objects GraphQL dataset returned no rows during the initial observation, so the per-route measurements above come from live tail.
+
+## Follow-up deployment transition
+
+Snapshot-sync change committed as `24ce566b`. Accounts/API version `35e0ba0e-566b-4578-89eb-58084c6a7cea` deployed 15:14:53 UTC with --keep-vars and no changed assets. All 48 standard read-only checks passed again. Remote source matches final tested bundle SHA256 `7f089319e946cea93eb251b4fee6189fbf7fea1f07b232f8f1757fc0d45f3dfd`; the coordinator remains the only binding addition relative to the original production baseline.
+
+During 15:15–15:17 UTC, live tail confirmed front Worker version 35e0ba0e while the active coordinator still ran f67ef0f3. The old coordinator rejected the newly forwarded sync route with 404 (no handler, signature or D1 processing); polls continued 200/ok. This temporary failed sync interval must not be counted as successful release coverage.
+
+Cloudflare's 2026-10-30 behavior change defers active Durable Object code updates by default for up to 300 seconds. Installed Wrangler 4.123.0 does not expose the new immediate-update CLI option; no incidental tooling upgrade was made. The release must wait for actual class-version adoption and verify real sync success, not just a successful Worker deployment. For future route additions, deploy an accepting coordinator first and observe its new version before routing the new path, or use verified newer tooling's explicit immediate strategy. Reference: https://developers.cloudflare.com/changelog/post/2026-10-30-durable-objects-deferred-code-updates/.
+
+## Final runtime verification — completed
+
+Actual new coordinator version was observed by 15:20:07.581 UTC. The following successful signed requests were observed on final version 35e0ba0e from then through 15:21:21 UTC:
+
+| Route | Successful signed requests | Front Worker CPU | Coordinator CPU |
+| --- | ---: | --- | --- |
+| staff/poll | 8 | 1–2 ms | 9–22 ms |
+| poll | 8 | 1 ms | 6–15 ms |
+| sync | 2 | 1–3 ms | 13–16 ms |
+
+All eighteen signed exchanges returned HTTP 200/outcome ok in both front Worker and coordinator. No resource-limit/exception outcome in the post-adoption tail. The larger CPU work now executes under the Durable Object allowance; front-Worker requests in this sample are below 10 ms. This is an initial active-traffic observation, not 24-hour certification or a claim about every unrelated API route.
+
+All three unsigned signature probes return 403 with coordinator-v1, no-store; the temporary 404 interval has recovered. SELECT-only D1 checks across final rollout show heartbeat 1793718968 → 1793719218, monitor generation 1793718926 → 1793719176 and latest player snapshot 1793718859 → 1793719209. Staff revision and applied_revision stay 15, ready=true. Final heartbeat age was nine seconds. No game or financial action was initiated to test the release.
+
+Evidence: `final-cpu-tail.json` retains the transition and per-event version/entrypoint/CPU/status without headers or bodies. `final-summary.json` isolates successful final-version post-adoption exchanges. `final-db-first.json`, `final-db-last.json`, `final-integrity.json` and `final-security-probes.json` record the corresponding checks, under `outputs/cpu-coordinator-20261103/`.
+
+The final aggregate GraphQL request hit the account's query-budget limiter (retry after five minutes). No retries were made against that limit; do not report aggregate post-release error counts or separate Durable Objects GraphQL metrics as verified. Runtime evidence above comes from actual Wrangler live tail and read-only D1 queries. No paid upgrade was performed; the existing worker usage model and variables remain unchanged. Authenticated portal browser coverage and a representative 24-hour active-traffic result remain unverified. Daily summary mail can still include failures from before release or the documented sync transition.
