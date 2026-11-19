@@ -20,35 +20,34 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     dialog = SettingsDialog(root, AppConfig(), applied.append)
     dialog.update_idletasks()
     style = ttk.Style(dialog)
-    assert "Modern" in str(style.layout("TCheckbutton"))
-    assert "ModernDark.secondary.Button.background" in str(style.layout("TButton"))
-    assert "ModernDark.Combo.field" not in str(style.layout("TCombobox"))
+    assert "Checkbutton.indicator" in str(style.layout("TCheckbutton"))
+    assert "Button.border" in str(style.layout("TButton"))
     assert "Combobox.downarrow" in str(style.layout("TCombobox"))
-    assert theme_manager._image_assets["ModernDark.neutral.normal"].height() == 28
     assert math.isclose(theme_manager.tk_scaling, max(1.0, native_scaling * COMPACT_UI_RATIO), rel_tol=.01)
     assert math.isclose(float(root.tk.call("tk", "scaling")), theme_manager.tk_scaling, rel_tol=.01)
-    assert int(style.lookup("TCombobox", "arrowsize")) == 12
-    assert tuple(style.lookup("TCombobox", "padding")) == (10, 5)
-    assert int(style.lookup("Treeview", "rowheight")) == 19
-    assert tuple(map(int, root.tk.splitlist(style.lookup("Control.TButton", "padding")))) == (12, 4)
-    assert str(style.lookup("Control.TButton", "font")) == "{Segoe UI} 10"
-    checked_image = theme_manager._image_assets["ModernDark.checked"]
-    unchecked_image = theme_manager._image_assets["ModernDark.unchecked"]
-    assert checked_image.height() == unchecked_image.height() == 16
-    assert checked_image.get(8, 9) != unchecked_image.get(8, 9)
+    assert "camera_device_choice" not in dialog._vars
+    assert dialog.roster_tree is None
+    assert dialog.notebook.select() == str(dialog._pages["general"])
+    assert dialog.notebook.tab(dialog._pages["advanced"], "state") == "hidden"
     first_checkbox = next(widget for _card, widget, _desc in dialog._setting_rows if isinstance(widget, ttk.Checkbutton))
     assert first_checkbox.instate(["selected"])
     first_checkbox.invoke(); dialog.update_idletasks()
     assert first_checkbox.instate(["!selected"])
     theme_manager.apply("light")
     assert math.isclose(float(root.tk.call("tk", "scaling")), theme_manager.tk_scaling, rel_tol=.01)
-    assert "ModernLight" in str(style.layout("TCheckbutton"))
-    assert "ModernLight.secondary.Button.background" in str(style.layout("TButton"))
+    assert "Checkbutton.indicator" in str(style.layout("TCheckbutton"))
     assert set(dialog._pages) == {
         "general", "camera_recording", "competition", "judging",
         "board_assist", "workspace_controls", "licence", "advanced",
     }
-    assert dialog._vars["athlete_timer_duration"].get() == 60
+    # Opening Advanced first must not build the Camera tab.
+    dialog._set_settings_view("advanced")
+    dialog.notebook.select(dialog._pages["advanced"])
+    root.update()
+    assert dialog._vars["fourcc"].get() == AppConfig().camera.fourcc
+    assert "camera_device_choice" not in dialog._vars
+    dialog.notebook.select(dialog._pages["camera_recording"])
+    root.update()
     assert str(dialog.camera_device_combo.cget("state")) == "readonly"
     assert str(dialog.camera_file_entry.cget("state")) == "disabled"
     assert dialog.camera_file_browse_button.instate(["disabled"])
@@ -61,37 +60,31 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert dialog._vars["preview_hz"].get() == 20
     assert dialog._vars["store_nth"].get() == 2
     assert dialog._vars["buffer_memory"].get() == 1024
-    assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
-    assert set(dialog._nav_group_labels) == {"essentials", "event", "system"}
-    assert dialog._nav_buttons["general"].cget("style") == "SettingsNav.TButton"
-    assert dialog._nav_buttons["general"].winfo_reqheight() <= 36
-    assert dialog.nav_scrollbar.winfo_manager() == "grid"
-    assert dialog.nav_canvas.cget("yscrollcommand")
-    assert dialog.nav_canvas.bbox("all") is not None
     general_rows = [
         (entry["card"], entry["widget"], next(desc for card, _widget, desc in dialog._setting_rows if card is entry["card"]))
         for entry in dialog._search_entries if entry["page"] == "general"
     ]
     dialog._show_page("general"); dialog.update_idletasks()
     assert len({widget.winfo_x() for _card, widget, _desc in general_rows}) == 1
-    assert all(widget.winfo_x() >= 500 for _card, widget, _desc in general_rows)
     described = [desc for _card, _widget, desc in general_rows if desc is not None]
     assert len(described) == len(general_rows)
     assert len({desc.winfo_x() for desc in described}) == 1
     dialog._vars["show_tooltips"].set(False); dialog.update_idletasks()
     assert all(not desc.winfo_manager() for desc in described)
-    assert all(not header.winfo_manager() for _columns, header in dialog._description_headers)
     dialog._vars["show_tooltips"].set(True); dialog.update_idletasks()
     assert all(desc.winfo_manager() == "grid" for desc in described)
     dialog._show_page("competition")
     assert dialog._current_page == "competition"
     assert dialog.roster_tree is not None
+    assert dialog._vars["athlete_timer_duration"].get() == 60
     for page in dialog._pages:
         dialog._show_page(page); dialog.update_idletasks()
         assert dialog.apply_button.winfo_manager() == "pack"
         assert dialog.apply_close_button.winfo_manager() == "pack"
         assert dialog.footer.winfo_manager() == "grid"
-        assert dialog._nav_buttons[page].instate(["selected"])
+        assert dialog.notebook.select() == str(dialog._pages[page])
+    assert dialog.hotkey_tree.set("timer_toggle", "key") == ""
+    dialog._set_settings_view("simple")
     dialog._dirty = False
     dialog.search_var.set("FOURCC"); dialog.update_idletasks()
     assert not dialog._dirty
@@ -104,6 +97,7 @@ def test_category_settings_dialog_builds_all_pages(monkeypatch):
     assert any(dialog.search_results_tree.set(item, "setting") == "Application version" for item in dialog.search_results_tree.get_children())
     dialog._open_selected_search_result(); dialog.update_idletasks()
     assert dialog._current_page == "licence"
+    assert dialog.notebook.tab(dialog._pages["advanced"], "state") == "hidden"
     assert not dialog._dirty
     dialog.destroy(); root.destroy()
 
@@ -118,7 +112,7 @@ def test_camera_file_source_can_be_typed_or_chosen(monkeypatch, tmp_path):
     root = tk.Tk(); root.geometry("2x2+0+0"); ThemeManager(root).apply("dark")
     config = AppConfig(); config.general.language = "cs"
     dialog = SettingsDialog(root, config, lambda _updated: None)
-    dialog.geometry("1100x700"); dialog._show_page("camera_recording"); dialog.update()
+    dialog.geometry("720x460"); dialog._show_page("camera_recording"); dialog.update()
     assert dialog.camera_file_browse_button.winfo_rootx() + dialog.camera_file_browse_button.winfo_width() <= dialog.page_host.winfo_rootx() + dialog.page_host.winfo_width()
 
     dialog._vars["source"].set("file")
@@ -153,6 +147,28 @@ def test_settings_repairs_invalid_runtime_panel_measurements(monkeypatch):
     dialog.destroy(); root.destroy()
 
 
+def test_saving_general_settings_preserves_camera_and_recording_quality(monkeypatch):
+    monkeypatch.setattr("src.settings_dialog.enumerate_camera_devices", lambda _current: [])
+    config = AppConfig()
+    config.camera.source_type = "synthetic"
+    config.camera.width, config.camera.height, config.camera.fps = 1280, 720, 120
+    config.buffer.jpeg_quality = 94
+    config.buffer.store_every_nth_frame = 1
+    root = tk.Tk(); root.withdraw()
+    dialog = SettingsDialog(root, config, lambda _updated: None)
+    try:
+        dialog._set_settings_view("advanced")
+        updated = dialog._apply_vars()
+        assert updated.general.settings_view == "advanced"
+        assert updated.camera == config.camera
+        assert updated.buffer == config.buffer
+        assert updated.attempts.temp_codec == config.attempts.temp_codec
+        assert updated.export == config.export
+    finally:
+        dialog.destroy()
+        root.destroy()
+
+
 def test_settings_can_start_manual_update_check(monkeypatch):
     monkeypatch.setattr(
         "src.settings_dialog.enumerate_camera_devices",
@@ -167,6 +183,7 @@ def test_settings_can_start_manual_update_check(monkeypatch):
         on_check_updates=requested_from.append,
     )
 
+    dialog._show_page("licence")
     assert dialog.check_updates_button.cget("text") == "Check for updates…"
     assert dialog.check_updates_button.instate(["!disabled"])
     dialog.check_updates_button.invoke()
@@ -194,6 +211,7 @@ def test_licence_page_shows_diagnostics_and_copies_safe_summary(monkeypatch):
     monkeypatch.setattr("src.settings_dialog.show_themed_info", lambda *args: None)
     root = tk.Tk(); root.withdraw(); ThemeManager(root).apply("dark")
     dialog = SettingsDialog(root, AppConfig(), lambda _updated: None)
+    dialog._show_page("licence")
     dialog._copy_support_summary()
     summary = dialog.clipboard_get()
     assert __version__ in summary

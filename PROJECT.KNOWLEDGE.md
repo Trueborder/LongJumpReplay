@@ -1133,16 +1133,9 @@ A webcam may negotiate a lower real rate. Requested FPS is not proof of actual F
 
 ### Judge-station visual hierarchy
 
-The main window is organized into stable task zones: application/camera/timer header, numbered-athlete context, video workspace, layered timeline, primary Freeze/Live and decision dock, and compact status reporting. Primary judging actions are visually stronger than layout, calibration, export, and maintenance controls. Both themes use the same hierarchy and semantic colors.
+The main window uses a native Tk menu bar, a compact camera and timer strip, video and timeline panes, and a single row for Freeze/Live, frame stepping, projection and decisions. Standard ttk elements draw the controls. Light and dark palettes retain semantic colors for judging and status.
 
-Settings uses four navigation groups (Essentials, Judging workflow, Replay workspace, Controls & system), active-page highlighting, page-introduction cards, card-based setting rows, visible impact badges, and a fixed Apply footer. The underlying sixteen pages remain separate to avoid presenting one very long form.
-Licence & account includes a localized Check for updates action. It uses the same signed stable-channel checker as the Help menu; update results are parented to Settings and restore its modal grab and keyboard focus when dismissed.
-
-Every ordinary setting row follows the same three-column contract: Option (fixed width), Description (flexible), and Value (fixed width). Column headings are visible and localized. Every row has a useful localized description; `general.show_tooltips` immediately hides or restores the complete middle column, including its headings, without moving the Value column inconsistently. Checkboxes align to the same Value-column origin as entries, spinboxes, and selectors; individual label or description length must not move a control horizontally.
-
-Checkboxes, comboboxes, combobox list popups, and classic Tk menus are themed as one component family. Checkbox indicator images are owned by `ThemeManager` for their full Tk lifetime. Dark/light theme application must also restyle existing File/View/Help and nested menus; native-looking defaults must not reappear after a runtime theme change.
-
-All ttk buttons use the shared small-radius (6 px), one-pixel-border nine-slice backgrounds from `ThemeManager`; they must remain desktop-shaped rather than pill-shaped and must not impose a larger minimum height than each semantic role requires. Standard actions and judging actions are approximately 32â€“34 px, while compact toolbar actions remain smaller. The neutral widget backing must not refill the transparent corners of bright semantic images. Comboboxes and menu buttons share the same fill, border, typography, and focus hierarchy. Checkboxes use a circular accent indicator with a visible white check. On Windows, mapped classic menu windows and combobox popdowns request DWM rounded corners. Checkbox tests must verify both Tk selected state and different rendered checked/unchecked pixels so an invisible logical selection cannot regress unnoticed. The Settings category sidebar has its own always-visible scrollbar and mouse-wheel navigation, independent of the scrollable contents of each page.
+Settings is a decorated Tk dialog with a ttk Notebook and a fixed Apply footer. Each page is built when selected. Search can reveal an advanced tab temporarily, including in Simple view. Form rows put the label and impact badge before the control and optional description. Long pages retain a vertical scrollbar. Licence includes a localized Check for updates action through the same signed stable-channel checker as Help.
 
 The competition target strip belongs inside the Competition Board tab and shows only the projected next athlete number and attempt; the standalone special-results/More button, old Boys/Girls selector, and Previous/Next buttons must not return. Special results remain available through board/recording context actions and configured shortcuts. Every board cell is focusable. While the Competition Board tab is selected and visible, plain arrow keys move the persistent blue, softly pulsing focus regardless of which child widget owns focus; they never step replay frames in that context. Enter opens recorded content or selects an empty cell. Space always remains Freeze/Live. Modified arrows and all unrelated configured shortcuts keep their normal actions. Freeze keeps the board's active outline on the recorded athlete/attempt throughout judging; only a successful return to Live advances it to the next rotation cell. Right-clicking either a recorded or eligible blank cell exposes all decision variants. Choosing a status on a blank cell creates a metadata-only, zero-frame placeholder without changing the current athlete; Delete attempt content is enabled only when a record exists.
 
@@ -1192,7 +1185,8 @@ Do not regress these properties:
 - canvas objects are created once and reused;
 - requests are coalesced with idle/scheduled updates;
 - update rate is limited by the performance profile;
-- the visible timeline can raise the main UI scheduler above preview FPS so its cursor is not accidentally capped by a slower preview setting;
+- the visible timeline can raise the main UI scheduler above preview FPS when media is active;
+- with no incoming frames or active replay the UI checks events and the athlete timer at 12 Hz, updates camera feedback on state changes, and skips the empty timeline and recording list;
 - hidden or suspended timeline does no expensive work;
 - dragging and overview seeking remain responsive;
 - window move/resize suspends expensive rendering and resumes with the latest frame.

@@ -259,7 +259,11 @@ class MainWindow:
         self._top_view_loading_cancel: Event | None = None
         self._takeoff_projection_indices: dict[int, tuple[int, ...]] = {}
         self._takeoff_projection_lock = Lock()
-        self._last_video_update = 0.0
+        self._last_source_frame_at = float("-inf")
+        self._last_source_frame_index = -1
+        self._idle_video_signature: tuple | None = None
+        self._judging_control_signature: tuple | None = None
+        self._mode_colors: tuple[str, str] | None = None
         self._menu_active_until = 0.0
         # Operator/setup mode is a development-only compatibility flag and is
         # never enabled by the customer application.
@@ -445,9 +449,9 @@ class MainWindow:
         self._menu_active_until = time.perf_counter() + 1.0
 
     def _build_menu(self) -> None:
-        # A lightweight in-window menu replaces the native root menubar. The
-        # popup menus are created once and never rebuilt by the video loop.
-        self.file_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
+        previous = getattr(self, "menubar", None)
+        self.menubar = tk.Menu(self.root, tearoff=False)
+        self.file_menu = tk.Menu(self.menubar, tearoff=False, postcommand=self._begin_menu_interaction)
         restricted_state = "disabled" if self._evaluation_mode and not capabilities_for().permits("competition_setup") else "normal"
         self.file_menu.add_command(label=self._t("menu.wizard") + "\tCtrl+N", command=self.start_competition_wizard, state=restricted_state)
         self.file_menu.add_command(label=self._t("menu.import_roster"), command=self.import_roster, state=restricted_state)
@@ -467,8 +471,8 @@ class MainWindow:
         self.file_menu.add_command(label=self._t("menu.settings"), command=self.open_settings)
         self.file_menu.add_separator()
         self.file_menu.add_command(label=self._t("menu.exit"), command=self.close)
-        self.camera_menu = tk.Menu(self.root, tearoff=False, postcommand=self._populate_camera_menu)
-        self.view_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
+        self.camera_menu = tk.Menu(self.menubar, tearoff=False, postcommand=self._populate_camera_menu)
+        self.view_menu = tk.Menu(self.menubar, tearoff=False, postcommand=self._begin_menu_interaction)
         self.layout_menu = tk.Menu(self.view_menu, tearoff=False, postcommand=self._begin_menu_interaction)
         layouts = [
             ("replay_pip", "layout.replay_pip"), ("side_by_side", "layout.side_by_side"),
@@ -497,12 +501,18 @@ class MainWindow:
         self.view_menu.add_command(label=self._t("menu.comparison") + "\tC", command=self.toggle_comparison)
         self.view_menu.add_command(label=self._t("menu.fullscreen") + "\tF11", command=self.toggle_fullscreen)
         self.view_menu.add_command(label=self._t("menu.reset") + "\tR", command=self.reset_video_views)
-        self.help_menu = tk.Menu(self.root, tearoff=False, postcommand=self._begin_menu_interaction)
+        self.help_menu = tk.Menu(self.menubar, tearoff=False, postcommand=self._begin_menu_interaction)
         self.help_menu.add_command(label=self._t("menu.controls"), command=self.show_controls)
         self.help_menu.add_separator()
         self.help_menu.add_command(label=self._t("menu.check_updates"), command=self.check_for_updates)
         self.help_menu.add_separator()
         self.help_menu.add_command(label=self._t("menu.about"), command=lambda: show_themed_info(self.root, self._t("menu.about"), f"Long Jump Replay {__version__}\nLive video review for long-jump take-off decisions."))
+        for label, menu in (("file", self.file_menu), ("camera", self.camera_menu),
+                            ("view", self.view_menu), ("help", self.help_menu)):
+            self.menubar.add_cascade(label=self._t(f"menu.{label}"), menu=menu)
+        self.root.configure(menu=self.menubar)
+        if previous is not None:
+            previous.destroy()
         self._style_all_menus()
 
     def check_for_updates(self, parent: tk.Misc | None = None) -> None:
@@ -602,21 +612,9 @@ class MainWindow:
             if isinstance(menu, tk.Menu):
                 self.theme.style_menu(menu)
 
-    def _attach_header_menus(self, header: ttk.Frame) -> None:
-        self.header_menu_frame = ttk.Frame(header, style="Panel.TFrame")
-        self.header_menu_frame.pack(side="left", padx=(22, 0))
-        self.file_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.file"), menu=self.file_menu, style="Header.TMenubutton")
-        self.view_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.view"), menu=self.view_menu, style="Header.TMenubutton")
-        self.help_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.help"), menu=self.help_menu, style="Header.TMenubutton")
-        self.camera_menu_button = ttk.Menubutton(self.header_menu_frame, text=self._t("menu.camera"), menu=self.camera_menu, style="Header.TMenubutton")
-        for index, button in enumerate((self.file_menu_button, self.view_menu_button, self.help_menu_button, self.camera_menu_button)):
-            button.pack(side="left", padx=1)
-            if index == 3:
-                button.pack_configure(padx=(10, 1))
-            button.bind("<ButtonPress-1>", lambda _e: self._begin_menu_interaction(), add="+")
-
     def _populate_camera_menu(self) -> None:
         """Refresh the compact camera selector immediately before it opens."""
+        self._begin_menu_interaction()
         self.camera_menu.delete(0, "end")
         current = self.config.camera.device_index
         devices = enumerate_camera_devices(current)
@@ -643,17 +641,12 @@ class MainWindow:
         self.apply_settings(new_config)
 
     def _build_layout(self) -> None:
-        self.outer = ttk.Frame(self.root, style="App.TFrame", padding=(12, 10, 12, 10))
+        self.outer = ttk.Frame(self.root, style="App.TFrame", padding=5)
         self.outer.pack(fill="both", expand=True)
 
-        header = ttk.Frame(self.outer, style="JudgeHeader.TFrame", padding=(14, 9))
-        header.pack(fill="x", pady=(0, 8))
-        header_brand = ttk.Frame(header, style="Panel.TFrame")
-        header_brand.pack(side="left")
-        self.header_title = ttk.Label(header_brand, text=self._t("app.header"), style="Brand.TLabel")
-        self.header_title.pack(anchor="w")
-        self._attach_header_menus(header)
-        ttk.Label(header, textvariable=self.camera_var, style="Muted.TLabel").pack(side="left", padx=(18, 0), pady=(3, 0))
+        header = ttk.Frame(self.outer, style="Toolbar.TFrame", padding=(4, 2))
+        header.pack(fill="x", pady=(0, 4))
+        ttk.Label(header, textvariable=self.camera_var, style="Status.TLabel").pack(side="left")
         self.timer_frame = tk.Frame(header, borderwidth=0, highlightthickness=1, cursor="hand2")
         self.timer_frame.pack(side="right", padx=(12, 0), pady=(1, 0))
         self.timer_prefix_label = tk.Label(self.timer_frame, textvariable=self.timer_prefix_var, borderwidth=0, cursor="hand2", font=("Segoe UI Semibold", 10))
@@ -738,10 +731,9 @@ class MainWindow:
         self.root.after_idle(self._set_timeline_sash)
         self.root.after(180, self._set_timeline_sash)
 
-        self.controls = ttk.Frame(self.workspace, style="ControlDock.TFrame", padding=(7, 5))
-        self.controls.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        self.controls = ttk.Frame(self.workspace, style="Toolbar.TFrame", padding=(4, 2))
+        self.controls.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         self.freeze_button = ttk.Button(self.controls, text=self._t("button.freeze"), width=14, style="Primary.TButton", command=self.toggle_freeze)
-        self.freeze_button.pack(side="left")
         # Freeze and Live are one primary toggle. Keep the old attribute as an
         # alias for integrations, but do not create a second visible button.
         self.live_button = self.freeze_button
@@ -749,31 +741,21 @@ class MainWindow:
         self.assist_warning_label = ttk.Label(self.controls, textvariable=self.assist_warning_var, style="Warning.TLabel")
         # Keep the failure notice out of the way until a frozen attempt needs it.
         self.assist_warning_label.pack_forget()
-        self.frame_group = ttk.Frame(self.controls, style="ControlDock.TFrame")
-        self.frame_group_label = ttk.Label(self.frame_group, text=self._t("controls.frame_review"), style="ContextTitle.TLabel")
-        self.frame_group_label.pack(anchor="w")
-        frame_buttons = ttk.Frame(self.frame_group, style="ControlDock.TFrame")
-        frame_buttons.pack(anchor="w", pady=(2, 0))
-        self.prev_frame_button = ttk.Button(frame_buttons, text=self._t("button.previous_frame"), style="Secondary.TButton", command=lambda: self.step_frame(-1))
-        self.prev_frame_button.pack(side="left", padx=(0, 2))
-        self.next_frame_button = ttk.Button(frame_buttons, text=self._t("button.next_frame"), style="Secondary.TButton", command=lambda: self.step_frame(1))
-        self.next_frame_button.pack(side="left", padx=2)
-        self.top_view_button = ttk.Button(frame_buttons, text=self._t("button.top_view"), style="Secondary.TButton", command=self.open_top_view_projection)
-        self.top_view_button.pack(side="left", padx=(7, 0))
-        self.frame_group.pack(side="left", padx=(0, 12))
+        self.prev_frame_button = ttk.Button(self.controls, text=self._t("button.previous_frame"), command=lambda: self.step_frame(-1))
+        self.prev_frame_button.pack(side="left", padx=1)
+        self.next_frame_button = ttk.Button(self.controls, text=self._t("button.next_frame"), command=lambda: self.step_frame(1))
+        self.next_frame_button.pack(side="left", padx=1)
+        self.top_view_button = ttk.Button(self.controls, text=self._t("button.top_view"), command=self.open_top_view_projection)
+        self.top_view_button.pack(side="left", padx=(1, 8))
 
-        self.decision_frame = ttk.Frame(self.controls, style="ControlDock.TFrame")
-        self.decision_group_label = ttk.Label(self.decision_frame, text=self._t("controls.judging"), style="ContextTitle.TLabel")
-        self.decision_group_label.pack(anchor="w")
-        decision_buttons = ttk.Frame(self.decision_frame, style="ControlDock.TFrame")
-        decision_buttons.pack(anchor="w", pady=(2, 0))
-        self.not_decided_button = ttk.Button(decision_buttons, text=self._t("button.not_decided"), width=12, style="JudgePending.TButton", command=lambda: self.mark_decision(AttemptDecision.NOT_DECIDED))
+        self.decision_frame = ttk.Frame(self.controls, style="Toolbar.TFrame")
+        self.not_decided_button = ttk.Button(self.decision_frame, text=self._t("button.not_decided"), style="JudgePending.TButton", command=lambda: self.mark_decision(AttemptDecision.NOT_DECIDED))
         self.not_decided_button.pack(side="left", padx=(0, 2))
-        self.valid_button = ttk.Button(decision_buttons, text=self._t("button.valid"), width=12, style="JudgeValid.TButton", command=lambda: self.mark_decision(AttemptDecision.VALID))
+        self.valid_button = ttk.Button(self.decision_frame, text=self._t("button.valid"), style="JudgeValid.TButton", command=lambda: self.mark_decision(AttemptDecision.VALID))
         self.valid_button.pack(side="left", padx=2)
-        self.foul_button = ttk.Button(decision_buttons, text=self._t("button.foul"), width=12, style="JudgeFoul.TButton", command=lambda: self.mark_decision(AttemptDecision.FOUL))
+        self.foul_button = ttk.Button(self.decision_frame, text=self._t("button.foul"), style="JudgeFoul.TButton", command=lambda: self.mark_decision(AttemptDecision.FOUL))
         self.foul_button.pack(side="left", padx=2)
-        self.review_button = ttk.Button(decision_buttons, text=self._t("button.review"), width=12, style="JudgeReview.TButton", command=lambda: self.mark_decision(AttemptDecision.REVIEW))
+        self.review_button = ttk.Button(self.decision_frame, text=self._t("button.review"), style="JudgeReview.TButton", command=lambda: self.mark_decision(AttemptDecision.REVIEW))
         self.review_button.pack(side="left", padx=2)
         self.decision_frame.pack(side="left")
 
@@ -1061,13 +1043,16 @@ class MainWindow:
                 hz = min(hz, 12)
         return max(4, int(hz))
 
-    def _schedule_tick(self) -> None:
-        if self._closing: return
-        hz = self._effective_preview_hz()
-        if self._timeline_pane_added and not self._window_interacting:
-            hz = max(hz, int(self.config.performance.timeline_refresh_hz))
-        interval = max(4, round(1000 / hz))
-        self._tick_job = self.root.after(interval, self._tick)
+    def _schedule_tick(self, media_active: bool = False) -> None:
+        if self._closing:
+            return
+        # Keep the event queue and timer responsive while a source is absent.
+        hz = 12
+        if media_active:
+            hz = self._effective_preview_hz()
+            if self._timeline_pane_added and not self._window_interacting:
+                hz = max(hz, int(self.config.performance.timeline_refresh_hz))
+        self._tick_job = self.root.after(max(4, round(1000 / hz)), self._tick)
 
     def _schedule_trial_expiry_check(self) -> None:
         if self._closing or not self._evaluation_mode:
@@ -1089,9 +1074,6 @@ class MainWindow:
                     else "Zkušební režim vypršel — pro pokračování aktivujte LongJumpReplay"
                 )
             self._build_menu()
-            self.file_menu_button.configure(menu=self.file_menu)
-            self.camera_menu_button.configure(menu=self.camera_menu)
-            self.view_menu_button.configure(menu=self.view_menu)
             self._update_judging_controls()
             self.root.after_idle(self._show_trial_expiry_dialog)
         self._schedule_trial_expiry_check()
@@ -1128,9 +1110,6 @@ class MainWindow:
             if hasattr(self, "evaluation_banner"):
                 self.evaluation_banner.destroy()
             self._build_menu()
-            self.file_menu_button.configure(menu=self.file_menu)
-            self.camera_menu_button.configure(menu=self.camera_menu)
-            self.view_menu_button.configure(menu=self.view_menu)
             self._apply_visibility()
             self.wizard_button.configure(state="normal")
             self._set_system_paused_ui()
@@ -1157,6 +1136,15 @@ class MainWindow:
         except tk.TclError:
             minimized = False
         live_frame, live_ts, live_index = self.capture.latest.get()
+        if live_frame is not None and live_index != self._last_source_frame_index:
+            self._last_source_frame_at = now
+            self._last_source_frame_index = live_index
+        elif live_frame is None:
+            self._last_source_frame_at = float("-inf")
+            self._last_source_frame_index = -1
+        media_active = not self._system_paused and (
+            self.playback.mode is not PlaybackMode.LIVE or now - self._last_source_frame_at < .5
+        )
         automatic_enabled = bool(
             self.config.takeoff_assist.enabled
             and self.config.takeoff_assist.automatic_monitor_enabled
@@ -1188,6 +1176,8 @@ class MainWindow:
                 self._last_replay_key = ("live", live_index)
                 self._update_auxiliary_views()
 
+        if self._camera_starting and live_frame is None:
+            self._maybe_select_available_camera()
         if self._camera_starting and not self._camera_retrying:
             if live_frame is not None:
                 self._finish_camera_start_feedback()
@@ -1225,15 +1215,38 @@ class MainWindow:
                 self._last_replay_key = key
 
         if not suspended and not minimized:
-            self._update_video_labels()
-            if (not self.config.performance.pause_hidden_panels or self._timeline_pane_added) and now - self._last_timeline_update >= 1 / max(1, self.config.performance.timeline_refresh_hz):
-                self._last_timeline_update = now; self._update_timeline()
+            self._refresh_video_feedback(media_active)
+            timeline_visible = self._timeline_pane_added or not self.config.performance.pause_hidden_panels
+            if timeline_visible and (media_active or self.timeline.model is not None):
+                if now - self._last_timeline_update >= 1 / max(1, self.config.performance.timeline_refresh_hz):
+                    self._last_timeline_update = now
+                    self._update_timeline()
             if now - self._last_stats_update >= 1 / max(1, self.config.performance.status_refresh_hz):
-                self._last_stats_update = now; self._update_status()
+                self._last_stats_update = now
+                self._update_status()
             if now - self._last_attempts_refresh >= 1 / max(1, self.config.performance.attempts_refresh_hz):
-                self._last_attempts_refresh = now; self._refresh_attempts(); self._refresh_current_try()
+                if not self._last_attempts_refresh or self.attempt_tree.get_children() or self.attempts.attempts():
+                    self._refresh_attempts()
+                    self._refresh_current_try()
+                self._last_attempts_refresh = now
         self._telemetry.record_ui_tick(time.perf_counter() - tick_started)
-        self._schedule_tick()
+        self._schedule_tick(media_active and not minimized and not suspended)
+
+    def _refresh_video_feedback(self, media_active: bool) -> None:
+        if media_active:
+            self._idle_video_signature = None
+            self._update_video_labels()
+            return
+        stats = self.capture.stats()
+        signature = (
+            self._system_paused, self._system_pause_transition, self.playback.mode,
+            self._camera_starting, self._camera_input_timed_out, self._displayed_bgr is None,
+            bool(stats.last_error), stats.captured_frames == 0, round(stats.capture_fps, 1),
+            self._selected_action_attempt_id,
+        )
+        if signature != self._idle_video_signature:
+            self._idle_video_signature = signature
+            self._update_video_labels()
 
     def _update_auxiliary_views(self) -> None:
         layout = self.config.display.layout
@@ -1321,17 +1334,26 @@ class MainWindow:
         }
         return self._t(labels[self.automatic_takeoff.state])
 
+    def _set_mode_feedback(self, text: str, background: str, foreground: str) -> None:
+        if self.mode_var.get() != text:
+            self.mode_var.set(text)
+        colors = (background, foreground)
+        if self._mode_colors != colors:
+            self.mode_badge.configure(bg=background, fg=foreground)
+            self._mode_colors = colors
+
     def _update_video_labels(self) -> None:
         self._update_judging_controls()
         p = self.palette; stats = self.capture.stats()
-        self.freeze_button.configure(text=self._t("button.live") if self.playback.mode is not PlaybackMode.LIVE else self._t("button.freeze"))
+        freeze_text = self._t("button.freeze" if self.playback.mode is PlaybackMode.LIVE else "button.live")
+        if self.freeze_button.cget("text") != freeze_text:
+            self.freeze_button.configure(text=freeze_text)
         if self._system_paused:
-            self.camera_waiting_frame.place_forget(); self.camera_action_frame.place_forget()
-            self.mode_var.set(self._t("mode.paused")); self.mode_badge.configure(bg=p["muted"], fg="#ffffff")
+            self._update_camera_input_overlay(False)
+            self._set_mode_feedback(self._t("mode.paused"), p["muted"], "#ffffff")
             self.live_canvas.set_status(self._t("mode.paused"), p["muted"])
             self.replay_canvas.set_status(self._t("mode.paused"), p["muted"], self._t("system.paused_status"))
             return
-        self._maybe_select_available_camera()
         no_video = (
             self.playback.mode is PlaybackMode.LIVE
             and self._displayed_bgr is None
@@ -1345,8 +1367,7 @@ class MainWindow:
             live_status = f"{live_status} · {automatic_status}"
         self.live_canvas.set_status(live_status, p["live"])
         if self.playback.mode is PlaybackMode.LIVE:
-            self.mode_var.set(self._t("mode.live")); self.mode_badge.configure(bg=p["live"], fg="#ffffff")
-            self.freeze_button.configure(text=self._t("button.freeze"))
+            self._set_mode_feedback(self._t("mode.live"), p["live"], "#ffffff")
             replay_status = f"● {self._t('overlay.live_review')}"
             if automatic_status:
                 replay_status = f"{replay_status} · {automatic_status}"
@@ -1354,14 +1375,12 @@ class MainWindow:
         elif self.playback.mode is PlaybackMode.LIVE_BUFFER:
             packet, newest = self.buffer.get(self.playback.live_seq), self.buffer.newest()
             offset = ((packet.timestamp_ns - newest.timestamp_ns) / 1e9) if packet and newest else 0
-            self.mode_var.set(self._t("overlay.buffer_review")); self.mode_badge.configure(bg=p["warning"], fg="#111111")
-            self.freeze_button.configure(text=self._t("button.live"))
+            self._set_mode_feedback(self._t("overlay.buffer_review"), p["warning"], "#111111")
             self.replay_canvas.set_status(f"{self._t("overlay.buffer")} · {offset:+.3f} s", p["warning"], self._t("overlay.frame_help"))
         else:
             attempt = self.attempts.get_attempt(self.playback.attempt_id or -1)
             label = f"{self._t("overlay.attempt")} #{attempt.attempt_id:02d}" if attempt else self._t("overlay.attempt")
-            self.mode_var.set(label); self.mode_badge.configure(bg=p["warning"], fg="#111111")
-            self.freeze_button.configure(text=self._t("button.live"))
+            self._set_mode_feedback(label, p["warning"], "#111111")
             if attempt:
                 rel = (self._displayed_timestamp_ns - attempt.freeze_timestamp_ns) / 1e9
                 assist = f" · {self._t("overlay.assist")} {attempt.takeoff_confidence:.0%}" if attempt.takeoff_candidate_index is not None and self.config.display.show_takeoff_assist_badge else ""
@@ -1373,14 +1392,14 @@ class MainWindow:
 
     def _update_status(self) -> None:
         capture, buffer = self.capture.stats(), self.buffer.stats()
-        cache_gb = self.attempts.cache_size_bytes() / 1024 ** 3
+        cache_bytes = self.attempts.cache_size_bytes()
         runtime = self._telemetry.snapshot(capture, buffer)
         # Keep health monitoring independent of the capture pause state.  The
         # camera/buffer status may be intentionally frozen, but CPU/RAM/disk
         # and the performance history must continue to describe the process.
         sampled = self.performance_monitor.sample(
             capture, buffer,
-            cache_bytes=self.attempts.cache_size_bytes(),
+            cache_bytes=cache_bytes,
             ui_p95_ms=runtime.ui_p95_ms,
             capture_active=self.capture.is_running and not self._system_paused,
         )
@@ -1390,24 +1409,31 @@ class MainWindow:
                 target_fps=self.config.camera.fps,
                 queue_capacity=self.config.buffer.encoder_queue_size,
             )
+        clock = time.strftime("%H:%M:%S")
         if self._system_paused:
-            self.camera_var.set(self._t("mode.paused")); self.clock_var.set(time.strftime("%H:%M:%S"))
-            self.status_var.set(self._t("system.paused_status"))
-            self.camera_warning_var.set("")
-            return
-        self.camera_var.set(capture.source_description); self.clock_var.set(time.strftime("%H:%M:%S"))
-        capture_text = f"CAP {capture.capture_fps:5.1f} fps  ·  BUFFER {capture.encode_fps:5.1f} fps / {buffer.duration_seconds:4.1f} s"
-        self.status_var.set(
-            f"{capture_text}  ·  RAM {buffer.memory_bytes / 1024 ** 2:,.0f} MB  ·  drops {capture.queue_drops}  ·  cache {cache_gb:.2f} GB"
-        )
-        warning = self._capture_quality_warning(capture)
-        if self.config.display.show_capture_warnings and warning:
-            self.camera_warning_var.set(self._compact_capture_warning(capture))
+            camera = self._t("mode.paused")
+            status = self._t("system.paused_status")
+            warning = ""
         else:
-            self.camera_warning_var.set("")
-        if not self._busy_depth and time.perf_counter() >= self._message_until: self.message_var.set(self.shuttle.status)
-        if capture.last_error and capture.last_error != self._last_error:
-            self._last_error = capture.last_error; self._show_message(f"Camera: {capture.last_error}", 8)
+            camera = capture.source_description
+            status = (
+                f"CAP {capture.capture_fps:5.1f} fps  ·  BUFFER {capture.encode_fps:5.1f} fps / {buffer.duration_seconds:4.1f} s"
+                f"  ·  RAM {buffer.memory_bytes / 1024 ** 2:,.0f} MB  ·  drops {capture.queue_drops}"
+                f"  ·  cache {cache_bytes / 1024 ** 3:.2f} GB"
+            )
+            warning = self._compact_capture_warning(capture) if (
+                self.config.display.show_capture_warnings and self._capture_quality_warning(capture)
+            ) else ""
+        for variable, value in ((self.camera_var, camera), (self.clock_var, clock),
+                                (self.status_var, status), (self.camera_warning_var, warning)):
+            if variable.get() != value:
+                variable.set(value)
+        if not self._system_paused:
+            if not self._busy_depth and time.perf_counter() >= self._message_until and self.message_var.get() != self.shuttle.status:
+                self.message_var.set(self.shuttle.status)
+            if capture.last_error and capture.last_error != self._last_error:
+                self._last_error = capture.last_error
+                self._show_message(f"Camera: {capture.last_error}", 8)
 
     def _begin_busy(self, message: str, *, mode: str = "indeterminate", delay_ms: int = 0) -> None:
         """Show non-blocking activity feedback in the status bar."""
@@ -1431,19 +1457,22 @@ class MainWindow:
             show()
 
     def _update_camera_input_overlay(self, no_video: bool) -> None:
-        waiting = self._camera_starting and self._displayed_bgr is None
+        waiting = self._camera_starting and not self._system_paused and self._displayed_bgr is None
         timed_out = no_video and (self._camera_input_timed_out or not self._camera_starting)
         if waiting:
-            self.camera_waiting_progress.start(12)
-            self.camera_waiting_frame.place(relx=.5, rely=.55, anchor="center")
-            self.camera_waiting_frame.lift()
+            if not self.camera_waiting_frame.winfo_manager():
+                self.camera_waiting_progress.start(12)
+                self.camera_waiting_frame.place(relx=.5, rely=.55, anchor="center")
+                self.camera_waiting_frame.lift()
             self.camera_action_frame.place_forget()
             return
-        self.camera_waiting_progress.stop()
-        self.camera_waiting_frame.place_forget()
+        if self.camera_waiting_frame.winfo_manager():
+            self.camera_waiting_progress.stop()
+            self.camera_waiting_frame.place_forget()
         if timed_out:
-            self.camera_action_frame.place(relx=.5, rely=.61, anchor="center")
-            self.camera_action_frame.lift()
+            if not self.camera_action_frame.winfo_manager():
+                self.camera_action_frame.place(relx=.5, rely=.61, anchor="center")
+                self.camera_action_frame.lift()
         else:
             self.camera_action_frame.place_forget()
 
@@ -1653,49 +1682,46 @@ class MainWindow:
             and self.playback.mode is PlaybackMode.ATTEMPT
             and self.playback.attempt_id is not None
         )
+        active_attempt = self.attempts.get_attempt(self.playback.attempt_id) if enabled else None
+        active_decision = active_attempt.decision if active_attempt else AttemptDecision.NOT_DECIDED
+
+        # Open, Export and Delete require an explicit recording selection.
+        selected_attempt = (
+            self._selected_action_attempt_id is not None
+            and self.attempts.get_attempt(self._selected_action_attempt_id) is not None
+        )
+        export_allowed = False
+        if selected_attempt:
+            if self._evaluation_mode:
+                policy = capabilities_for()
+                export_allowed = policy.permits("video_export") and policy.exports_remaining > 0
+            else:
+                export_allowed = not trial_is_active()
+        has_temporary_recordings = any(not attempt.persistent for attempt in self.attempts.attempts())
+        signature = (enabled, active_decision, selected_attempt, export_allowed, has_temporary_recordings)
+        if signature == self._judging_control_signature:
+            return
+        self._judging_control_signature = signature
+
         state = ["!disabled"] if enabled else ["disabled"]
-        for button in (self.prev_frame_button, self.next_frame_button):
+        for button in (self.prev_frame_button, self.next_frame_button, self.top_view_button):
             button.state(state)
-        self.top_view_button.state(state)
-        for button in (self.not_decided_button, self.valid_button, self.foul_button, self.review_button):
-            button.state(state)
-        active_decision = AttemptDecision.NOT_DECIDED
-        if enabled and self.playback.attempt_id is not None:
-            active_attempt = self.attempts.get_attempt(self.playback.attempt_id)
-            if active_attempt is not None:
-                active_decision = active_attempt.decision
         for button, decision in (
             (self.not_decided_button, AttemptDecision.NOT_DECIDED),
             (self.valid_button, AttemptDecision.VALID),
             (self.foul_button, AttemptDecision.FOUL),
             (self.review_button, AttemptDecision.REVIEW),
         ):
-            button.state(["selected"] if enabled and active_decision is decision else ["!selected"])
+            button.state([*state, "selected" if enabled and active_decision is decision else "!selected"])
 
-        # Recordings actions follow the explicit selection in either the
-        # Recordings list or the Competition Board. Export and Delete are
-        # intentionally quiet until that target is a real attempt; Clear
-        # becomes a red action only when temporary attempts exist.
-        selected_attempt = (
-            self._selected_action_attempt_id is not None
-            and self.attempts.get_attempt(self._selected_action_attempt_id) is not None
-        )
-        trial_policy = capabilities_for() if self._evaluation_mode else None
-        export_allowed = (
-            (not self._evaluation_mode and not trial_is_active())
-            or bool(trial_policy and trial_policy.permits("video_export") and trial_policy.exports_remaining > 0)
-        )
-        self.open_attempt_button.state(["!disabled"] if selected_attempt else ["disabled"])
-        self.export_button.state(["!disabled"] if selected_attempt and export_allowed else ["disabled"])
-        self.delete_button.state(["!disabled"] if selected_attempt else ["disabled"])
-        self.open_attempt_button.configure(style="Secondary.TButton" if selected_attempt else "Neutral.TButton")
-        self.export_button.configure(style="Secondary.TButton" if selected_attempt and export_allowed else "Neutral.TButton")
-        self.delete_button.configure(style="Secondary.TButton" if selected_attempt else "Neutral.TButton")
-        has_temporary_recordings = any(not attempt.persistent for attempt in self.attempts.attempts())
-        self.clear_button.state(["!disabled"] if has_temporary_recordings else ["disabled"])
-        clear_style = "Destructive.TButton" if has_temporary_recordings else "Neutral.TButton"
-        if self.clear_button.cget("style") != clear_style:
-            self.clear_button.configure(style=clear_style)
+        for button, available, active_style in (
+            (self.open_attempt_button, selected_attempt, "Secondary.TButton"),
+            (self.export_button, export_allowed, "Secondary.TButton"),
+            (self.delete_button, selected_attempt, "Secondary.TButton"),
+            (self.clear_button, has_temporary_recordings, "Destructive.TButton"),
+        ):
+            button.state(["!disabled"] if available else ["disabled"])
+            button.configure(style=active_style if available else "Neutral.TButton")
 
     def toggle_system_pause(self) -> None:
         if self._system_pause_transition:
@@ -4142,7 +4168,7 @@ class MainWindow:
         win = tk.Toplevel(self.root); configure_popup(win, self.root); self._onboarding_window = win
         win.title("Getting started" if lang == "en" else "Začínáme"); win.geometry("560x340"); win.resizable(False, False); win.transient(self.root); win.grab_set()
         body = ttk.Frame(win, style="App.TFrame", padding=26); body.pack(fill="both", expand=True)
-        title = ttk.Label(body, style="SettingsHeroTitle.TLabel", font=("Segoe UI Semibold", 19)); title.pack(anchor="w")
+        title = ttk.Label(body, style="Title.TLabel", font=("Segoe UI Semibold", 19)); title.pack(anchor="w")
         progress = ttk.Label(body, style="Muted.TLabel"); progress.pack(anchor="w", pady=(4, 18))
         copy = ttk.Label(body, style="Text.TLabel", wraplength=500, justify="left", font=("Segoe UI", 11)); copy.pack(anchor="w", fill="x", expand=True)
         buttons = ttk.Frame(body, style="App.TFrame"); buttons.pack(fill="x", pady=(18, 0))
@@ -4180,12 +4206,7 @@ class MainWindow:
             for canvas in self._all_video_canvases():
                 canvas.set_language(self.config.general.language)
         self.root.title(self._t("app.title"))
-        self.header_title.configure(text=self._t("app.header"))
         self._update_athlete_timer_display()
-        self.file_menu_button.configure(text=self._t("menu.file"))
-        self.camera_menu_button.configure(text=self._t("menu.camera"))
-        self.view_menu_button.configure(text=self._t("menu.view"))
-        self.help_menu_button.configure(text=self._t("menu.help"))
         self.freeze_button.configure(text=self._t("button.freeze"))
         self.system_pause_button.configure(text=self._t("button.resume_system") if self._system_paused else self._t("button.pause_system"))
         self.prev_frame_button.configure(text=self._t("button.previous_frame"))
@@ -4195,8 +4216,6 @@ class MainWindow:
         self.valid_button.configure(text=self._t("button.valid"))
         self.foul_button.configure(text=self._t("button.foul"))
         self.review_button.configure(text=self._t("button.review"))
-        self.frame_group_label.configure(text=self._t("controls.frame_review"))
-        self.decision_group_label.configure(text=self._t("controls.judging"))
         self.wizard_button.configure(text=self._t("button.wizard"))
         self.roster_button.configure(text=self._t("menu.edit_roster"))
         self.announcer_frame.configure(text=self._t("announcer.title"))
@@ -4231,13 +4250,7 @@ class MainWindow:
             self.side_notebook.tab(self.performance_tab, text=self._t("performance.title").title())
         except tk.TclError:
             pass
-        # Recreate popup menus only on an actual language/settings change, not
-        # in the video loop. The header buttons are then pointed at the new menus.
         self._build_menu()
-        self.file_menu_button.configure(menu=self.file_menu)
-        self.camera_menu_button.configure(menu=self.camera_menu)
-        self.view_menu_button.configure(menu=self.view_menu)
-        self.help_menu_button.configure(menu=self.help_menu)
         self._refresh_competitor_selector()
         self._refresh_attempts()
 
@@ -4316,10 +4329,6 @@ class MainWindow:
         else:
             # Menu contents depend on optional feature toggles.
             self._build_menu()
-            self.file_menu_button.configure(menu=self.file_menu)
-            self.camera_menu_button.configure(menu=self.camera_menu)
-            self.view_menu_button.configure(menu=self.view_menu)
-            self.help_menu_button.configure(menu=self.help_menu)
         self._refresh_competitor_selector()
         # _apply_visibility positions the sash when the timeline is newly
         # shown. Leave an already-visible sash untouched so merely applying
@@ -4403,10 +4412,6 @@ class MainWindow:
             4,
         )
         self._build_menu()
-        self.file_menu_button.configure(menu=self.file_menu)
-        self.camera_menu_button.configure(menu=self.camera_menu)
-        self.view_menu_button.configure(menu=self.view_menu)
-        self.help_menu_button.configure(menu=self.help_menu)
 
     def _check_recovered_session(self) -> None:
         if self._recovery_checked or self._closing:

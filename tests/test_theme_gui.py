@@ -87,8 +87,6 @@ def test_button_system_has_stable_sizes_and_states(theme_name: str) -> None:
         for style_name in BUTTON_STYLES.values():
             assert style.layout(style_name)
         menu_layout = str(style.layout("TMenubutton"))
-        expected_menu_element = f"Modern{theme_name.title()}.menu.Menubutton.background"
-        assert expected_menu_element in menu_layout
         assert "Menubutton.label" in menu_layout
         assert "Menubutton.indicator" in menu_layout
 
@@ -98,17 +96,17 @@ def test_button_system_has_stable_sizes_and_states(theme_name: str) -> None:
             for label, variant in (("PENDING", "pending"), ("VALID", "valid"), ("FOUL", "foul"), ("REVIEW", "review"))
         ]
         root.update_idletasks()
-        assert 30 <= standard.winfo_reqheight() <= 36
+        assert 20 <= standard.winfo_reqheight() <= 30
         assert len({button.winfo_reqheight() for button in judge_buttons}) == 1
-        assert 32 <= judge_buttons[0].winfo_reqheight() <= 38
+        assert 20 <= judge_buttons[0].winfo_reqheight() <= 30
 
         judge_buttons[1].state(["selected"])
         assert judge_buttons[1].instate(["selected"])
         standard.state(["disabled"])
         assert standard.instate(["disabled"])
         assert style.lookup(button_style("secondary"), "foreground", ("disabled",)) == palette["button_disabled_text"]
-        assert style.lookup(button_style("secondary"), "background", ("active",)) == palette["bg"]
-        assert manager._image_assets[f"Modern{theme_name.title()}.primary.normal"].transparency_get(0, 0)
+        assert style.lookup(button_style("secondary"), "background", ("active",)) == palette["button_hover"]
+        assert "Button.border" in str(style.layout(button_style("primary")))
     finally:
         root.destroy()
 

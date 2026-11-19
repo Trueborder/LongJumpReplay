@@ -19,6 +19,12 @@
 - Moves the LongJumpReplay switch and language control to the bottom of the navigation menu, while keeping sign-out in the header.
 - Adds an accessible account-settings icon and tighter EconomySuite / Novaryn Solutions branding.
 
+## 6.2.11 - 2026-11-19
+
+- Simplified the judge workspace with a standard menu bar and a compact row for replay and judging controls.
+- Replaced the settings sidebar with tabs. Each settings page loads when first needed.
+- Reduced UI updates when no video is arriving. Camera capture, retained frames, and evidence quality keep the configured settings.
+
 ## 6.2.10 - 2026-09-13
 
 - Makes the startup splash fade visibly into view while keeping a shorter

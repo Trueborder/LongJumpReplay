@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 from pathlib import Path
 import sys
@@ -73,9 +74,13 @@ def jpeg_frame():
 
 
 @pytest.fixture(autouse=True)
-def noninteractive_main_window_shutdown(monkeypatch):
+def noninteractive_main_window_shutdown(monkeypatch, request):
     """Keep existing GUI tests non-blocking while production close stays interactive."""
     from src.main_window import MainWindow
     from src.session_storage import RetentionPlan
 
+    if request.node.path.name.endswith("_gui.py"):
+        # Collect destroyed Tk roots on the owner thread before a test starts
+        # new capture workers that could trigger cyclic collection themselves.
+        gc.collect()
     monkeypatch.setattr(MainWindow, "_show_shutdown_dialog", lambda _self: RetentionPlan())

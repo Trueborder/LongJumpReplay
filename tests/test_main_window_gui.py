@@ -433,3 +433,44 @@ def test_window_interaction_suspends_expensive_redraws(tmp_path):
 
     assert state['during'] == (True, True, True, True)
     assert state['after'] == (False, False, False, False)
+
+
+def test_idle_workspace_draws_video_and_timeline_when_a_source_arrives(monkeypatch, tmp_path):
+    monkeypatch.setattr(MainWindow, "_start_camera_with_feedback", lambda *_: None)
+    config = AppConfig()
+    config.general.onboarding_completed = True
+    config.shuttle.enabled = False
+    config.camera.source_type = "synthetic"
+    config.camera.width, config.camera.height, config.camera.fps = 320, 180, 60
+    updates = []
+    update_timeline = MainWindow._update_timeline
+
+    def count_timeline_update(window):
+        updates.append(True)
+        update_timeline(window)
+
+    monkeypatch.setattr(MainWindow, "_update_timeline", count_timeline_update)
+    root = tk.Tk()
+    app = MainWindow(root, config, tmp_path / "config.json")
+
+    def run_for(milliseconds):
+        root.after(milliseconds, root.quit)
+        root.mainloop()
+
+    try:
+        run_for(350)
+        updates.clear()
+        run_for(300)
+        assert not updates
+        assert app.timeline.model is None
+        assert str(root["menu"]) == str(app.menubar)
+
+        app.capture.start()
+        run_for(900)
+        assert updates
+        assert app.timeline.model is not None
+        assert app._displayed_bgr is not None
+        assert app.capture.is_running
+    finally:
+        app.close()
+        root.mainloop()

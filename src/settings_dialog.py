@@ -70,18 +70,13 @@ class SettingsDialog(tk.Toplevel):
 
     CATEGORY_DEFS = [
         ("general", "General", "Obecné"),
-        ("camera_recording", "Camera & recording", "Kamera a záznam"),
+        ("camera_recording", "Camera / recording", "Kamera a záznam"),
         ("competition", "Competition", "Soutěž"),
-        ("judging", "Judging & evidence", "Rozhodování a důkazy"),
-        ("board_assist", "Board & Take-off Assist", "Prkno a asistent odrazu"),
-        ("workspace_controls", "Workspace & controls", "Pracovní plocha a ovládání"),
-        ("licence", "Licence & support", "Licence a podpora"),
+        ("judging", "Judging", "Rozhodování"),
+        ("board_assist", "Take-off", "Odraz"),
+        ("workspace_controls", "Controls", "Ovládání"),
+        ("licence", "Licence", "Licence"),
         ("advanced", "Advanced", "Pokročilé"),
-    ]
-    CATEGORY_GROUPS = [
-        ("essentials", "ESSENTIALS", "ZÁKLADNÍ", ("general", "camera_recording")),
-        ("event", "EVENT WORKFLOW", "PRŮBĚH SOUTĚŽE", ("competition", "judging", "board_assist")),
-        ("system", "WORKSPACE & SYSTEM", "PRACOVNÍ PLOCHA A SYSTÉM", ("workspace_controls", "licence", "advanced")),
     ]
     SIMPLE_PAGES = {"general", "camera_recording", "competition", "judging", "board_assist", "licence"}
 
@@ -105,17 +100,15 @@ class SettingsDialog(tk.Toplevel):
         self.lang = self.working.general.language
         self.tr = Translator(self.lang)
         self.title(self.tr("settings.title"))
-        self.geometry("1220x820")
-        self.minsize(1100, 700)
+        self.geometry("900x650")
+        self.minsize(720, 460)
         self.transient(parent)
         self.grab_set()
         self._vars: dict[str, tk.Variable] = {}
         self._pages: dict[str, ttk.Frame] = {}
         self._page_inners: dict[str, ttk.Frame] = {}
         self._page_canvases: dict[str, tk.Canvas] = {}
-        self._nav_buttons: dict[str, ttk.Button] = {}
-        self._nav_group_labels: dict[str, ttk.Label] = {}
-        self._category_group: dict[str, str] = {}
+        self._tracked_vars: set[str] = set()
         self._current_page = ""
         self._dirty = False
         self._initialising = True
@@ -126,35 +119,40 @@ class SettingsDialog(tk.Toplevel):
         self._search_entries: list[dict[str, object]] = []
         self._search_result_rows: list[dict[str, object]] = []
         self._building_page = "general"
-        self._description_headers: list[tuple[ttk.Frame, ttk.Label]] = []
         self._build()
+        self._show_page("general")
         if "show_tooltips" in self._vars:
             self._vars["show_tooltips"].trace_add("write", lambda *_args: self._update_description_visibility())
             self._update_description_visibility()
         self._initialising = False
-        self._attach_dirty_traces()
         self.protocol("WM_DELETE_WINDOW", self._cancel)
-        self._show_page("general")
+
+    def destroy(self) -> None:
+        # Tcl variable callbacks can retain a closed dialog until the app exits.
+        variables = list(getattr(self, "_vars", {}).values())
+        if hasattr(self, "search_var"):
+            variables.append(self.search_var)
+        for variable in variables:
+            for modes, token in variable.trace_info():
+                variable.trace_remove(modes, token)
+        super().destroy()
 
     def _txt(self, en: str, cs: str) -> str:
         return cs if self.lang == "cs" else en
 
-    def _build_deferred_pages(self) -> None:
-        builders = getattr(self, "_deferred_builders", ())
-        self._deferred_builders = ()
-        for page_key, builder in builders:
-            if not self.winfo_exists():
-                return
-            self._build_on_page(page_key, builder)
-        for page_key, inner in self._page_inners.items():
-            canvas = self._page_canvases.get(page_key)
-            if canvas:
-                self._bind_scroll_descendants(inner, canvas)
+    def _ensure_page_built(self, key: str) -> None:
+        builders = self._page_builders.pop(key, None)
+        if builders is None:
+            return
+        for builder in builders:
+            self._build_on_page(key, builder)
+        self._bind_scroll_descendants(self._page_inners[key], self._page_canvases[key])
+        self._update_description_visibility()
         self._attach_dirty_traces()
 
     def _ensure_all_pages_built(self) -> None:
-        if getattr(self, "_deferred_builders", ()):
-            self._build_deferred_pages()
+        for key in tuple(self._page_builders):
+            self._ensure_page_built(key)
 
     def _action_label(self, action: str) -> str:
         if action == "timer_toggle":
@@ -163,99 +161,46 @@ class SettingsDialog(tk.Toplevel):
         return values[1] if self.lang == "cs" else values[0]
 
     def _build(self) -> None:
-        shell = ttk.Frame(self, style="App.TFrame", padding=14)
+        shell = ttk.Frame(self, padding=8)
         shell.grid(row=0, column=0, sticky="nsew")
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         shell.rowconfigure(1, weight=1)
         shell.columnconfigure(0, weight=1)
 
-        header = ttk.Frame(shell, style="SettingsHeader.TFrame", padding=(18, 13))
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        brand = ttk.Frame(header, style="Panel.TFrame")
-        brand.pack(side="left")
-        ttk.Label(brand, text=self.tr("settings.header"), style="Brand.TLabel").pack(anchor="w")
-        ttk.Label(brand, text=self.tr("settings.subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(1, 0))
-        self.dirty_label = ttk.Label(header, text="", style="SettingsDirty.TLabel")
-        self.dirty_label.pack(side="right", padx=(14, 0))
-        self.settings_view_var = tk.StringVar(value=self.working.general.settings_view)
-        view_switch = ttk.Frame(header, style="Panel.TFrame")
-        view_switch.pack(side="right")
-        self.simple_view_button = ttk.Button(
-            view_switch, text=self._txt("Simple", "Jednoduché"), style="Secondary.TButton",
-            command=lambda: self._set_settings_view("simple"),
-        )
-        self.simple_view_button.pack(side="left")
-        self.advanced_view_button = ttk.Button(
-            view_switch, text=self._txt("Advanced", "Pokročilé"), style="Secondary.TButton",
-            command=lambda: self._set_settings_view("advanced"),
-        )
-        self.advanced_view_button.pack(side="left", padx=(6, 0))
-
-        body = ttk.Frame(shell, style="App.TFrame")
-        body.grid(row=1, column=0, sticky="nsew")
-        body.rowconfigure(0, weight=1)
-        body.columnconfigure(1, weight=1)
-        sidebar = ttk.Frame(body, style="SettingsSidebar.TFrame", padding=10, width=255)
-        sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 12))
-        sidebar.grid_propagate(False)
-        ttk.Label(sidebar, text=self.tr("settings.find_area"), style="SettingsGroup.TLabel").pack(anchor="w", padx=5, pady=(2, 5))
+        options = ttk.Frame(shell)
+        options.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(options, text=self._txt("Find setting", "Najít nastavení")).pack(side="left", padx=(0, 5))
         self.search_var = tk.StringVar()
-        search = ttk.Entry(sidebar, textvariable=self.search_var)
-        self.search_entry = search
-        search.pack(fill="x", pady=(0, 10))
-        search.insert(0, "")
-        search.bind("<Down>", lambda _event: self._move_search_selection(1))
-        search.bind("<Up>", lambda _event: self._move_search_selection(-1))
-        search.bind("<Return>", self._open_selected_search_result)
-        search.bind("<Escape>", self._clear_search)
-        nav_wrapper = ttk.Frame(sidebar, style="Toolbar.TFrame")
-        nav_wrapper.pack(fill="both", expand=True)
-        nav_wrapper.rowconfigure(0, weight=1)
-        nav_wrapper.columnconfigure(0, weight=1)
-        nav_bg = ttk.Style(self).lookup("Toolbar.TFrame", "background") or self.cget("background")
-        self.nav_canvas = tk.Canvas(nav_wrapper, highlightthickness=0, bd=0, background=nav_bg)
-        self.nav_scrollbar = ttk.Scrollbar(nav_wrapper, orient="vertical", command=self.nav_canvas.yview)
-        self.nav_canvas.configure(yscrollcommand=self.nav_scrollbar.set)
-        self.nav_canvas.grid(row=0, column=0, sticky="nsew")
-        self.nav_scrollbar.grid(row=0, column=1, sticky="ns", padx=(5, 0))
-        self.nav_host = ttk.Frame(self.nav_canvas, style="Toolbar.TFrame")
-        self._nav_window = self.nav_canvas.create_window((0, 0), window=self.nav_host, anchor="nw")
-        self.nav_host.bind("<Configure>", self._update_navigation_scrollregion)
-        bind_resize_only(self.nav_canvas, self._resize_navigation_host)
-        self._bind_navigation_wheel(self.nav_canvas)
-        self._bind_navigation_wheel(self.nav_host)
+        self.search_entry = ttk.Entry(options, textvariable=self.search_var, width=24)
+        self.search_entry.pack(side="left")
+        self.search_entry.bind("<Down>", lambda _event: self._move_search_selection(1))
+        self.search_entry.bind("<Up>", lambda _event: self._move_search_selection(-1))
+        self.search_entry.bind("<Return>", self._open_selected_search_result)
+        self.search_entry.bind("<Escape>", self._clear_search)
+        self.settings_view_var = tk.StringVar(value=self.working.general.settings_view)
+        ttk.Checkbutton(
+            options, text=self._txt("Show advanced tabs", "Zobrazit pokročilé záložky"),
+            variable=self.settings_view_var, onvalue="advanced", offvalue="simple",
+            command=lambda: self._set_settings_view(self.settings_view_var.get()),
+        ).pack(side="right")
 
-        self.page_host = ttk.Frame(body, style="Panel.TFrame", padding=1)
-        self.page_host.grid(row=0, column=1, sticky="nsew")
-        definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
-        for group_key, group_en, group_cs, keys in self.CATEGORY_GROUPS:
-            label = ttk.Label(self.nav_host, text=self._txt(group_en, group_cs), style="SettingsGroup.TLabel")
-            label.pack(fill="x", padx=5, pady=(10 if self._nav_group_labels else 2, 4))
-            self._bind_navigation_wheel(label)
-            self._nav_group_labels[group_key] = label
-            for key in keys:
-                en, cs = definitions[key]
-                self._category_group[key] = group_key
-                button = ttk.Button(self.nav_host, text=self._txt(en, cs), style="SettingsNav.TButton", command=lambda k=key: self._show_page(k))
-                button.pack(fill="x", pady=1)
-                self._bind_navigation_wheel(button)
-                self._nav_buttons[key] = button
-        for key, _en, _cs in self.CATEGORY_DEFS:
-            wrapper, inner = self._new_scroll_page()
+        self.page_host = ttk.Frame(shell)
+        self.page_host.grid(row=1, column=0, sticky="nsew")
+        self.notebook = ttk.Notebook(self.page_host)
+        self.notebook.enable_traversal()
+        for key, en, cs in self.CATEGORY_DEFS:
+            wrapper, inner, canvas = self._new_scroll_page()
             self._pages[key] = wrapper
             self._page_inners[key] = inner
-            self._page_canvases[key] = self._pending_page_canvas
+            self._page_canvases[key] = canvas
+            self.notebook.add(wrapper, text=self._txt(en, cs))
+        self.notebook.bind("<<NotebookTabChanged>>", self._tab_changed)
         self._apply_settings_view_navigation()
 
-        self.search_results = ttk.Frame(self.page_host, style="Panel.TFrame", padding=18)
-        ttk.Label(
-            self.search_results,
-            text=self._txt("Settings search", "Hledání v nastavení"),
-            style="SettingsHeroTitle.TLabel",
-        ).pack(anchor="w", pady=(0, 4))
-        self.search_results_summary = ttk.Label(self.search_results, text="", style="Muted.TLabel")
-        self.search_results_summary.pack(anchor="w", pady=(0, 10))
+        self.search_results = ttk.Frame(self.page_host)
+        self.search_results_summary = ttk.Label(self.search_results, text="")
+        self.search_results_summary.pack(anchor="w", pady=(0, 4))
         self.search_results_tree = ttk.Treeview(
             self.search_results,
             columns=("setting", "page"),
@@ -272,35 +217,22 @@ class SettingsDialog(tk.Toplevel):
         self.search_results_tree.bind("<Escape>", self._clear_search)
 
         self.search_var.trace_add("write", lambda *_: self._filter_navigation())
-        builders = (
-            ("general", self._build_general), ("general", self._build_appearance),
-            ("camera_recording", self._build_camera),
-            ("camera_recording", self._build_replay), ("competition", self._build_competition),
-            ("competition", self._build_rounds), ("competition", self._build_timer),
-            ("competition", self._build_final), ("judging", self._build_decisions),
-            ("judging", self._build_evidence), ("board_assist", self._build_board),
-            ("board_assist", self._build_assist), ("workspace_controls", self._build_views),
-            ("workspace_controls", self._build_hotkeys), ("workspace_controls", self._build_shuttle),
-            ("licence", self._build_licence), ("advanced", self._build_performance),
-            ("advanced", self._build_camera_advanced), ("advanced", self._build_advanced),
-        )
-        # Build the visible page first so the dialog opens before the heavier
-        # camera, roster, hotkey and performance controls are created.
-        for page_key, builder in builders[:2]:
-            self._build_on_page(page_key, builder)
-        # Licence diagnostics are kept available immediately because the
-        # Settings entry point can be used to activate or inspect an install.
-        self._build_on_page("licence", self._build_licence)
-        self._deferred_builders = tuple(item for item in builders[2:] if item[0] != "licence")
-        self.after_idle(self._build_deferred_pages)
-        for page_key, inner in self._page_inners.items():
-            canvas = self._page_canvases.get(page_key)
-            if canvas:
-                self._bind_scroll_descendants(inner, canvas)
+        self._page_builders = {
+            "general": (self._build_general, self._build_appearance),
+            "camera_recording": (self._build_camera, self._build_replay),
+            "competition": (self._build_competition, self._build_rounds, self._build_timer, self._build_final),
+            "judging": (self._build_decisions, self._build_evidence),
+            "board_assist": (self._build_board, self._build_assist),
+            "workspace_controls": (self._build_views, self._build_hotkeys, self._build_shuttle),
+            "licence": (self._build_licence,),
+            "advanced": (self._build_performance, self._build_camera_advanced, self._build_advanced),
+        }
 
-        footer = ttk.Frame(shell, style="SettingsHeader.TFrame", padding=(12, 9))
+        footer = ttk.Frame(shell)
         self.footer = footer
-        footer.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        footer.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        self.dirty_label = ttk.Label(footer, text="", style="SettingsDirty.TLabel")
+        self.dirty_label.pack(side="left", padx=(0, 8))
         self.restore_button = ttk.Button(footer, text=self.tr("settings.restore"), style="Secondary.TButton", command=self._restore_defaults)
         self.restore_button.pack(side="left")
         self.cancel_button = ttk.Button(footer, text=self.tr("settings.cancel"), style="Secondary.TButton", command=self._cancel)
@@ -316,25 +248,24 @@ class SettingsDialog(tk.Toplevel):
     def _build_on_page(self, page_key: str, builder: Callable[[ttk.Frame], None]) -> None:
         """Build one logical section inside one of the eight operator pages."""
         host = ttk.Frame(self._page_inners[page_key], style="Panel.TFrame")
-        host.pack(fill="x", expand=True, pady=(0, 14))
+        host.pack(fill="x", pady=(0, 9))
         self._building_page = page_key
         builder(host)
 
-    def _new_scroll_page(self) -> tuple[ttk.Frame, ttk.Frame]:
-        wrapper = ttk.Frame(self.page_host, style="Panel.TFrame")
+    def _new_scroll_page(self) -> tuple[ttk.Frame, ttk.Frame, tk.Canvas]:
+        wrapper = ttk.Frame(self.notebook, style="Panel.TFrame")
         panel_bg = ttk.Style(self).lookup("Panel.TFrame", "background") or self.cget("background")
         canvas = tk.Canvas(wrapper, highlightthickness=0, bd=0, background=panel_bg)
         scrollbar = ttk.Scrollbar(wrapper, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        inner = ttk.Frame(canvas, style="Panel.TFrame", padding=18)
+        inner = ttk.Frame(canvas, style="Panel.TFrame", padding=8)
         window = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda _e, c=canvas: c.configure(scrollregion=c.bbox("all")))
         bind_resize_only(canvas, lambda e, c=canvas, w=window: c.itemconfigure(w, width=e.width))
         self._bind_scroll_events(canvas, lambda direction, c=canvas: c.yview_scroll(direction, "units"))
-        self._pending_page_canvas = canvas
-        return wrapper, inner
+        return wrapper, inner, canvas
 
     def _bind_scroll_descendants(self, widget: tk.Misc, canvas: tk.Canvas) -> None:
         self._bind_scroll_events(widget, lambda direction, c=canvas: c.yview_scroll(direction, "units"))
@@ -352,33 +283,29 @@ class SettingsDialog(tk.Toplevel):
         widget.bind("<Button-4>", lambda _e: (scroll(-1), "break")[1], add="+")
         widget.bind("<Button-5>", lambda _e: (scroll(1), "break")[1], add="+")
 
-    def _bind_navigation_wheel(self, widget: tk.Misc) -> None:
-        self._bind_scroll_events(widget, lambda direction: self.nav_canvas.yview_scroll(direction, "units"))
-
-    def _scroll_navigation(self, event: tk.Event) -> str:
-        if event.delta:
-            self.nav_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
-        return "break"
-
-    def _update_navigation_scrollregion(self, _event: tk.Event | None = None) -> None:
-        self.nav_canvas.configure(scrollregion=self.nav_canvas.bbox("all"))
-
-    def _resize_navigation_host(self, event: tk.Event) -> None:
-        self.nav_canvas.itemconfigure(self._nav_window, width=event.width)
+    def _tab_changed(self, _event: tk.Event) -> None:
+        if self.search_var.get().strip():
+            return
+        selected = self.notebook.select()
+        for key, page in self._pages.items():
+            if str(page) == selected:
+                self._current_page = key
+                self._ensure_page_built(key)
+                self._apply_settings_view_navigation()
+                break
 
     def _show_page(self, key: str) -> None:
         self.search_results.pack_forget()
-        if self._current_page and self._current_page != key:
-            self._pages[self._current_page].pack_forget()
-        if not self._pages[key].winfo_manager():
-            self._pages[key].pack(fill="both", expand=True)
         self._current_page = key
-        for name, button in self._nav_buttons.items():
-            button.state(["selected"] if name == key else ["!selected"])
+        self._ensure_page_built(key)
+        self.notebook.tab(self._pages[key], state="normal")
+        self.notebook.select(self._pages[key])
+        self._apply_settings_view_navigation()
+        if not self.notebook.winfo_manager():
+            self.notebook.pack(fill="both", expand=True)
 
     def _set_settings_view(self, mode: str) -> None:
         self.settings_view_var.set("advanced" if mode == "advanced" else "simple")
-        self.working.general.settings_view = self.settings_view_var.get()
         self._apply_settings_view_navigation()
         if self._current_page not in self._visible_pages():
             self._show_page("general")
@@ -391,20 +318,10 @@ class SettingsDialog(tk.Toplevel):
 
     def _apply_settings_view_navigation(self) -> None:
         visible = self._visible_pages()
-        definitions = {key: (en, cs) for key, en, cs in self.CATEGORY_DEFS}
-        for label in self._nav_group_labels.values(): label.pack_forget()
-        for button in self._nav_buttons.values(): button.pack_forget()
-        for group_key, _group_en, _group_cs, keys in self.CATEGORY_GROUPS:
-            shown = [key for key in keys if key in visible]
-            if not shown: continue
-            self._nav_group_labels[group_key].pack(fill="x", padx=5, pady=(10 if group_key != "essentials" else 2, 4))
-            for key in shown:
-                self._nav_buttons[key].configure(text=self._txt(*definitions[key]))
-                self._nav_buttons[key].pack(fill="x", pady=1)
-        simple = self.settings_view_var.get() == "simple"
-        self.simple_view_button.state(["selected"] if simple else ["!selected"])
-        self.advanced_view_button.state(["!selected"] if simple else ["selected"])
-        self._update_navigation_scrollregion()
+        for key, page in self._pages.items():
+            state = "normal" if key in visible or key == self._current_page else "hidden"
+            if self.notebook.tab(page, "state") != state:
+                self.notebook.tab(page, state=state)
 
     def _filter_navigation(self) -> None:
         query = self.search_var.get().strip().casefold()
@@ -415,8 +332,8 @@ class SettingsDialog(tk.Toplevel):
                 self._show_page(self._current_page)
             return
 
-        if self._current_page:
-            self._pages[self._current_page].pack_forget()
+        self._ensure_all_pages_built()
+        self.notebook.pack_forget()
         for item in self.search_results_tree.get_children():
             self.search_results_tree.delete(item)
         self._search_result_rows = []
@@ -507,35 +424,17 @@ class SettingsDialog(tk.Toplevel):
             pass
 
     def _title(self, frame: ttk.Frame, title_en: str, title_cs: str, desc_en: str = "", desc_cs: str = "") -> int:
-        hero = ttk.Frame(frame, style="SettingsHero.TFrame", padding=(18, 15))
-        hero.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 10))
-        ttk.Label(hero, text=self._txt(title_en, title_cs), style="SettingsHeroTitle.TLabel").pack(anchor="w")
+        ttk.Label(frame, text=self._txt(title_en, title_cs), style="PanelTitle.TLabel").grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(3, 2),
+        )
         if desc_en or desc_cs:
-            hero_description = ttk.Label(
-                hero,
-                text=self._txt(desc_en, desc_cs),
-                style="SettingsHeroDesc.TLabel",
-                wraplength=640,
-                justify="left",
+            description = ttk.Label(
+                frame, text=self._txt(desc_en, desc_cs), style="Muted.TLabel",
+                wraplength=600, justify="left",
             )
-            hero_description.pack(fill="x", anchor="w", pady=(5, 0))
-            self._bind_responsive_wrap(hero_description, minimum=260, maximum=760)
-        columns = ttk.Frame(frame, style="SettingsGroup.TFrame", padding=(14, 5))
-        columns.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 2))
-        self._configure_row_columns(columns)
-        ttk.Label(columns, text=self.tr("settings.column.option"), style="SettingsGroup.TLabel").grid(row=0, column=0, sticky="w")
-        description_header = ttk.Label(columns, text=self.tr("settings.column.description"), style="SettingsGroup.TLabel")
-        description_header.grid(row=0, column=1, sticky="w", padx=(18, 18))
-        self._description_headers.append((columns, description_header))
-        ttk.Label(columns, text=self.tr("settings.column.value"), style="SettingsGroup.TLabel").grid(row=0, column=2, sticky="w")
+            description.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 4))
         frame.columnconfigure(0, weight=1)
         return 2
-
-    @staticmethod
-    def _configure_row_columns(container: ttk.Frame) -> None:
-        container.columnconfigure(0, minsize=220, weight=0)
-        container.columnconfigure(1, minsize=300, weight=1)
-        container.columnconfigure(2, minsize=160, weight=0)
 
     def _impact_text(self, impact: str) -> str:
         return self.tr(f"settings.impact.{impact}")
@@ -578,12 +477,14 @@ class SettingsDialog(tk.Toplevel):
         width: int | None = None,
         keywords: str = "",
     ) -> tk.Widget:
-        card = ttk.Frame(frame, style="SettingsRow.TFrame", padding=(14, 11))
-        card.grid(row=row, column=0, columnspan=4, sticky="ew", pady=4)
-        self._configure_row_columns(card)
+        card = ttk.Frame(frame, style="SettingsRow.TFrame", padding=(3, 2))
+        card.grid(row=row, column=0, columnspan=4, sticky="ew", pady=1)
+        card.columnconfigure(0, minsize=203)
+        card.columnconfigure(1, minsize=140)
+        card.columnconfigure(2, weight=1)
         left = ttk.Frame(card, style="Panel.TFrame")
         left.grid(row=0, column=0, sticky="nw")
-        ttk.Label(left, text=self._txt(label_en, label_cs), style="SettingsRowTitle.TLabel", wraplength=205, justify="left").pack(anchor="w")
+        ttk.Label(left, text=self._txt(label_en, label_cs), style="SettingsRowTitle.TLabel", wraplength=195, justify="left").pack(anchor="w")
         if impact != "none":
             ttk.Label(left, text=self._impact_text(impact), style=IMPACT_STYLES[impact]).pack(anchor="w", pady=(2, 0))
         if kind == "check":
@@ -608,9 +509,8 @@ class SettingsDialog(tk.Toplevel):
             wraplength=260,
             justify="left",
         )
-        description.grid(row=0, column=1, sticky="new", padx=(18, 18))
-        self._bind_responsive_wrap(description, minimum=180, maximum=520)
-        widget.grid(row=0, column=2, sticky="w" if kind == "check" else "ew")
+        description.grid(row=0, column=2, sticky="new", padx=(10, 0))
+        widget.grid(row=0, column=1, sticky="w")
         self._setting_rows.append((card, widget, description))
         self._register_search_entry(
             label_en=label_en, label_cs=label_cs,
@@ -620,25 +520,11 @@ class SettingsDialog(tk.Toplevel):
         )
         return widget
 
-    @staticmethod
-    def _bind_responsive_wrap(label: ttk.Label, minimum: int = 180, maximum: int = 760) -> None:
-        """Keep explanatory text inside the space assigned by the current page width."""
-        def resize(event: tk.Event) -> None:
-            width = max(minimum, min(maximum, int(getattr(event, "width", 0))))
-            if int(label.cget("wraplength") or 0) != width:
-                label.configure(wraplength=width)
-
-        bind_resize_only(label, resize)
-
     def _update_description_visibility(self) -> None:
         visible = bool(self._vars.get("show_tooltips") and self._vars["show_tooltips"].get())
-        for card, _widget, description in self._setting_rows:
-            card.columnconfigure(1, minsize=300 if visible else 0, weight=1 if visible else 0)
+        for _card, _widget, description in self._setting_rows:
             if description is not None:
                 description.grid() if visible else description.grid_remove()
-        for columns, header in self._description_headers:
-            columns.columnconfigure(1, minsize=300 if visible else 0, weight=1 if visible else 0)
-            header.grid() if visible else header.grid_remove()
 
     def _section(self, frame: ttk.Frame, row: int, title_en: str, title_cs: str) -> ttk.LabelFrame:
         box = ttk.LabelFrame(frame, text=self._txt(title_en, title_cs), padding=10, style="SettingsSection.TLabelframe")
@@ -805,8 +691,8 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Confirm destructive actions", "Potvrzovat mazání", self._vars["confirm_destructive"], "check", desc_en="Shows a confirmation before clearing or deleting recordings.", desc_cs="Před smazáním záznamů zobrazí potvrzení."); r += 1
         self._row(
             f, r, "Show setting descriptions", "Zobrazovat popisy nastavení", self._vars["show_tooltips"], "check",
-            desc_en="Shows or hides the middle Description column immediately throughout Settings.",
-            desc_cs="Okamžitě zobrazí nebo skryje prostřední sloupec Popis v celém Nastavení.",
+            desc_en="Shows or hides explanations next to the settings.",
+            desc_cs="Zobrazí nebo skryje vysvětlení vedle jednotlivých voleb.",
         ); r += 1
         self._row(f, r, "Start fullscreen", "Spustit přes celou obrazovku", self._vars["fullscreen"], "check", impact="low"); r += 1
         self._row(f, r, "Remember window and panel sizes", "Pamatovat velikost okna a panelů", self._vars["remember_geometry"], "check")
@@ -876,7 +762,6 @@ class SettingsDialog(tk.Toplevel):
                 justify="left",
             )
             definition.grid(row=1, column=0, sticky="ew", pady=(3, 0))
-            self._bind_responsive_wrap(definition, minimum=150, maximum=420)
         if self.on_show_onboarding:
             ttk.Button(f, text=self._txt("Show the tutorial again", "Znovu zobrazit výukový program"), command=self.on_show_onboarding).grid(row=r + 2, column=0, sticky="w", pady=(10, 0))
 
@@ -911,10 +796,9 @@ class SettingsDialog(tk.Toplevel):
         performance_intro = ttk.Label(
             preset_box,
             text=self._txt("Choose a profile to fill the controls below. Apply saves the profile and its values; camera FPS, stored evidence, and export quality stay unchanged.", "Vyber profil, který vyplní níže uvedené volby. Použít uloží profil a jeho hodnoty; FPS kamery, uložený důkaz a kvalita exportu se nemění."),
-            style="SettingsRowDesc.TLabel", wraplength=640, justify="left",
+            style="SettingsRowDesc.TLabel", wraplength=600, justify="left",
         )
         performance_intro.grid(row=0, column=0, columnspan=5, sticky="ew", pady=(0, 9))
-        self._bind_responsive_wrap(performance_intro, minimum=220, maximum=760)
         preset_names = {
             "quiet": self._txt("Smooth live", "Plynulé živé video"),
             "balanced": self._txt("Balanced judging", "Vyvážené rozhodování"),
@@ -928,9 +812,8 @@ class SettingsDialog(tk.Toplevel):
                 preset_box, text=preset_names[value], style="Neutral.TButton",
                 command=lambda value=value: self._choose_performance_preset(value),
             ).grid(row=1, column=column, sticky="ew", padx=(0 if column == 0 else 5, 0))
-        self.preset_description = ttk.Label(preset_box, style="Muted.TLabel", wraplength=650, justify="left")
+        self.preset_description = ttk.Label(preset_box, style="Muted.TLabel", wraplength=600, justify="left")
         self.preset_description.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(9, 0))
-        self._bind_responsive_wrap(self.preset_description, minimum=220, maximum=760)
         performance_warning = ttk.Label(
             preset_box,
             text=self._txt(
@@ -942,7 +825,6 @@ class SettingsDialog(tk.Toplevel):
             justify="left",
         )
         performance_warning.grid(row=3, column=0, columnspan=5, sticky="ew", pady=(8, 0))
-        self._bind_responsive_wrap(performance_warning, minimum=220, maximum=760)
         self._vars["performance_preset"].trace_add("write", lambda *_: self._update_preset_description())
         self._update_preset_description()
         self._row(f, r, "Live/replay preview refresh", "Obnovování náhledu videa", self._vars["preview_hz"], desc_en="Changes interface smoothness, not camera recording FPS.", desc_cs="Mění plynulost rozhraní, ne snímkovou frekvenci záznamu kamery.", impact="high"); r += 1
@@ -990,10 +872,13 @@ class SettingsDialog(tk.Toplevel):
         self._vars["adaptive"].set(p.adaptive_enabled)
         self._vars["menu_throttle"].set(p.menu_throttle_enabled)
         self._vars["jpeg_quality"].set(temp.buffer.jpeg_quality)
-        if "assist_width" in self._vars:
-            self._vars["assist_width"].set(temp.takeoff_assist.downscale_width)
+        self._ensure_page_built("board_assist")
+        self._vars["assist_width"].set(temp.takeoff_assist.downscale_width)
 
     def _load_low_resource_mode(self) -> None:
+        self._ensure_page_built("advanced")
+        self._ensure_page_built("camera_recording")
+        self._ensure_page_built("board_assist")
         temp = deepcopy(self.working)
         apply_low_resource_mode(temp)
         p, b = temp.performance, temp.buffer
@@ -1017,14 +902,13 @@ class SettingsDialog(tk.Toplevel):
         r = self._title(f, "Camera", "Kamera", "Camera changes require an application restart.", "Změny kamery vyžadují restart aplikace.")
         c = self.working.camera
         vals = {
-            "source": tk.StringVar(value=c.source_type if c.source_type in {"camera", "file"} else "camera"), "device": tk.IntVar(value=c.device_index),
+            "source": tk.StringVar(value=c.source_type), "device": tk.IntVar(value=c.device_index),
             "file_path": tk.StringVar(value=c.file_path),
             "width": tk.IntVar(value=c.width), "height": tk.IntVar(value=c.height), "fps": tk.DoubleVar(value=c.fps),
-            "backend": tk.StringVar(value=c.backend), "fourcc": tk.StringVar(value=c.fourcc), "reconnect": tk.DoubleVar(value=c.reconnect_seconds),
         }
         camera_devices = enumerate_camera_devices(c.device_index)
         self._camera_choice_to_index = {device.label: device.index for device in camera_devices}
-        selected_device = next((device.label for device in camera_devices if device.index == c.device_index), camera_devices[0].label)
+        selected_device = next((device.label for device in camera_devices if device.index == c.device_index), "")
         vals["camera_device_choice"] = tk.StringVar(value=selected_device)
         vals["camera_device_choice"].trace_add(
             "write",
@@ -1055,7 +939,7 @@ class SettingsDialog(tk.Toplevel):
             command=self._browse_camera_file,
             style="TButton",
         )
-        self.camera_file_browse_button.grid(row=1, column=2, sticky="e", pady=(4, 0))
+        self.camera_file_browse_button.grid(row=1, column=1, sticky="w", pady=(2, 0))
         vals["source"].trace_add("write", self._sync_camera_source_fields)
         self._sync_camera_source_fields()
         r += 1
@@ -1064,6 +948,12 @@ class SettingsDialog(tk.Toplevel):
         self._row(f, r, "Requested camera FPS", "Požadované FPS kamery", vals["fps"], desc_en="The camera may provide a lower actual rate; the current status is shown after startup.", desc_cs="Kamera může poskytovat nižší skutečnou hodnotu; aktuální stav se zobrazí po spuštění.", impact="very_high")
 
     def _build_camera_advanced(self, f: ttk.Frame) -> None:
+        camera = self.working.camera
+        self._vars.update({
+            "backend": tk.StringVar(value=camera.backend),
+            "fourcc": tk.StringVar(value=camera.fourcc),
+            "reconnect": tk.DoubleVar(value=camera.reconnect_seconds),
+        })
         r = self._title(
             f, "Camera diagnostics", "Diagnostika kamery",
             "Low-level capture controls for troubleshooting a specific camera.",
@@ -1111,10 +1001,9 @@ class SettingsDialog(tk.Toplevel):
                 "Open View → Board calibration. Drag the four yellow board corners and four red take-off-line corners, choose Preview, and confirm. The editor is skippable; both overlays can be hidden from View during competition.",
                 "Otevři Zobrazení → Kalibrace prkna. Přetáhni čtyři žluté rohy prkna a čtyři červené rohy odrazové čáry, zvol Náhled a potvrď. Průvodce lze přeskočit; oba obrysy lze během soutěže skrýt v nabídce Zobrazení.",
             ),
-            style="SettingsRowDesc.TLabel", wraplength=640, justify="left",
+            style="SettingsRowDesc.TLabel", wraplength=600, justify="left",
         )
         calibration_help.grid(row=0, column=0, columnspan=5, sticky="ew")
-        self._bind_responsive_wrap(calibration_help, minimum=220, maximum=760)
 
     def _build_competition(self, f: ttk.Frame) -> None:
         r = self._title(f, "Competition", "Soutěž", "Turn competition management off for a clean judge-only replay screen.", "Vypnutím správy soutěže získáš čistou rozhodcovskou obrazovku bez kategorií a pořadníku.")
@@ -1316,11 +1205,10 @@ class SettingsDialog(tk.Toplevel):
                 "Tažením za oddělovače mezi panely změníte jejich velikost. Rozložení se automaticky zapamatuje.",
             ),
             style="SettingsRowDesc.TLabel",
-            wraplength=640,
+            wraplength=600,
             justify="left",
         )
         resize_help.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(10, 4))
-        self._bind_responsive_wrap(resize_help)
 
     def _build_assist(self, f: ttk.Frame) -> None:
         r = self._title(f, "Take-off Assist", "Asistent odrazu", "Finds a local motion peak inside the board ROI. It never decides Valid or Foul.", "Vyhledá lokální vrchol pohybu uvnitř oblasti prkna. Nikdy sám nerozhodne platný pokus nebo přešlap.")
@@ -1557,9 +1445,10 @@ class SettingsDialog(tk.Toplevel):
         self.destroy()
 
     def _attach_dirty_traces(self) -> None:
-        for var in self._vars.values():
-            try: var.trace_add("write", lambda *_: self._mark_dirty())
-            except (tk.TclError, AttributeError): pass
+        for key, var in self._vars.items():
+            if key not in self._tracked_vars:
+                var.trace_add("write", lambda *_: self._mark_dirty())
+                self._tracked_vars.add(key)
 
     def _mark_dirty(self) -> None:
         if self._initialising:

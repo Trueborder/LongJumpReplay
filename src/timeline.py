@@ -244,6 +244,8 @@ class ProfessionalTimeline(tk.Canvas):
             self.itemconfigure(item, fill=p["tick"])
 
     def set_model(self, model: TimelineModel | None) -> None:
+        if model == self.model:
+            return
         self.model = model
         self.request_render()
 
